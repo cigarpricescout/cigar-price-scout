@@ -1,0 +1,116 @@
+The search is too strict. Please patch the code to use brand-aware fuzzy line matching and write today’s cheapest to price history. Make these edits:
+
+1) app/main.py — add helpers near the top (after imports):
+----------------------------------------------------------
+from datetime import date
+
+def _canon(s: str) -> str:
+    return (s or "").strip().lower()
+
+def _line_matches(requested: str | None, actual: str | None) -> bool:
+    # allow “Hemingway Short Story” to match line “Hemingway”
+    if not requested or not actual:
+        return False
+    r, a = _canon(requested), _canon(actual)
+    return (r in a) or (a in r)
+
+def _pick_line_core(brand: str | None, requested_line: str | None, all_products) -> str | None:
+    # pick the known line for this brand that best matches the requested phrase
+    if not brand or not requested_line:
+        return None
+    b = _canon(brand)
+    for p in all_products:
+        if _canon(p.brand) == b and _line_matches(requested_line, p.line):
+            return p.line
+    return None
+
+def _sid(brand, line, size) -> str:
+    return "-".join([x for x in [brand, line, size] if x]).replace(" ", "_")[:100]
+
+
+2) app/main.py — inside /search, AFTER you load all_products and build known_brands:
+------------------------------------------------------------------------------------
+# derive a brand-specific line core if user typed extra words like "Hemingway Short Story"
+line_core = _pick_line_core(nq.brand, nq.line, all_products)
+if nq.line and line_core:
+    nq.line = line_core  # normalize to the canonical line from CSV
+
+
+3) app/main.py — brand branch should group by canonical line (no exact equality required):
+------------------------------------------------------------------------------------------
+elif nq.brand and not nq.line:
+    intent = "brand"
+    filtered = [p for p in all_products if _canon(p.brand) == _canon(nq.brand)]
+    by_line = {}
+    for p in filtered:
+        d = delivered_cents(p.base_cents, p.retailer_key, state)
+        cur = by_line.get(p.line)
+        if cur is None or d < cur["delivered"]:
+            by_line[p.line] = {"line": p.line, "delivered": d, "url": p.url}
+    results = [{"line": v["line"], "cheapest_delivered": f"${v['delivered']/100:.2f}", "url": v["url"]} for v in by_line.values()]
+    return {"intent": intent, "brand": nq.brand, "results": results}
+
+
+4) app/main.py — line branch should accept fuzzy matches for the line:
+----------------------------------------------------------------------
+elif nq.brand and nq.line and not nq.size:
+    intent = "line"
+    filtered = [p for p in all_products
+                if _canon(p.brand) == _canon(nq.brand) and _line_matches(nq.line, p.line)]
+    by_size = {}
+    for p in filtered:
+        d = delivered_cents(p.base_cents, p.retailer_key, state)
+        cur = by_size.get(p.size)
+        if cur is None or d < cur:
+            by_size[p.size] = d
+    results = [{"size": s, "cheapest_delivered": f"${c/100:.2f}"} for s, c in sorted(by_size.items())]
+    return {"intent": intent, "brand": nq.brand, "line": nq.line, "results": results}
+
+
+5) app/main.py — SKU branch should require brand+size and fuzzy line match, then write price history and add affiliate sid:
+--------------------------------------------------------------------------------------------------------------------------
+elif nq.brand and nq.line and nq.size:
+    intent = "sku"
+    filtered = [p for p in all_products
+                if _canon(p.brand) == _canon(nq.brand)
+                and _line_matches(nq.line, p.line)
+                and _canon(p.size) == _canon(nq.size)
+                and p.in_stock]
+    # compute delivered once and sort
+    rows = []
+    min_del = None
+    for p in filtered:
+        d = delivered_cents(p.base_cents, p.retailer_key, state)
+        rows.append((p, d))
+        min_del = d if (min_del is None or d < min_del) else min_del
+    rows.sort(key=lambda t: t[1])
+
+    results = [{
+        "retailer": p.retailer_name,
+        "base": f"${p.base_cents/100:.2f}",
+        "shipping": f"${(d - p.base_cents)/100:.2f}",
+        "tax": "$0.00",
+        "delivered": f"${d/100:.2f}",
+        "url": cj_deeplink(p.url, sid=_sid(nq.brand, nq.line, nq.size)),
+        "cheapest": (d == min_del),
+    } for (p, d) in rows]
+
+    # write today's cheapest for price history
+    if min_del is not None:
+        await session.execute(
+            PricePoint.__table__.delete().where(
+                (PricePoint.day == date.today().isoformat()) &
+                (PricePoint.brand == nq.brand) &
+                (PricePoint.line == nq.line) &
+                (PricePoint.size == nq.size) &
+                (PricePoint.source == "cheapest")
+            )
+        )
+        session.add(PricePoint(
+            day=date.today().isoformat(),
+            brand=nq.brand, line=nq.line, size=nq.size,
+            delivered_cents=min_del, source="cheapest"
+        ))
+        await session.commit()
+
+    return {"intent": intent, "brand": nq.brand, "line": nq.line, "size": nq.size, "results": results}

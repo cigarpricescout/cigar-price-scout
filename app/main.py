@@ -12,6 +12,29 @@ from .affiliate import cj_deeplink
 from .shipping_tax import delivered_cents, zip_to_state
 from .adapters.csv_adapter import load_csv
 
+def _canon(s: str) -> str:
+    return (s or "").strip().lower()
+
+def _line_matches(requested: str | None, actual: str | None) -> bool:
+    # allow "Hemingway Short Story" to match line "Hemingway"
+    if not requested or not actual:
+        return False
+    r, a = _canon(requested), _canon(actual)
+    return (r in a) or (a in r)
+
+def _pick_line_core(brand: str | None, requested_line: str | None, all_products) -> str | None:
+    # pick the known line for this brand that best matches the requested phrase
+    if not brand or not requested_line:
+        return None
+    b = _canon(brand)
+    for p in all_products:
+        if _canon(p.brand) == b and _line_matches(requested_line, p.line):
+            return p.line
+    return None
+
+def _sid(brand, line, size) -> str:
+    return "-".join([x for x in [brand, line, size] if x]).replace(" ", "_")[:100]
+
 SITE_NAME = os.environ.get("SITE_NAME", "CigarPriceScout")
 ADMIN_USER = os.environ.get("ADMIN_USER", "admin")
 ADMIN_PASS = os.environ.get("ADMIN_PASS", "admin")
@@ -90,27 +113,83 @@ def offers_for_sku(listings, brand, line, size, state):
 async def search(q: str, zip: str | None = None, session=Depends(get_session)):
     state = zip_to_state(zip or "") or "OR"
     n = normalize_query(q, KNOWN_BRANDS)
-    listings = load_all_listings()
+    all_products = load_all_listings()
+
+    # derive a brand-specific line core if user typed extra words like "Hemingway Short Story"
+    line_core = _pick_line_core(n.brand, n.line, all_products)
+    if n.line and line_core:
+        n.line = line_core  # normalize to the canonical line from CSV
 
     if n.brand and not n.line:
-        results = cheapest_by_line(listings, n.brand, state)
-        return SearchOut(intent="brand", brand=n.brand, results=results)
-    if n.brand and n.line and not n.size:
-        results = sizes_cheapest(listings, n.brand, n.line, state)
-        return SearchOut(intent="line", brand=n.brand, line=n.line, results=results)
-    if n.brand and n.line and n.size:
-        offs = offers_for_sku(listings, n.brand, n.line, n.size, state)
-        sid = make_sid(n.brand, n.line, n.size)
-        for o in offs: o["url"] = cj_deeplink(o["url"], sid=sid)
-        if offs:
-            cheapest = offs[0]
-            session.add(Event(event_type="CLICK_LIST", brand=n.brand, line=n.line, size=n.size, retailer=cheapest["retailer"], state=state, delivered_cents=cheapest["delivered_cents"]))
-            today = date.today().isoformat()
-            await session.execute(PricePoint.__table__.delete().where((PricePoint.day==today)&(PricePoint.brand==n.brand)&(PricePoint.line==n.line)&(PricePoint.size==n.size)&(PricePoint.source=="cheapest")))
-            session.add(PricePoint(day=today, brand=n.brand, line=n.line, size=n.size, delivered_cents=cheapest["delivered_cents"], source="cheapest"))
+        intent = "brand"
+        filtered = [p for p in all_products if _canon(p.brand) == _canon(n.brand)]
+        by_line = {}
+        for p in filtered:
+            d = delivered_cents(p.base_cents, p.retailer_key, state)
+            cur = by_line.get(p.line)
+            if cur is None or d < cur["delivered"]:
+                by_line[p.line] = {"line": p.line, "delivered": d, "url": p.url}
+        results = [{"line": v["line"], "cheapest_delivered": f"${v['delivered']/100:.2f}", "url": v["url"]} for v in by_line.values()]
+        return {"intent": intent, "brand": n.brand, "results": results}
+
+    elif n.brand and n.line and not n.size:
+        intent = "line"
+        filtered = [p for p in all_products
+                    if _canon(p.brand) == _canon(n.brand) and _line_matches(n.line, p.line)]
+        by_size = {}
+        for p in filtered:
+            d = delivered_cents(p.base_cents, p.retailer_key, state)
+            cur = by_size.get(p.size)
+            if cur is None or d < cur:
+                by_size[p.size] = d
+        results = [{"size": s, "cheapest_delivered": f"${c/100:.2f}"} for s, c in sorted(by_size.items())]
+        return {"intent": intent, "brand": n.brand, "line": n.line, "results": results}
+
+    elif n.brand and n.line and n.size:
+        intent = "sku"
+        filtered = [p for p in all_products
+                    if _canon(p.brand) == _canon(n.brand)
+                    and _line_matches(n.line, p.line)
+                    and _canon(p.size) == _canon(n.size)
+                    and p.in_stock]
+        # compute delivered once and sort
+        rows = []
+        min_del = None
+        for p in filtered:
+            d = delivered_cents(p.base_cents, p.retailer_key, state)
+            rows.append((p, d))
+            min_del = d if (min_del is None or d < min_del) else min_del
+        rows.sort(key=lambda t: t[1])
+
+        results = [{
+            "retailer": p.retailer_name,
+            "base": f"${p.base_cents/100:.2f}",
+            "shipping": f"${(d - p.base_cents)/100:.2f}",
+            "tax": "$0.00",
+            "delivered": f"${d/100:.2f}",
+            "url": cj_deeplink(p.url, sid=_sid(n.brand, n.line, n.size)),
+            "cheapest": (d == min_del),
+        } for (p, d) in rows]
+
+        # write today's cheapest for price history
+        if min_del is not None:
+            await session.execute(
+                PricePoint.__table__.delete().where(
+                    (PricePoint.day == date.today().isoformat()) &
+                    (PricePoint.brand == n.brand) &
+                    (PricePoint.line == n.line) &
+                    (PricePoint.size == n.size) &
+                    (PricePoint.source == "cheapest")
+                )
+            )
+            session.add(PricePoint(
+                day=date.today().isoformat(),
+                brand=n.brand, line=n.line, size=n.size,
+                delivered_cents=min_del, source="cheapest"
+            ))
             await session.commit()
-        results = [{"retailer": o["retailer"], "base": f"${o['base_cents']/100:.2f}", "shipping": "est", "tax": "est", "delivered": f"${o['delivered_cents']/100:.2f}", "url": o["url"], "cheapest": (i==0)} for i,o in enumerate(offs)]
-        return SearchOut(intent="sku", brand=n.brand, line=n.line, size=n.size, results=results)
+
+        return {"intent": intent, "brand": n.brand, "line": n.line, "size": n.size, "results": results}
 
     return SearchOut(intent="help", results=[{"message":"Try a brand (e.g., Arturo Fuente) or include a line (e.g., Arturo Fuente Hemingway)."}])
 
