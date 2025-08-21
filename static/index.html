@@ -1,0 +1,100 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>CigarPriceScout</title>
+    <link rel="stylesheet" href="/static/style.css">
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="brand">
+        <div class="mark">CS</div>
+        <div>
+          <div class="title">CigarPriceScout</div>
+          <div class="muted">Cheapest delivered price — clearly shown</div>
+        </div>
+      </header>
+
+      <section class="hero">
+        <h1>Find the lowest delivered price on cigar boxes</h1>
+        <p class="muted">Type a brand, line, or size. We normalize names, check multiple retailers, and show an honest delivered total.</p>
+        <div class="search">
+          <input id="q" placeholder="e.g., Arturo Fuente Hemingway Short Story 4x49 (Box of 25)">
+          <input id="zip" placeholder="ZIP (shipping est.)" value="97005">
+          <button id="go">Search</button>
+        </div>
+        <div id="chips" class="chips" style="display:none"></div>
+      </section>
+
+      <section id="out"></section>
+
+      <footer class="foot">
+        <div class="legal"><strong>Affiliate disclosure.</strong> We may earn a commission when you use our retailer links. We do not sell tobacco; we compare prices from third-party retailers. 21+ where applicable.</div>
+      </footer>
+    </div>
+
+    <script>
+      function chips(n){
+        const el = document.getElementById('chips');
+        const arr = [];
+        if(n.brand) arr.push(['Brand', n.brand]);
+        if(n.line) arr.push(['Line', n.line]);
+        if(n.size) arr.push(['Size', n.size.replace('x',' × ')]);
+        if(arr.length){
+          el.style.display='flex';
+          el.innerHTML = arr.map(([k,v])=>`<span class="chip">${k}: ${v}</span>`).join('');
+        }else{
+          el.style.display='none'; el.innerHTML='';
+        }
+      }
+      async function doSearch(){
+        const q = document.getElementById('q').value.trim();
+        const zip = document.getElementById('zip').value.trim();
+        const res = await fetch(`/search?q=${encodeURIComponent(q)}&zip=${encodeURIComponent(zip)}`);
+        const data = await res.json();
+        chips(data);
+        const out = document.getElementById('out');
+        if(data.intent==='brand'){
+          out.innerHTML = `<h2>${data.brand} — Lines</h2>` + 
+            '<div class="cards">' + data.results.map(r=>`<div class="card"><div class="h">${r.line}</div><div class="muted">From ${r.cheapest_delivered} delivered</div></div>`).join('') + '</div>';
+        }else if(data.intent==='line'){
+          out.innerHTML = `<h2>${data.brand} — ${data.line}</h2>` + 
+            '<table><thead><tr><th>Size</th><th>Cheapest delivered</th></tr></thead><tbody>' + 
+            data.results.map(r=>`<tr><td>${r.size}</td><td>${r.cheapest_delivered}</td></tr>`).join('') + '</tbody></table>';
+        }else if(data.intent==='sku'){
+          out.innerHTML = `<h2>${data.brand} — ${data.line} — ${data.size}</h2>` + 
+            '<table><thead><tr><th>Retailer</th><th>Base</th><th>Shipping</th><th>Est. tax</th><th>Delivered</th><th></th></tr></thead><tbody>' + 
+            data.results.map(r=>`<tr><td>${r.retailer}${r.cheapest?' • <span class=best>Cheapest</span>':''}</td><td>${r.base}</td><td>${r.shipping}</td><td>${r.tax}</td><td><b>${r.delivered}</b></td><td><a href="${r.url}" target="_blank">Go →</a></td></tr>`).join('') + '</tbody></table>' +
+            '<div style="margin-top:8px" class="muted">Price history (30 days)</div><canvas id="spark" class="spark"></canvas>';
+          const hres = await fetch(`/price_history?brand=${encodeURIComponent(data.brand)}&line=${encodeURIComponent(data.line)}&size=${encodeURIComponent(data.size)}`);
+          const hist = await hres.json();
+          drawSpark('spark', hist.points || []);
+        }else{
+          out.innerHTML = '<div class="muted">Try a brand (e.g., <b>Arturo Fuente</b>) or include a line (e.g., <b>Arturo Fuente Hemingway</b>).</div>';
+        }
+        fetch('/event', {method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({event_type:'SEARCH', brand:data.brand, line:data.line, size:data.size})});
+      }
+      function drawSpark(id, pts){
+        const c = document.getElementById(id);
+        const w = c.clientWidth, h = c.clientHeight;
+        c.width = w * devicePixelRatio; c.height = h * devicePixelRatio;
+        const ctx = c.getContext('2d'); ctx.scale(devicePixelRatio, devicePixelRatio);
+        ctx.clearRect(0,0,w,h);
+        if(!pts.length){ ctx.fillStyle='#999'; ctx.fillText('No history yet', 8, h-8); return; }
+        const vals = pts.map(p=>p.delivered_cents);
+        const min = Math.min(...vals), max = Math.max(...vals);
+        const pad = 6; ctx.beginPath();
+        pts.forEach((p,i)=>{
+          const x = pad + (w-2*pad)*(i/(pts.length-1));
+          const y = h-pad - (h-2*pad)*((p.delivered_cents-min)/Math.max(1,(max-min)));
+          if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+        });
+        ctx.strokeStyle = '#7c5c2e'; ctx.lineWidth = 2; ctx.stroke();
+      }
+      document.getElementById('go').addEventListener('click', doSearch);
+      document.getElementById('q').addEventListener('keyup', (e)=>{ if(e.key==='Enter') doSearch(); });
+    </script>
+  </body>
+</html>
