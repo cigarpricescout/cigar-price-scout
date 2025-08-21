@@ -1,0 +1,549 @@
+Build a FastAPI web app called **CigarPriceScout**. Purpose: let users find the **lowest delivered price** for cigar **boxes** across multiple retailers. Features: intent search (brand → line → size), boxes-only filtering, delivered-price calc (base + est. shipping + est. tax by ZIP→state), affiliate deep links (CJ placeholders), 30-day price history, basic admin dashboard, and event logging (no PII).
+
+Create these files with EXACT contents:
+
+=== .replit ===
+run = "uvicorn app.main:app --host 0.0.0.0 --port 8000"
+
+=== requirements.txt ===
+fastapi
+uvicorn[standard]
+pydantic
+jinja2
+sqlalchemy
+aiosqlite
+python-dotenv
+
+=== app/__init__.py ===
+# make 'app' a package
+
+=== app/db.py ===
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy import Column, Integer, String, DateTime, BigInteger, UniqueConstraint
+from datetime import datetime
+
+DATABASE_URL = "sqlite+aiosqlite:///./data.db"
+
+engine = create_async_engine(DATABASE_URL, echo=False, future=True)
+AsyncSessionLocal = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+Base = declarative_base()
+
+class Event(Base):
+    __tablename__ = "events"
+    id = Column(Integer, primary_key=True)
+    event_type = Column(String(32))
+    ts = Column(DateTime, default=datetime.utcnow)
+    brand = Column(String(120), nullable=True)
+    line = Column(String(160), nullable=True)
+    size = Column(String(80), nullable=True)
+    retailer = Column(String(120), nullable=True)
+    state = Column(String(8), nullable=True)
+    delivered_cents = Column(BigInteger, nullable=True)
+
+class PricePoint(Base):
+    __tablename__ = "price_points"
+    id = Column(Integer, primary_key=True)
+    day = Column(String(10))  # YYYY-MM-DD
+    brand = Column(String(120))
+    line = Column(String(160))
+    size = Column(String(80))
+    delivered_cents = Column(BigInteger)
+    source = Column(String(64), default="cheapest")  # cheapest|retailer:<key>
+    __table_args__ = (UniqueConstraint("day","brand","line","size","source", name="uix_pp_day_sku_source"),)
+
+async def init_db():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+async def get_session():
+    async with AsyncSessionLocal() as session:
+        yield session
+
+=== app/normalize.py ===
+import re
+from dataclasses import dataclass
+
+@dataclass
+class NQ:
+    brand: str | None
+    line: str | None
+    size: str | None
+
+def normalize_query(q: str, known_brands: list[str]) -> NQ:
+    s = (q or "").strip()
+    brand = None
+    for b in known_brands:
+        if re.search(rf"\\b{re.escape(b)}\\b", s, flags=re.IGNORECASE):
+            brand = b
+            break
+    line = None
+    if brand:
+        rest = re.sub(rf"\\b{re.escape(brand)}\\b", "", s, flags=re.IGNORECASE).strip()
+        m = re.search(r"(\\d+(?:\\.\\d+)?)\\s*[xX]\\s*(\\d+)", rest)
+        candidate = rest[:m.start()].strip() if m else rest
+        line = candidate if candidate else None
+    m = re.search(r"(\\d+(?:\\.\\d+)?)\\s*[xX]\\s*(\\d+)", s)
+    size = f"{m.group(1)}x{m.group(2)}" if m else None
+    return NQ(brand=brand, line=line if line else None, size=size if size else None)
+
+=== app/affiliate.py ===
+import os
+from urllib.parse import quote_plus
+
+CJ_PID = os.getenv("CJ_PID")  # set these in Replit Secrets later
+CJ_AID = os.getenv("CJ_AID")
+
+def cj_deeplink(merchant_url: str, sid: str | None = None) -> str:
+    if not (CJ_PID and CJ_AID):
+        return merchant_url  # pass-through until you set secrets
+    base = f"https://www.anrdoezrs.net/click-{CJ_PID}-{CJ_AID}?url={quote_plus(merchant_url)}"
+    return base + (f"&sid={quote_plus(sid)}" if sid else "")
+
+=== app/shipping_tax.py ===
+import re
+SHIPPING_CENTS = {"famous": 995, "ci": 1495, "jr": 1295}
+TAX_RATE = {"OR": 0.00}  # expand later
+
+def zip_to_state(zip_str: str) -> str | None:
+    z = (zip_str or "").strip()
+    if not re.fullmatch(r"\\d{5}", z): return None
+    if 97000 <= int(z) <= 97999: return "OR"  # demo mapping
+    return None
+
+def delivered_cents(base_cents: int, retailer_key: str, state: str | None) -> int:
+    ship = SHIPPING_CENTS.get(retailer_key, 1495)
+    rate = TAX_RATE.get(state or "", 0.0)
+    tax = int(round(base_cents * rate))
+    return base_cents + ship + tax
+
+=== app/adapters/csv_adapter.py ===
+import csv, os
+from dataclasses import dataclass
+
+PACK_OK = {10, 12, 20, 24, 25, 50}
+
+@dataclass
+class ListingCandidate:
+    retailer_key: str
+    retailer_name: str
+    title: str
+    url: str
+    brand: str
+    line: str
+    size: str
+    box_qty: int
+    base_cents: int
+    in_stock: bool
+
+def is_box(row: dict) -> bool:
+    qty = int(row.get("box_qty") or 0)
+    title = (row.get("title") or "").lower()
+    return (qty in PACK_OK) or (" box " in f" {title} ")
+
+def load_csv(path: str, retailer_key: str, retailer_name: str) -> list[ListingCandidate]:
+    out = []
+    if not os.path.exists(path): return out
+    with open(path, newline="", encoding="utf-8") as f:
+        for r in csv.DictReader(f):
+            if not is_box(r): continue
+            out.append(ListingCandidate(
+                retailer_key=retailer_key,
+                retailer_name=retailer_name,
+                title=r["title"],
+                url=r["url"],
+                brand=r["brand"],
+                line=r["line"],
+                size=r["size"],
+                box_qty=int(r["box_qty"]),
+                base_cents=int(float(r["price"]) * 100),
+                in_stock=(r.get("in_stock","true").strip().lower() != "false")
+            ))
+    return out
+
+=== static/data/famous.csv ===
+title,url,brand,line,size,box_qty,price,in_stock
+Arturo Fuente Hemingway Short Story 4x49 (Box of 25),https://example.com/famous/af-hem-ss,Arturo Fuente,Hemingway,4x49,25,214.99,true
+Arturo Fuente Hemingway Signature 6x47 (Box of 25),https://example.com/famous/af-hem-sig,Arturo Fuente,Hemingway,6x47,25,254.99,true
+Arturo Fuente Hemingway Classic 7x48 (Box of 25),https://example.com/famous/af-hem-classic,Arturo Fuente,Hemingway,7x48,25,279.99,true
+
+=== static/data/ci.csv ===
+title,url,brand,line,size,box_qty,price,in_stock
+Arturo Fuente Hemingway Short Story 4x49 (Box of 25),https://example.com/ci/af-hem-ss,Arturo Fuente,Hemingway,4x49,25,219.99,true
+Arturo Fuente Hemingway Signature 6x47 (Box of 25),https://example.com/ci/af-hem-sig,Arturo Fuente,Hemingway,6x47,25,259.99,true
+Arturo Fuente Hemingway Classic 7x48 (Box of 25),https://example.com/ci/af-hem-classic,Arturo Fuente,Hemingway,7x48,25,284.99,true
+
+=== static/data/jr.csv ===
+title,url,brand,line,size,box_qty,price,in_stock
+Arturo Fuente Hemingway Short Story 4x49 (Box of 25),https://example.com/jr/af-hem-ss,Arturo Fuente,Hemingway,4x49,25,224.99,true
+Arturo Fuente Hemingway Signature 6x47 (Box of 25),https://example.com/jr/af-hem-sig,Arturo Fuente,Hemingway,6x47,25,262.99,true
+Arturo Fuente Hemingway Classic 7x48 (Box of 25),https://example.com/jr/af-hem-classic,Arturo Fuente,Hemingway,7x48,25,287.99,true
+
+=== static/style.css ===
+:root{--bg:#faf7f2;--panel:#fff;--ink:#1f2937;--muted:#6b7280;--accent:#7c5c2e;--rule:#e5e7eb;--ok:#166534}
+*{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
+.wrap{max-width:960px;margin:0 auto;padding:0 20px}
+.brand{display:flex;align-items:center;gap:12px;padding:16px 0;border-bottom:1px solid var(--rule)}
+.mark{height:28px;width:28px;border-radius:6px;background:var(--accent);display:grid;place-items:center;color:#fff;font-weight:700;font-size:13px}
+.title{font-weight:650}
+.hero{padding:24px 0}
+.muted{color:var(--muted)}
+.search{display:grid;grid-template-columns:1fr 160px 120px;gap:8px;margin-top:10px}
+.search input{padding:10px 12px;border:1px solid var(--rule);border-radius:10px;background:#fff}
+.search button{border:1px solid #111;background:#fff;border-radius:10px;font-weight:600}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.chip{font-size:12px;padding:6px 10px;border-radius:999px;border:1px solid var(--rule);background:#fff;color:#374151}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-top:8px}
+.card{background:var(--panel);border:1px solid var(--rule);border-radius:12px;padding:14px}
+.card .h{font-weight:600;margin-bottom:4px}
+table{width:100%;border-collapse:collapse;margin-top:8px;background:#fff;border:1px solid var(--rule);border-radius:12px;overflow:hidden}
+th,td{padding:12px 14px;border-bottom:1px solid var(--rule);text-align:left;font-size:14px}
+th{background:#fcfbf9;color:#374151}
+.best{color:var(--ok);font-weight:700;font-size:12px}
+.spark{width:100%;height:64px}
+.foot{border-top:1px solid var(--rule);padding:18px 0;margin-top:24px}
+
+=== static/index.html ===
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>CigarPriceScout</title>
+    <link rel="stylesheet" href="/static/style.css">
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="brand">
+        <div class="mark">CS</div>
+        <div>
+          <div class="title">CigarPriceScout</div>
+          <div class="muted">Cheapest delivered price — clearly shown</div>
+        </div>
+      </header>
+
+      <section class="hero">
+        <h1>Find the lowest delivered price on cigar boxes</h1>
+        <p class="muted">Type a brand, line, or size. We normalize names, check multiple retailers, and show an honest delivered total.</p>
+        <div class="search">
+          <input id="q" placeholder="e.g., Arturo Fuente Hemingway Short Story 4x49 (Box of 25)">
+          <input id="zip" placeholder="ZIP (shipping est.)" value="97005">
+          <button id="go">Search</button>
+        </div>
+        <div id="chips" class="chips" style="display:none"></div>
+      </section>
+
+      <section id="out"></section>
+
+      <footer class="foot">
+        <div class="legal"><strong>Affiliate disclosure.</strong> We may earn a commission when you use our retailer links. We do not sell tobacco; we compare prices from third-party retailers. 21+ where applicable.</div>
+      </footer>
+    </div>
+
+    <script>
+      function chips(n){
+        const el = document.getElementById('chips');
+        const arr = [];
+        if(n.brand) arr.push(['Brand', n.brand]);
+        if(n.line) arr.push(['Line', n.line]);
+        if(n.size) arr.push(['Size', n.size.replace('x',' × ')]);
+        if(arr.length){
+          el.style.display='flex';
+          el.innerHTML = arr.map(([k,v])=>`<span class="chip">${k}: ${v}</span>`).join('');
+        }else{
+          el.style.display='none'; el.innerHTML='';
+        }
+      }
+      async function doSearch(){
+        const q = document.getElementById('q').value.trim();
+        const zip = document.getElementById('zip').value.trim();
+        const res = await fetch(`/search?q=${encodeURIComponent(q)}&zip=${encodeURIComponent(zip)}`);
+        const data = await res.json();
+        chips(data);
+        const out = document.getElementById('out');
+        if(data.intent==='brand'){
+          out.innerHTML = `<h2>${data.brand} — Lines</h2>` + 
+            '<div class="cards">' + data.results.map(r=>`<div class="card"><div class="h">${r.line}</div><div class="muted">From ${r.cheapest_delivered} delivered</div></div>`).join('') + '</div>';
+        }else if(data.intent==='line'){
+          out.innerHTML = `<h2>${data.brand} — ${data.line}</h2>` + 
+            '<table><thead><tr><th>Size</th><th>Cheapest delivered</th></tr></thead><tbody>' + 
+            data.results.map(r=>`<tr><td>${r.size}</td><td>${r.cheapest_delivered}</td></tr>`).join('') + '</tbody></table>';
+        }else if(data.intent==='sku'){
+          out.innerHTML = `<h2>${data.brand} — ${data.line} — ${data.size}</h2>` + 
+            '<table><thead><tr><th>Retailer</th><th>Base</th><th>Shipping</th><th>Est. tax</th><th>Delivered</th><th></th></tr></thead><tbody>' + 
+            data.results.map(r=>`<tr><td>${r.retailer}${r.cheapest?' • <span class=best>Cheapest</span>':''}</td><td>${r.base}</td><td>${r.shipping}</td><td>${r.tax}</td><td><b>${r.delivered}</b></td><td><a href="${r.url}" target="_blank">Go →</a></td></tr>`).join('') + '</tbody></table>' +
+            '<div style="margin-top:8px" class="muted">Price history (30 days)</div><canvas id="spark" class="spark"></canvas>';
+          const hres = await fetch(`/price_history?brand=${encodeURIComponent(data.brand)}&line=${encodeURIComponent(data.line)}&size=${encodeURIComponent(data.size)}`);
+          const hist = await hres.json();
+          drawSpark('spark', hist.points || []);
+        }else{
+          out.innerHTML = '<div class="muted">Try a brand (e.g., <b>Arturo Fuente</b>) or include a line (e.g., <b>Arturo Fuente Hemingway</b>).</div>';
+        }
+        fetch('/event', {method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({event_type:'SEARCH', brand:data.brand, line:data.line, size:data.size})});
+      }
+      function drawSpark(id, pts){
+        const c = document.getElementById(id);
+        const w = c.clientWidth, h = c.clientHeight;
+        c.width = w * devicePixelRatio; c.height = h * devicePixelRatio;
+        const ctx = c.getContext('2d'); ctx.scale(devicePixelRatio, devicePixelRatio);
+        ctx.clearRect(0,0,w,h);
+        if(!pts.length){ ctx.fillStyle='#999'; ctx.fillText('No history yet', 8, h-8); return; }
+        const vals = pts.map(p=>p.delivered_cents);
+        const min = Math.min(...vals), max = Math.max(...vals);
+        const pad = 6; ctx.beginPath();
+        pts.forEach((p,i)=>{
+          const x = pad + (w-2*pad)*(i/(pts.length-1));
+          const y = h-pad - (h-2*pad)*((p.delivered_cents-min)/Math.max(1,(max-min)));
+          if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+        });
+        ctx.strokeStyle = '#7c5c2e'; ctx.lineWidth = 2; ctx.stroke();
+      }
+      document.getElementById('go').addEventListener('click', doSearch);
+      document.getElementById('q').addEventListener('keyup', (e)=>{ if(e.key==='Enter') doSearch(); });
+    </script>
+  </body>
+</html>
+
+=== templates/admin.html ===
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>{{ site }} — Admin</title>
+    <style>
+      :root{--ink:#111827;--muted:#6b7280;--rule:#e5e7eb}
+      body{font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;margin:0;color:var(--ink);background:#fff}
+      .wrap{max-width:1000px;margin:0 auto;padding:20px}
+      h1{font-size:22px;margin:0 0 12px}
+      .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+      .card{border:1px solid var(--rule);border-radius:10px;padding:16px}
+      table{width:100%;border-collapse:collapse;border:1px solid var(--rule);border-radius:10px;overflow:hidden}
+      th,td{padding:8px 10px;border-bottom:1px solid var(--rule);text-align:left}
+      th{background:#fafafa}
+      .muted{color:var(--muted)}
+      button{padding:8px 10px;border:1px solid #111;background:#fff;border-radius:8px}
+      canvas{width:100%;height:260px}
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>{{ site }} — Admin</h1>
+      <div class="muted">Basic auth required. Summary shows last 30 days.</div>
+      <div class="grid" style="margin-top:12px">
+        <div class="card">
+          <h3>Top brands (clicks)</h3>
+          <canvas id="brands"></canvas>
+        </div>
+        <div class="card">
+          <h3>Top sizes (clicks)</h3>
+          <canvas id="sizes"></canvas>
+        </div>
+      </div>
+      <div class="card" style="margin-top:16px">
+        <h3>Avg delivered by line</h3>
+        <table id="prices"><thead><tr><th>Line</th><th>Avg delivered</th></tr></thead><tbody></tbody></table>
+      </div>
+    </div>
+    <script>
+      async function fetchSummary(){
+        const creds = btoa(prompt("Admin user:")+":"+prompt("Admin pass:"));
+        const res = await fetch("/api/summary",{headers:{Authorization:"Basic "+creds}});
+        if(!res.ok){ alert("Auth failed"); return; }
+        const data = await res.json();
+        const bc = document.getElementById('brands').getContext('2d');
+        drawBars(bc, data.top_brands.map(x=>x.brand), data.top_brands.map(x=>x.clicks));
+        const sc = document.getElementById('sizes').getContext('2d');
+        drawBars(sc, data.top_sizes.map(x=>x.size), data.top_sizes.map(x=>x.clicks));
+        const tbody = document.querySelector("#prices tbody");
+        tbody.innerHTML = data.avg_delivered_by_line.map(r=>`<tr><td>${r.line}</td><td>$${(r.avg_delivered/100).toFixed(2)}</td></tr>`).join("");
+      }
+      function drawBars(ctx, labels, values){
+        const W=ctx.canvas.width, H=ctx.canvas.height;
+        ctx.clearRect(0,0,W,H);
+        const max = Math.max(1,...values);
+        const barW = (W-40)/Math.max(1,values.length);
+        labels.forEach((lab,i)=>{
+          const v = values[i];
+          const h = (H-40) * (v/max);
+          const x = 20 + i*barW;
+          const y = H-20 - h;
+          ctx.fillStyle = "#ddd"; ctx.fillRect(x, y, barW*0.7, h);
+          ctx.fillStyle = "#111"; ctx.fillText(lab, x, H-6);
+          ctx.fillText(String(v), x, y-4);
+        });
+      }
+      fetchSummary();
+    </script>
+  </body>
+</html>
+
+=== app/main.py ===
+import os, base64
+from datetime import datetime, timedelta, date
+from fastapi import FastAPI, Request, Depends, HTTPException, status
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
+from sqlalchemy import select, func, desc
+from .db import get_session, init_db, Event, PricePoint
+from .normalize import normalize_query
+from .affiliate import cj_deeplink
+from .shipping_tax import delivered_cents, zip_to_state
+from .adapters.csv_adapter import load_csv
+
+SITE_NAME = os.environ.get("SITE_NAME", "CigarPriceScout")
+ADMIN_USER = os.environ.get("ADMIN_USER", "admin")
+ADMIN_PASS = os.environ.get("ADMIN_PASS", "admin")
+
+app = FastAPI(title=SITE_NAME)
+app.mount("/static", StaticFiles(directory="static"), name="static")
+templates = Jinja2Templates(directory="templates")
+
+RETAILERS = [
+    ("famous", "Famous Smoke Shop", "static/data/famous.csv"),
+    ("ci", "Cigars International", "static/data/ci.csv"),
+    ("jr", "JR Cigar", "static/data/jr.csv"),
+]
+
+KNOWN_BRANDS = ["Arturo Fuente"]  # expand later
+
+@app.on_event("startup")
+async def startup():
+    await init_db()
+
+@app.get("/health")
+async def health():
+    return {"ok": True, "ts": datetime.utcnow().isoformat()}
+
+class SearchOut(BaseModel):
+    intent: str
+    brand: str | None = None
+    line: str | None = None
+    size: str | None = None
+    results: list[dict] = []
+
+def make_sid(brand, line, size):
+    return "-".join([x for x in [brand, line, size] if x]).replace(" ", "_")[:100]
+
+def load_all_listings():
+    listings = []
+    for key, name, path in RETAILERS:
+        listings.extend(load_csv(path, key, name))
+    return listings
+
+def cheapest_by_line(listings, brand, state):
+    out = {}
+    for L in listings:
+        if L.brand != brand: continue
+        d = delivered_cents(L.base_cents, L.retailer_key, state)
+        cur = out.get(L.line)
+        if (cur is None) or (d < cur["delivered_cents"]):
+            out[L.line] = {"line": L.line, "retailer": L.retailer_name, "delivered_cents": d, "url": L.url, "retailer_key": L.retailer_key, "base_cents": L.base_cents}
+    return [{"line": v["line"], "cheapest_delivered": f"${v['delivered_cents']/100:.2f}", "url": v["url"]} for v in out.values()]
+
+def sizes_cheapest(listings, brand, line, state):
+    out = {}
+    for L in listings:
+        if L.brand != brand or L.line != line: continue
+        d = delivered_cents(L.base_cents, L.retailer_key, state)
+        cur = out.get(L.size)
+        if (cur is None) or (d < cur["delivered_cents"]):
+            out[L.size] = {"size": L.size, "delivered_cents": d}
+    return [{"size": s, "cheapest_delivered": f"${v['delivered_cents']/100:.2f}"} for s,v in sorted(out.items())]
+
+def offers_for_sku(listings, brand, line, size, state):
+    out = []
+    for L in listings:
+        if L.brand == brand and L.line == line and L.size == size and L.in_stock:
+            d = delivered_cents(L.base_cents, L.retailer_key, state)
+            out.append({"retailer": L.retailer_name, "retailer_key": L.retailer_key, "base_cents": L.base_cents, "delivered_cents": d, "url": L.url})
+    out.sort(key=lambda x: x["delivered_cents"])
+    return out
+
+@app.get("/search", response_model=SearchOut)
+async def search(q: str, zip: str | None = None, session=Depends(get_session)):
+    state = zip_to_state(zip or "") or "OR"
+    n = normalize_query(q, KNOWN_BRANDS)
+    listings = load_all_listings()
+
+    if n.brand and not n.line:
+        results = cheapest_by_line(listings, n.brand, state)
+        return SearchOut(intent="brand", brand=n.brand, results=results)
+    if n.brand and n.line and not n.size:
+        results = sizes_cheapest(listings, n.brand, n.line, state)
+        return SearchOut(intent="line", brand=n.brand, line=n.line, results=results)
+    if n.brand and n.line and n.size:
+        offs = offers_for_sku(listings, n.brand, n.line, n.size, state)
+        sid = make_sid(n.brand, n.line, n.size)
+        for o in offs: o["url"] = cj_deeplink(o["url"], sid=sid)
+        if offs:
+            cheapest = offs[0]
+            session.add(Event(event_type="CLICK_LIST", brand=n.brand, line=n.line, size=n.size, retailer=cheapest["retailer"], state=state, delivered_cents=cheapest["delivered_cents"]))
+            today = date.today().isoformat()
+            await session.execute(PricePoint.__table__.delete().where((PricePoint.day==today)&(PricePoint.brand==n.brand)&(PricePoint.line==n.line)&(PricePoint.size==n.size)&(PricePoint.source=="cheapest")))
+            session.add(PricePoint(day=today, brand=n.brand, line=n.line, size=n.size, delivered_cents=cheapest["delivered_cents"], source="cheapest"))
+            await session.commit()
+        results = [{"retailer": o["retailer"], "base": f"${o['base_cents']/100:.2f}", "shipping": "est", "tax": "est", "delivered": f"${o['delivered_cents']/100:.2f}", "url": o["url"], "cheapest": (i==0)} for i,o in enumerate(offs)]
+        return SearchOut(intent="sku", brand=n.brand, line=n.line, size=n.size, results=results)
+
+    return SearchOut(intent="help", results=[{"message":"Try a brand (e.g., Arturo Fuente) or include a line (e.g., Arturo Fuente Hemingway)."}])
+
+class EventIn(BaseModel):
+    event_type: str
+    brand: str | None = None
+    line: str | None = None
+    size: str | None = None
+    retailer: str | None = None
+    state: str | None = None
+    delivered_cents: int | None = None
+
+@app.post("/event")
+async def log_event(payload: EventIn, session=Depends(get_session)):
+    session.add(Event(event_type=payload.event_type, brand=payload.brand, line=payload.line, size=payload.size, retailer=payload.retailer, state=payload.state, delivered_cents=payload.delivered_cents))
+    await session.commit()
+    return {"ok": True}
+
+def check_basic_auth(request: Request):
+    auth = request.headers.get("authorization", "")
+    if not auth.lower().startswith("basic "):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, headers={"WWW-Authenticate":"Basic"})
+    try:
+        userpass = base64.b64decode(auth.split(" ",1)[1]).decode("utf-8"); u,p = userpass.split(":",1)
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, headers={"WWW-Authenticate":"Basic"})
+    if not (u == ADMIN_USER and p == ADMIN_PASS):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, headers={"WWW-Authenticate":"Basic"})
+
+@app.get("/api/summary")
+async def get_summary(request: Request, session=Depends(get_session)):
+    check_basic_auth(request)
+    since = datetime.utcnow() - timedelta(days=30)
+    q1 = await session.execute(select(Event.brand, func.count()).where(Event.event_type=="CLICK_LIST", Event.ts >= since, Event.brand.isnot(None)).group_by(Event.brand).order_by(desc(func.count())).limit(10))
+    top_brands = [{"brand": b or "Unknown", "clicks": c} for b,c in q1.all()]
+    q2 = await session.execute(select(Event.size, func.count()).where(Event.event_type=="CLICK_LIST", Event.ts >= since, Event.size.isnot(None)).group_by(Event.size).order_by(desc(func.count())).limit(10))
+    top_sizes = [{"size": s or "Unknown", "clicks": c} for s,c in q2.all()]
+    q3 = await session.execute(select(Event.line, func.avg(Event.delivered_cents)).where(Event.event_type=="CLICK_LIST", Event.ts >= since, Event.delivered_cents.isnot(None), Event.line.isnot(None)).group_by(Event.line).order_by(desc(func.avg(Event.delivered_cents))).limit(10))
+    prices = [{"line": ln or "Unknown", "avg_delivered": int(avg or 0)} for ln,avg in q3.all()]
+    return {"since": since.isoformat(), "top_brands": top_brands, "top_sizes": top_sizes, "avg_delivered_by_line": prices}
+
+@app.get("/admin", response_class=HTMLResponse)
+async def admin(request: Request):
+    return templates.TemplateResponse("admin.html", {"request": request, "site": SITE_NAME})
+
+@app.get("/price_history")
+async def price_history(brand: str, line: str, size: str, session=Depends(get_session)):
+    rows = await session.execute(select(PricePoint.day, PricePoint.delivered_cents).where(PricePoint.brand==brand, PricePoint.line==line, PricePoint.size==size, PricePoint.source=="cheapest").order_by(PricePoint.day.asc()))
+    pts = [{"day": d, "delivered_cents": v} for d,v in rows.all()]
+    return {"points": pts}
+
+END OF FILES.
+
+Then open the Shell and run:
+pip install -r requirements.txt
+Click “Run”, open the webview, and go to /static/index.html. Try:
+- Arturo Fuente
+- Arturo Fuente Hemingway
+- Arturo Fuente Hemingway Short Story 4x49 (Box of 25)
