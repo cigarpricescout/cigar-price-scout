@@ -1,0 +1,165 @@
+Search still isn’t matching real user queries. Please implement robust fuzzy intent like this:
+
+1) In app/main.py add helpers (near the imports):
+-------------------------------------------------
+import re
+from datetime import date
+
+def _canon(s: str) -> str:
+    return (s or "").strip().lower()
+
+def _tok(s: str) -> set[str]:
+    return set(re.findall(r"[a-z0-9]+", (s or "").lower()))
+
+def _size_from_text(s: str) -> str | None:
+    m = re.search(r"(\d+(?:\.\d+)?)\s*[xX]\s*(\d+)", s or "")
+    return f"{m.group(1)}x{m.group(2)}" if m else None
+
+def _line_matches(requested: str | None, actual: str | None) -> bool:
+    if not requested or not actual:
+        return False
+    r, a = _canon(requested), _canon(actual)
+    return (r in a) or (a in r)
+
+def _best_titles(q: str, products, brand: str | None = None):
+    qtok = _tok(q)
+    rows = []
+    for p in products:
+        if brand and _canon(p.brand) != _canon(brand):
+            continue
+        ttok = _tok(p.title)
+        overlap = len(qtok & ttok)
+        if overlap == 0:
+            continue
+        size_bonus = 1 if (p.size and p.size.replace("x","") in "".join(qtok)) else 0
+        line_bonus = 1 if any(t in _canon(p.line) for t in qtok) else 0
+        rows.append( (overlap + size_bonus + line_bonus, p) )
+    rows.sort(key=lambda t: t[0], reverse=True)
+    return [p for _,p in rows]
+
+def _sid(brand, line, size) -> str:
+    return "-".join([x for x in [brand, line, size] if x]).replace(" ", "_")[:100]
+
+
+2) In /search AFTER you build `all_products` and `known_brands`, relax normalization:
+------------------------------------------------------------------------------------
+# Use brand list from data if normalize_query missed it
+if not nq.brand:
+    # choose a brand whose tokens intersect the query
+    qtok = _tok(q)
+    by = {}
+    for p in all_products:
+        bt = _tok(p.brand)
+        sc = len(qtok & bt)
+        if sc:
+            by[p.brand] = max(by.get(p.brand, 0), sc)
+    if by:
+        nq.brand = max(by.items(), key=lambda x: x[1])[0]
+
+# Pull size from free text if not detected
+if not nq.size:
+    nq.size = _size_from_text(q)
+
+# If user typed extra words (e.g., "Hemingway Short Story"), pick the canonical line by best title match
+if nq.brand and nq.line:
+    tops = _best_titles(q, all_products, brand=nq.brand)
+    if tops:
+        # choose the line that appears most among best titles
+        from collections import Counter
+        c = Counter(p.line for p in tops[:10])
+        nq.line = c.most_common(1)[0][0]
+
+
+3) Brand view (brand only): show lines sorted by relevancy, not exact equality:
+-------------------------------------------------------------------------------
+if nq.brand and not nq.line:
+    intent = "brand"
+    filtered = [p for p in all_products if _canon(p.brand) == _canon(nq.brand)]
+    by_line = {}
+    qtok = _tok(q)
+    for p in filtered:
+        d = delivered_cents(p.base_cents, p.retailer_key, state)
+        rec = by_line.get(p.line)
+        # relevance score by overlap with line/title
+        rel = len(qtok & (_tok(p.line) | _tok(p.title)))
+        if (rec is None) or (d < rec["delivered"]):
+            by_line[p.line] = {"line": p.line, "delivered": d, "rel": rel}
+        else:
+            by_line[p.line]["rel"] = max(by_line[p.line]["rel"], rel)
+    rows = list(by_line.values())
+    rows.sort(key=lambda r: (-r["rel"], r["delivered"]))  # relevant first, then cheapest
+    results = [{"line": r["line"], "cheapest_delivered": f"${r['delivered']/100:.2f}"} for r in rows]
+    return {"intent": intent, "brand": nq.brand, "results": results}
+
+
+4) Line view (brand + line but no size): accept fuzzy match for line and rank sizes:
+-----------------------------------------------------------------------------------
+if nq.brand and nq.line and not nq.size:
+    intent = "line"
+    filtered = [p for p in all_products
+                if _canon(p.brand) == _canon(nq.brand) and _line_matches(nq.line, p.line)]
+    by_size = {}
+    for p in filtered:
+        d = delivered_cents(p.base_cents, p.retailer_key, state)
+        cur = by_size.get(p.size)
+        if cur is None or d < cur:
+            by_size[p.size] = d
+    results = [{"size": s, "cheapest_delivered": f"${c/100:.2f}"} for s,c in sorted(by_size.items())]
+    return {"intent": intent, "brand": nq.brand, "line": nq.line, "results": results}
+
+
+5) SKU view (brand + ~line + size): fuzzy line match + price history + affiliate sid:
+--------------------------------------------------------------------------------------
+if nq.brand and nq.line and nq.size:
+    intent = "sku"
+    filtered = [p for p in all_products
+                if _canon(p.brand) == _canon(nq.brand)
+                and _line_matches(nq.line, p.line)
+                and _canon(p.size) == _canon(nq.size)
+                and p.in_stock]
+    rows = []
+    min_del = None
+    for p in filtered:
+        d = delivered_cents(p.base_cents, p.retailer_key, state)
+        rows.append((p, d))
+        min_del = d if (min_del is None or d < min_del) else min_del
+    rows.sort(key=lambda t: t[1])
+
+    results = [{
+        "retailer": p.retailer_name,
+        "base": f"${p.base_cents/100:.2f}",
+        "shipping": f"${(d - p.base_cents)/100:.2f}",
+        "tax": "$0.00",
+        "delivered": f"${d/100:.2f}",
+        "url": cj_deeplink(p.url, sid=_sid(nq.brand, nq.line, nq.size)),
+        "cheapest": (d == min_del),
+    } for (p, d) in rows]
+
+    if min_del is not None:
+        await session.execute(
+            PricePoint.__table__.delete().where(
+                (PricePoint.day == date.today().isoformat()) &
+                (PricePoint.brand == nq.brand) &
+                (PricePoint.line == nq.line) &
+                (PricePoint.size == nq.size) &
+                (PricePoint.source == "cheapest")
+            )
+        )
+        session.add(PricePoint(
+            day=date.today().isoformat(),
+            brand=nq.brand, line=nq.line, size=nq.size,
+            delivered_cents=min_del, source="cheapest"
+        ))
+        await session.commit()
+
+    return {"intent": intent, "brand": nq.brand, "line": nq.line, "size": nq.size, "results": results}
+
+
+6) Keep the existing help/none fallback as-is.
+----------------------------------------------
+
+After patching, restart. Test these messy queries:
+- "fuente hemingway short 4x49"
+- "Arturo Fuente hem short story 4x49"
+- "AF Hemingway Signature"
+Each should resolve to brand/line/size and show retailer comparisons with a 'Cheapest' row.

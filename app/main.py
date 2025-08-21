@@ -11,26 +11,40 @@ from .normalize import normalize_query
 from .affiliate import cj_deeplink
 from .shipping_tax import delivered_cents, zip_to_state
 from .adapters.csv_adapter import load_csv
+import re
+from datetime import date
 
 def _canon(s: str) -> str:
     return (s or "").strip().lower()
 
+def _tok(s: str) -> set[str]:
+    return set(re.findall(r"[a-z0-9]+", (s or "").lower()))
+
+def _size_from_text(s: str) -> str | None:
+    m = re.search(r"(\d+(?:\.\d+)?)\s*[xX]\s*(\d+)", s or "")
+    return f"{m.group(1)}x{m.group(2)}" if m else None
+
 def _line_matches(requested: str | None, actual: str | None) -> bool:
-    # allow "Hemingway Short Story" to match line "Hemingway"
     if not requested or not actual:
         return False
     r, a = _canon(requested), _canon(actual)
     return (r in a) or (a in r)
 
-def _pick_line_core(brand: str | None, requested_line: str | None, all_products) -> str | None:
-    # pick the known line for this brand that best matches the requested phrase
-    if not brand or not requested_line:
-        return None
-    b = _canon(brand)
-    for p in all_products:
-        if _canon(p.brand) == b and _line_matches(requested_line, p.line):
-            return p.line
-    return None
+def _best_titles(q: str, products, brand: str | None = None):
+    qtok = _tok(q)
+    rows = []
+    for p in products:
+        if brand and _canon(p.brand) != _canon(brand):
+            continue
+        ttok = _tok(p.title)
+        overlap = len(qtok & ttok)
+        if overlap == 0:
+            continue
+        size_bonus = 1 if (p.size and p.size.replace("x","") in "".join(qtok)) else 0
+        line_bonus = 1 if any(t in _canon(p.line) for t in qtok) else 0
+        rows.append( (overlap + size_bonus + line_bonus, p) )
+    rows.sort(key=lambda t: t[0], reverse=True)
+    return [p for _,p in rows]
 
 def _sid(brand, line, size) -> str:
     return "-".join([x for x in [brand, line, size] if x]).replace(" ", "_")[:100]
@@ -112,30 +126,58 @@ def offers_for_sku(listings, brand, line, size, state):
 @app.get("/search", response_model=SearchOut)
 async def search(q: str, zip: str | None = None, session=Depends(get_session)):
     state = zip_to_state(zip or "") or "OR"
-    n = normalize_query(q, KNOWN_BRANDS)
+    nq = normalize_query(q, KNOWN_BRANDS)
     all_products = load_all_listings()
 
-    # derive a brand-specific line core if user typed extra words like "Hemingway Short Story"
-    line_core = _pick_line_core(n.brand, n.line, all_products)
-    if n.line and line_core:
-        n.line = line_core  # normalize to the canonical line from CSV
+    # Use brand list from data if normalize_query missed it
+    if not nq.brand:
+        # choose a brand whose tokens intersect the query
+        qtok = _tok(q)
+        by = {}
+        for p in all_products:
+            bt = _tok(p.brand)
+            sc = len(qtok & bt)
+            if sc:
+                by[p.brand] = max(by.get(p.brand, 0), sc)
+        if by:
+            nq.brand = max(by.items(), key=lambda x: x[1])[0]
 
-    if n.brand and not n.line:
+    # Pull size from free text if not detected
+    if not nq.size:
+        nq.size = _size_from_text(q)
+
+    # If user typed extra words (e.g., "Hemingway Short Story"), pick the canonical line by best title match
+    if nq.brand and nq.line:
+        tops = _best_titles(q, all_products, brand=nq.brand)
+        if tops:
+            # choose the line that appears most among best titles
+            from collections import Counter
+            c = Counter(p.line for p in tops[:10])
+            nq.line = c.most_common(1)[0][0]
+
+    if nq.brand and not nq.line:
         intent = "brand"
-        filtered = [p for p in all_products if _canon(p.brand) == _canon(n.brand)]
+        filtered = [p for p in all_products if _canon(p.brand) == _canon(nq.brand)]
         by_line = {}
+        qtok = _tok(q)
         for p in filtered:
             d = delivered_cents(p.base_cents, p.retailer_key, state)
-            cur = by_line.get(p.line)
-            if cur is None or d < cur["delivered"]:
-                by_line[p.line] = {"line": p.line, "delivered": d, "url": p.url}
-        results = [{"line": v["line"], "cheapest_delivered": f"${v['delivered']/100:.2f}", "url": v["url"]} for v in by_line.values()]
-        return {"intent": intent, "brand": n.brand, "results": results}
+            rec = by_line.get(p.line)
+            # relevance score by overlap with line/title
+            rel = len(qtok & (_tok(p.line) | _tok(p.title)))
+            if (rec is None) or (d < rec["delivered"]):
+                by_line[p.line] = {"line": p.line, "delivered": d, "rel": rel}
+            else:
+                by_line[p.line]["rel"] = max(by_line[p.line]["rel"], rel)
+        rows = list(by_line.values())
+        rows.sort(key=lambda r: (-r["rel"], r["delivered"]))  # relevant first, then cheapest
+        results = [{"line": r["line"], "cheapest_delivered": f"${r['delivered']/100:.2f}"} for r in rows]
+        return {"intent": intent, "brand": nq.brand, "results": results}
 
-    elif n.brand and n.line and not n.size:
+    if nq.brand and nq.line and not nq.size:
         intent = "line"
         filtered = [p for p in all_products
-                    if _canon(p.brand) == _canon(n.brand) and _line_matches(n.line, p.line)]
+                    if _canon(p.brand) == _canon(nq.brand) and _line_matches(nq.line, p.line)]
         by_size = {}
         for p in filtered:
             d = delivered_cents(p.base_cents, p.retailer_key, state)
@@ -143,16 +185,15 @@ async def search(q: str, zip: str | None = None, session=Depends(get_session)):
             if cur is None or d < cur:
                 by_size[p.size] = d
         results = [{"size": s, "cheapest_delivered": f"${c/100:.2f}"} for s, c in sorted(by_size.items())]
-        return {"intent": intent, "brand": n.brand, "line": n.line, "results": results}
+        return {"intent": intent, "brand": nq.brand, "line": nq.line, "results": results}
 
-    elif n.brand and n.line and n.size:
+    if nq.brand and nq.line and nq.size:
         intent = "sku"
         filtered = [p for p in all_products
-                    if _canon(p.brand) == _canon(n.brand)
-                    and _line_matches(n.line, p.line)
-                    and _canon(p.size) == _canon(n.size)
+                    if _canon(p.brand) == _canon(nq.brand)
+                    and _line_matches(nq.line, p.line)
+                    and _canon(p.size) == _canon(nq.size)
                     and p.in_stock]
-        # compute delivered once and sort
         rows = []
         min_del = None
         for p in filtered:
@@ -167,29 +208,28 @@ async def search(q: str, zip: str | None = None, session=Depends(get_session)):
             "shipping": f"${(d - p.base_cents)/100:.2f}",
             "tax": "$0.00",
             "delivered": f"${d/100:.2f}",
-            "url": cj_deeplink(p.url, sid=_sid(n.brand, n.line, n.size)),
+            "url": cj_deeplink(p.url, sid=_sid(nq.brand, nq.line, nq.size)),
             "cheapest": (d == min_del),
         } for (p, d) in rows]
 
-        # write today's cheapest for price history
         if min_del is not None:
             await session.execute(
                 PricePoint.__table__.delete().where(
                     (PricePoint.day == date.today().isoformat()) &
-                    (PricePoint.brand == n.brand) &
-                    (PricePoint.line == n.line) &
-                    (PricePoint.size == n.size) &
+                    (PricePoint.brand == nq.brand) &
+                    (PricePoint.line == nq.line) &
+                    (PricePoint.size == nq.size) &
                     (PricePoint.source == "cheapest")
                 )
             )
             session.add(PricePoint(
                 day=date.today().isoformat(),
-                brand=n.brand, line=n.line, size=n.size,
+                brand=nq.brand, line=nq.line, size=nq.size,
                 delivered_cents=min_del, source="cheapest"
             ))
             await session.commit()
 
-        return {"intent": intent, "brand": n.brand, "line": n.line, "size": n.size, "results": results}
+        return {"intent": intent, "brand": nq.brand, "line": nq.line, "size": nq.size, "results": results}
 
     return SearchOut(intent="help", results=[{"message":"Try a brand (e.g., Arturo Fuente) or include a line (e.g., Arturo Fuente Hemingway)."}])
 
