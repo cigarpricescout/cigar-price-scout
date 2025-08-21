@@ -6,6 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from sqlalchemy import select, func, desc
+from typing import Dict, List
 from .db import get_session, init_db, Event, PricePoint
 from .normalize import normalize_query
 from .affiliate import cj_deeplink
@@ -58,10 +59,16 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
 RETAILERS = [
-    ("famous", "Famous Smoke Shop", "static/data/famous.csv"),
-    ("ci", "Cigars International", "static/data/ci.csv"),
-    ("jr", "JR Cigar", "static/data/jr.csv"),
+    {"key": "famous", "name": "Famous Smoke Shop", "csv": "static/data/famous.csv"},
+    {"key": "ci", "name": "Cigars International", "csv": "static/data/ci.csv"},
+    {"key": "jr", "name": "JR Cigar", "csv": "static/data/jr.csv"},
 ]
+
+def load_all_listings():
+    listings = []
+    for r in RETAILERS:
+        listings.extend(load_csv(r["csv"], r["key"], r["name"]))
+    return listings
 
 KNOWN_BRANDS = ["Arturo Fuente"]  # expand later
 
@@ -88,11 +95,6 @@ class SearchOut(BaseModel):
 def make_sid(brand, line, size):
     return "-".join([x for x in [brand, line, size] if x]).replace(" ", "_")[:100]
 
-def load_all_listings():
-    listings = []
-    for key, name, path in RETAILERS:
-        listings.extend(load_csv(path, key, name))
-    return listings
 
 def cheapest_by_line(listings, brand, state):
     out = {}
@@ -232,6 +234,66 @@ async def search(q: str, zip: str | None = None, session=Depends(get_session)):
         return {"intent": intent, "brand": nq.brand, "line": nq.line, "size": nq.size, "results": results}
 
     return SearchOut(intent="help", results=[{"message":"Try a brand (e.g., Arturo Fuente) or include a line (e.g., Arturo Fuente Hemingway)."}])
+
+# NEW: catalog of brands→lines→sizes so UI can populate dropdowns
+@app.get("/catalog")
+async def catalog():
+    L = load_all_listings()
+    brands = sorted(set(p.brand for p in L))
+    lines: Dict[str, List[str]] = {}
+    sizes: Dict[str, List[str]] = {}
+    for b in brands:
+        blines = sorted(set(p.line for p in L if p.brand == b))
+        lines[b] = blines
+        for ln in blines:
+            key = f"{b}|{ln}"
+            sizes[key] = sorted(set(p.size for p in L if p.brand == b and p.line == ln))
+    # Expose common box counts the UI can show (informational)
+    box_qty = [10, 12, 20, 24, 25, 50]
+    return {"brands": brands, "lines": lines, "sizes": sizes, "box_qty": box_qty}
+
+# NEW: strict compare endpoint — no fuzzy text; just brand/line/size
+@app.get("/compare")
+async def compare(brand: str, line: str, size: str, zip: str = "", session = Depends(get_session)):
+    state = zip_to_state(zip)
+    L = load_all_listings()
+    rows = []
+    for p in L:
+        if p.brand == brand and p.line == line and p.size == size and p.in_stock:
+            d = delivered_cents(p.base_cents, p.retailer_key, state)
+            rows.append((p, d))
+    rows.sort(key=lambda t: t[1])
+
+    results = [{
+        "retailer": p.retailer_name,
+        "base": f"${p.base_cents/100:.2f}",
+        "shipping": f"${(d - p.base_cents)/100:.2f}",
+        "tax": "$0.00",
+        "delivered": f"${d/100:.2f}",
+        "url": cj_deeplink(p.url, sid="-".join([brand, line, size]).replace(" ", "_")[:100]),
+        "cheapest": (i == 0),
+    } for i,(p,d) in enumerate(rows)]
+
+    # Save today's cheapest so /price_history works
+    if rows:
+        min_del = rows[0][1]
+        await session.execute(
+            PricePoint.__table__.delete().where(
+                (PricePoint.day == date.today().isoformat()) &
+                (PricePoint.brand == brand) &
+                (PricePoint.line == line) &
+                (PricePoint.size == size) &
+                (PricePoint.source == "cheapest")
+            )
+        )
+        session.add(PricePoint(
+            day=date.today().isoformat(),
+            brand=brand, line=line, size=size,
+            delivered_cents=min_del, source="cheapest"
+        ))
+        await session.commit()
+
+    return {"brand": brand, "line": line, "size": size, "results": results}
 
 class EventIn(BaseModel):
     event_type: str

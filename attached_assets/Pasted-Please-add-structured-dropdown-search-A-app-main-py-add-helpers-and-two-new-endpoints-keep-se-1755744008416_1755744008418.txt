@@ -1,3 +1,87 @@
+Please add structured dropdown search.
+
+A) app/main.py — add helpers and two new endpoints (keep /search; just add these).
+-----------------------------------------------------------------------------------
+# ADD near the top with other imports
+from typing import Dict, List
+from datetime import date
+
+def load_all_listings():
+    listings = []
+    for r in RETAILERS:
+        listings.extend(load_csv(r["csv"], r["key"], r["name"]))
+    return listings
+
+# NEW: catalog of brands→lines→sizes so UI can populate dropdowns
+@app.get("/catalog")
+async def catalog():
+    L = load_all_listings()
+    brands = sorted(set(p.brand for p in L))
+    lines: Dict[str, List[str]] = {}
+    sizes: Dict[str, List[str]] = {}
+    for b in brands:
+        blines = sorted(set(p.line for p in L if p.brand == b))
+        lines[b] = blines
+        for ln in blines:
+            key = f"{b}|{ln}"
+            sizes[key] = sorted(set(p.size for p in L if p.brand == b and p.line == ln))
+    # Expose common box counts the UI can show (informational)
+    box_qty = [10, 12, 20, 24, 25, 50]
+    return {"brands": brands, "lines": lines, "sizes": sizes, "box_qty": box_qty}
+
+# NEW: strict compare endpoint — no fuzzy text; just brand/line/size
+@app.get("/compare")
+async def compare(brand: str, line: str, size: str, zip: str = "", session = Depends(get_session)):
+    state = zip_to_state(zip)
+    L = load_all_listings()
+    rows = []
+    for p in L:
+        if p.brand == brand and p.line == line and p.size == size and p.in_stock:
+            d = delivered_cents(p.base_cents, p.retailer_key, state)
+            rows.append((p, d))
+    rows.sort(key=lambda t: t[1])
+
+    results = [{
+        "retailer": p.retailer_name,
+        "base": f"${p.base_cents/100:.2f}",
+        "shipping": f"${(d - p.base_cents)/100:.2f}",
+        "tax": "$0.00",
+        "delivered": f"${d/100:.2f}",
+        "url": cj_deeplink(p.url, sid="-".join([brand, line, size]).replace(" ", "_")[:100]),
+        "cheapest": (i == 0),
+    } for i,(p,d) in enumerate(rows)]
+
+    # Save today's cheapest so /price_history works
+    if rows:
+        min_del = rows[0][1]
+        await session.execute(
+            PricePoint.__table__.delete().where(
+                (PricePoint.day == date.today().isoformat()) &
+                (PricePoint.brand == brand) &
+                (PricePoint.line == line) &
+                (PricePoint.size == size) &
+                (PricePoint.source == "cheapest")
+            )
+        )
+        session.add(PricePoint(
+            day=date.today().isoformat(),
+            brand=brand, line=line, size=size,
+            delivered_cents=min_del, source="cheapest"
+        ))
+        await session.commit()
+
+    return {"brand": brand, "line": line, "size": size, "results": results}
+
+
+B) static/style.css — append small styles for selects.
+------------------------------------------------------
+/* dropdown UI */
+select{padding:10px 12px;border:1px solid var(--rule);border-radius:10px;background:#fff}
+.chooser{display:grid;grid-template-columns:1fr 1fr 1fr 120px 120px;gap:8px;margin-top:10px}
+
+
+C) static/index.html — REPLACE the whole file with this version.
+----------------------------------------------------------------
 <!doctype html>
 <html>
   <head>
