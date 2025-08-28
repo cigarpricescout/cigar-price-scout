@@ -1,0 +1,51 @@
+{
+  "permanent": {
+    "famous": [
+      {
+        "type": "freeship",
+        "threshold_cents": 20000,
+        "label": "Free shipping on $200+",
+        "code": null,
+        "applies_to": "sitewide",
+        "stackable": true
+      }
+    ],
+    "smokeinn": [
+      {
+        "type": "freeship",
+        "threshold_cents": 15000,
+        "label": "Free shipping $150+",
+        "code": "SHIPFREE",
+        "applies_to": "sitewide",
+        "stackable": true
+      }
+    ]
+  },
+  "temporary": {
+    "famous": [
+      {
+        "type": "percent",
+        "value": 25,
+        "code": "MEM25",
+        "label": "Memorial Day: 25% off sitewide",
+        "min_subtotal_cents": 0,
+        "applies_to": "sitewide",
+        "starts": "2025-05-20",
+        "expires": "2025-05-28",
+        "stackable": true
+      }
+    ],
+    "holts": [
+      {
+        "type": "amount",
+        "value": 20,
+        "code": "TWENTY",
+        "label": "$20 off $200+",
+        "min_subtotal_cents": 20000,
+        "applies_to": "sitewide",
+        "expires": "2026-12-31",
+        "stackable": true
+      }
+    ]
+  }
+}

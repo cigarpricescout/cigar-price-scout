@@ -1,0 +1,107 @@
+from __future__ import annotations
+import json, re
+from pathlib import Path
+from datetime import datetime, timezone
+from typing import List, Dict, Any, Optional
+
+ROOT = Path(__file__).resolve().parent.parent
+PROMOS_PATH = ROOT / "static" / "promos.json"
+
+def _load_promos() -> Dict[str, List[Dict[str, Any]]]:
+    if not PROMOS_PATH.exists():
+        return {"permanent": [], "temporary": []}
+    try:
+        data = json.loads(PROMOS_PATH.read_text(encoding="utf-8"))
+        return {
+            "permanent": list(data.get("permanent", [])),
+            "temporary": list(data.get("temporary", [])),
+        }
+    except Exception:
+        # malformed promos file -> ignore
+        return {"permanent": [], "temporary": []}
+
+def _within_dates(p: Dict[str, Any], now: datetime) -> bool:
+    start = p.get("start")
+    end = p.get("end")
+    try:
+        if start:
+            if now < datetime.fromisoformat(start).replace(tzinfo=timezone.utc):
+                return False
+        if end:
+            if now > datetime.fromisoformat(end).replace(tzinfo=timezone.utc):
+                return False
+    except Exception:
+        # if dates are malformed, ignore date filtering
+        return True
+    return True
+
+def _matches(p: Dict[str, Any], retailer_key: str, brand: str, line: str, url: str) -> bool:
+    rk = (p.get("retailer_key") or "").strip().lower()
+    if rk and rk != retailer_key.lower():
+        return False
+    b = (p.get("brand") or "").strip().lower()
+    if b and b != brand.lower():
+        return False
+    l = (p.get("line") or "").strip().lower()
+    if l and l != line.lower():
+        return False
+    patt = p.get("url_pattern")
+    if patt:
+        try:
+            if not re.search(patt, url, re.I):
+                return False
+        except Exception:
+            # bad regex -> ignore pattern
+            pass
+    return True
+
+def apply_promos(retailer_key: str, brand: str, line: str, url: str, base_price: float, now: Optional[datetime] = None) -> Dict[str, Any]:
+    """
+    Returns {"savings": float, "applied": [str]}
+    Supports keys per promo item:
+      retailer_key?, brand?, line?, url_pattern?,
+      percent_off?, amount_off?, code?, start?, end?
+    """
+    promos = _load_promos()
+    items = list(promos.get("permanent", [])) + list(promos.get("temporary", []))
+    if not items:
+        return {"savings": 0.0, "applied": []}
+
+    now = now or datetime.now(timezone.utc)
+    total_savings = 0.0
+    applied: List[str] = []
+
+    for p in items:
+        if not _within_dates(p, now):
+            continue
+        if not _matches(p, retailer_key, brand, line, url):
+            continue
+
+        # compute savings
+        savings = 0.0
+        try:
+            if p.get("percent_off") is not None:
+                savings += (float(p["percent_off"]) / 100.0) * float(base_price)
+            if p.get("amount_off") is not None:
+                savings += float(p["amount_off"])
+        except Exception:
+            continue
+
+        if savings <= 0:
+            continue
+
+        # description
+        bits = []
+        if p.get("percent_off") is not None:
+            bits.append(f"{p['percent_off']}% off")
+        if p.get("amount_off") is not None:
+            bits.append(f"${float(p['amount_off']):.2f} off")
+        if p.get("code"):
+            bits.append(f"code {p['code']}")
+        applied.append(" / ".join(bits))
+
+        total_savings += savings
+
+    # never discount below zero
+    total_savings = max(0.0, min(float(base_price), float(total_savings)))
+    return {"savings": round(total_savings, 2), "applied": applied}

@@ -1,122 +1,397 @@
 <!doctype html>
-<html>
+<html lang="en">
   <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>CigarPriceScout</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Cigar Price Scout</title>
+
+    <!-- Sherlock-esque fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap" rel="stylesheet" />
+
+    <style>
+      :root{
+        --ink:#111;
+        --muted:#4b5563;
+        --rule:#e5e7eb;
+        --accent:#7c5c2e;
+      }
+      body{
+        margin:0;
+        color:var(--ink);
+        background:#faf7f2;
+        font-family:"Cormorant Garamond", serif;
+        font-size:18px;
+        line-height:1.5;
+      }
+      .wrap{max-width:900px;margin:0 auto;padding:0 20px}
+      
+      /* Header: scout hat, title, tagline stacked and centered */
+      .heroheader{
+        display:flex;flex-direction:column;align-items:center;justify-content:center;
+        gap:8px;padding:28px 0 10px;text-align:center;
+      }
+      .scout-hat{width:80px;height:60px}
+      .brandname{
+        font-family:"Cinzel", serif;
+        font-weight:700;
+        letter-spacing:.4px;
+        font-size:28px;
+      }
+      .tag{
+        font-style:italic;
+        color:var(--muted);
+        font-size:20px;
+        margin-top:2px;
+      }
+
+      /* Picker */
+      .picker{display:grid;grid-template-columns:1fr 1fr 1fr 140px 200px;gap:10px;margin:18px auto}
+      .picker select,.picker input{
+        padding:12px 14px;border:1px solid var(--rule);border-radius:12px;background:#fff;
+        font-family:"Cormorant Garamond", serif;font-size:18px
+      }
+      .cta{border:none;border-radius:12px;padding:12px 14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
+      .cta-primary{background:var(--accent);color:#fff}
+      .cta-primary:hover{filter:brightness(.95)}
+      .cta:disabled{opacity:0.5;cursor:not-allowed}
+      .cta svg{width:18px;height:18px}
+
+      .chips{display:flex;gap:8px;justify-content:center;margin-top:12px;flex-wrap:wrap}
+      .chip{font-size:14px;padding:6px 10px;border-radius:999px;border:1px solid var(--rule);background:#fff;color:#374151}
+
+      h2{font-family:"Cinzel", serif;font-weight:700;letter-spacing:.3px;margin:18px 0 8px;font-size:24px}
+      
+      /* Clean, Professional Table Styling */
+      table{
+        width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--rule);
+        border-radius:12px;overflow:hidden;margin-top:20px;
+        box-shadow:0 1px 3px rgba(0,0,0,0.05);
+      }
+      th,td{
+        padding:14px 16px;border-bottom:1px solid var(--rule);text-align:left;
+        font-size:17px;line-height:1.4;
+      }
+      th{
+        background:#fcfbf9;color:var(--ink);font-family:"Cinzel", serif;
+        font-weight:600;font-size:16px;letter-spacing:0.3px;
+      }
+      td{color:var(--ink);background:#fff}
+      
+      /* Status indicators */
+      .oos{color:#dc2626;font-weight:600;font-size:12px;text-transform:uppercase}
+      .best{color:#059669;font-weight:700;font-size:12px;text-transform:uppercase}
+      
+      /* Links styling */
+      td a{color:var(--accent);text-decoration:none;font-weight:600}
+      td a:hover{text-decoration:underline}
+      
+      /* Loading state */
+      .loading{
+        text-align:center;padding:60px 20px;color:var(--muted);
+        font-style:italic;font-size:20px;
+      }
+      
+      /* Results summary */
+      .results-summary{
+        background:#f8f9fa;border:1px solid var(--rule);border-radius:8px;
+        padding:12px 16px;margin-bottom:15px;font-size:16px;
+      }
+
+      .foot{border-top:1px solid var(--rule);padding:26px 0;margin-top:28px;text-align:center;color:#6b7280}
+      .foot a{color:inherit;text-decoration:none}
+      .foot a:hover{text-decoration:underline}
+      .fine{color:#6b7280;font-size:14px}
+
+      @media (max-width: 920px){
+        .picker{grid-template-columns:1fr 1fr}
+        th,td{padding:10px 12px;font-size:15px}
+      }
+    </style>
   </head>
   <body>
     <div class="wrap">
-      <header class="brand">
-        <div class="mark">CS</div>
-        <div>
-          <div class="title">CigarPriceScout</div>
-          <div class="muted">Cheapest delivered price — clearly shown</div>
-        </div>
+
+      <header class="heroheader">
+        <!-- Minimalist scout hat -->
+        <svg class="scout-hat" viewBox="0 0 200 160" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <!-- Hat crown -->
+          <path d="M50 80c0-20 15-35 35-35h30c20 0 35 15 35 35v15H50v-15z" fill="#111"/>
+          <!-- Hat brim -->
+          <ellipse cx="100" cy="95" rx="70" ry="12" fill="#111"/>
+          <!-- Hat band -->
+          <rect x="50" y="85" width="100" height="8" fill="#111"/>
+        </svg>
+        <div class="brandname">Cigar Price Scout</div>
+        <div class="tag">Pick a box, we'll scout the stock.</div>
       </header>
 
       <section class="hero">
-        <h1>Find the lowest delivered price on cigar boxes</h1>
-        <p class="muted">Pick a brand, line & size. We compare multiple retailers and show an honest delivered total.</p>
-        <div class="chooser">
-          <select id="brand"><option value="">Brand…</option></select>
-          <select id="line" disabled><option value="">Line…</option></select>
-          <select id="size" disabled><option value="">Size…</option></select>
-          <input id="zip" placeholder="ZIP (shipping est.)" value="97005">
-          <button id="go">Compare</button>
+        <div class="picker">
+          <select id="brand" aria-label="Brand" disabled>
+            <option value="">Loading brands...</option>
+          </select>
+          <select id="line" aria-label="Line" disabled>
+            <option value="">Line…</option>
+          </select>
+          <select id="size" aria-label="Size" disabled>
+            <option value="">Size…</option>
+          </select>
+          <input id="zip" placeholder="ZIP (shipping est.)" value="97005" inputmode="numeric" />
+          <button id="go" class="cta cta-primary" title="Scout Lowest Price" disabled>
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M10 2a8 8 0 1 1 5.292 13.958l4.375 4.375-1.414 1.414-4.375-4.375A8 8 0 0 1 10 2m0 2a6 6 0 1 0 0 12A6 6 0 0 0 10 4z"/>
+            </svg>
+            Scout Lowest Price
+          </button>
         </div>
         <div id="chips" class="chips" style="display:none"></div>
       </section>
 
-      <section id="out"></section>
+      <section id="out" class="wrap"></section>
 
       <footer class="foot">
-        <div class="legal"><strong>Affiliate disclosure.</strong> We may earn a commission when you use our retailer links. We do not sell tobacco; we compare prices from third-party retailers. 21+ where applicable.</div>
+        <div>
+          <strong>Affiliate disclosure.</strong> We may earn a commission when you use our retailer links. 
+          We do not sell tobacco; we compare prices from third-party retailers. 21+ where applicable.
+        </div>
+        <div style="margin-top:10px;font-size:14px">
+          <a href="/about.html">About</a> |
+          <a href="/privacy-policy.html">Privacy Policy</a> |
+          <a href="/terms-of-service.html">Terms of Service</a> |
+          <a href="/contact.html">Contact</a>
+        </div>
       </footer>
     </div>
 
     <script>
-      let CATALOG = null;
+      // DOM elements
+      const brandSel = document.querySelector('#brand');
+      const lineSel = document.querySelector('#line');
+      const sizeSel = document.querySelector('#size');
+      const zipInp = document.querySelector('#zip');
+      const goBtn = document.querySelector('#go');
+      const out = document.querySelector('#out');
+      const chips = document.querySelector('#chips');
 
-      function setChips(brand, line, size){
-        const el = document.getElementById('chips');
+      // Global data store
+      let optionsData = null;
+
+      // Utility functions
+      function setChips(b, l, s) {
         const arr = [];
-        if(brand) arr.push(['Brand', brand]);
-        if(line)  arr.push(['Line', line]);
-        if(size)  arr.push(['Size', size.replace('x',' × ')]);
-        if(arr.length){
-          el.style.display='flex';
-          el.innerHTML = arr.map(([k,v])=>`<span class="chip">${k}: ${v}</span>`).join('');
-        }else{ el.style.display='none'; el.innerHTML=''; }
+        if (b) arr.push(['Brand', b]);
+        if (l) arr.push(['Line', l]);
+        if (s) arr.push(['Size', s.replace('x', ' × ')]);
+        
+        if (arr.length) {
+          chips.style.display = 'flex';
+          chips.innerHTML = arr.map(([k,v]) => `<span class="chip">${k}: ${v}</span>`).join('');
+        } else {
+          chips.style.display = 'none';
+          chips.innerHTML = '';
+        }
       }
 
-      function fill(el, items, placeholder){
-        el.innerHTML = `<option value="">${placeholder}</option>` + items.map(v=>`<option>${v}</option>`).join('');
-        el.disabled = !items.length;
+      function updateButtonState() {
+        const canSearch = brandSel.value && lineSel.value && sizeSel.value;
+        goBtn.disabled = !canSearch;
       }
 
-      async function loadCatalog(){
-        const res = await fetch('/catalog');
-        CATALOG = await res.json();
-        const brands = CATALOG.brands || [];
-        fill(document.getElementById('brand'), brands, 'Brand…');
+      // Load options from backend
+      async function loadOptions() {
+        try {
+          const res = await fetch('/options');
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          
+          optionsData = await res.json();
+          const brands = optionsData.brands || [];
+          
+          brandSel.innerHTML = '<option value="">Brand…</option>' + 
+            brands.map(b => `<option value="${b.brand}">${b.brand}</option>`).join('');
+          brandSel.disabled = false;
+          
+        } catch(e) {
+          console.error('Failed to load options:', e);
+          brandSel.innerHTML = '<option value="">Error loading brands</option>';
+        }
       }
 
-      function onBrandChange(){
-        const b = document.getElementById('brand').value;
-        const lines = b ? (CATALOG.lines[b] || []) : [];
-        fill(document.getElementById('line'), lines, 'Line…');
-        fill(document.getElementById('size'), [], 'Size…');
-        setChips(b, null, null);
-      }
-
-      function onLineChange(){
-        const b = document.getElementById('brand').value;
-        const l = document.getElementById('line').value;
-        const key = `${b}|${l}`;
-        const sizes = (CATALOG.sizes[key] || []);
-        fill(document.getElementById('size'), sizes, 'Size…');
-        setChips(b, l, null);
-      }
-
-      async function doCompare(){
-        const b = document.getElementById('brand').value;
-        const l = document.getElementById('line').value;
-        const s = document.getElementById('size').value;
-        const zip = document.getElementById('zip').value.trim();
-        if(!b || !l || !s){ alert('Please choose brand, line, and size.'); return; }
-        const res = await fetch(`/compare?brand=${encodeURIComponent(b)}&line=${encodeURIComponent(l)}&size=${encodeURIComponent(s)}&zip=${encodeURIComponent(zip)}`);
-        const data = await res.json();
-        setChips(b, l, s);
-        const out = document.getElementById('out');
-        if(!data.results || !data.results.length){
-          out.innerHTML = '<div class="muted">No offers found for that selection.</div>';
+      // Brand selection handler
+      function onBrandChange() {
+        const selectedBrand = brandSel.value;
+        
+        // Reset dependent dropdowns
+        lineSel.innerHTML = '<option value="">Line…</option>';
+        sizeSel.innerHTML = '<option value="">Size…</option>';
+        lineSel.disabled = true;
+        sizeSel.disabled = true;
+        
+        if (!selectedBrand) {
+          setChips();
+          updateButtonState();
           return;
         }
-        out.innerHTML = `<h2>${b} — ${l} — ${s}</h2>
-          <table>
-            <thead><tr><th>Retailer</th><th>Base</th><th>Shipping</th><th>Est. tax</th><th>Delivered</th><th></th></tr></thead>
-            <tbody>
-              ${data.results.map(r=>`
-                <tr>
-                  <td>${r.retailer}${r.cheapest?' • <span class=best>Cheapest</span>':''}</td>
-                  <td>${r.base}</td>
-                  <td>${r.shipping}</td>
-                  <td>${r.tax}</td>
-                  <td><b>${r.delivered}</b></td>
-                  <td><a href="${r.url}" target="_blank">Go →</a></td>
-                </tr>`).join('')}
-            </tbody>
-          </table>`;
+
+        // Find brand data
+        const brandData = optionsData.brands.find(b => b.brand === selectedBrand);
+        if (!brandData || !brandData.lines) {
+          console.error('Brand data not found:', selectedBrand);
+          return;
+        }
+
+        // Populate lines
+        lineSel.innerHTML = '<option value="">Line…</option>' + 
+          brandData.lines.map(l => `<option value="${l.line}">${l.line}</option>`).join('');
+        lineSel.disabled = false;
+        
+        setChips(selectedBrand);
+        updateButtonState();
       }
 
-      document.addEventListener('DOMContentLoaded', ()=>{
-        loadCatalog();
-        document.getElementById('brand').addEventListener('change', onBrandChange);
-        document.getElementById('line').addEventListener('change', onLineChange);
-        document.getElementById('go').addEventListener('click', doCompare);
-      });
+      // Line selection handler
+      function onLineChange() {
+        const selectedBrand = brandSel.value;
+        const selectedLine = lineSel.value;
+        
+        // Reset size dropdown
+        sizeSel.innerHTML = '<option value="">Size…</option>';
+        sizeSel.disabled = true;
+        
+        if (!selectedLine) {
+          setChips(selectedBrand);
+          updateButtonState();
+          return;
+        }
+
+        // Find line data
+        const brandData = optionsData.brands.find(b => b.brand === selectedBrand);
+        const lineData = brandData?.lines.find(l => l.line === selectedLine);
+        
+        if (!lineData || !lineData.sizes) {
+          console.error('Line data not found:', selectedBrand, selectedLine);
+          return;
+        }
+
+        // Populate sizes
+        sizeSel.innerHTML = '<option value="">Size…</option>' + 
+          lineData.sizes.map(s => `<option value="${s}">${s}</option>`).join('');
+        sizeSel.disabled = false;
+        
+        setChips(selectedBrand, selectedLine);
+        updateButtonState();
+      }
+
+      // Size selection handler
+      function onSizeChange() {
+        const selectedBrand = brandSel.value;
+        const selectedLine = lineSel.value;
+        const selectedSize = sizeSel.value;
+        
+        setChips(selectedBrand, selectedLine, selectedSize);
+        updateButtonState();
+      }
+
+      // Compare prices
+      async function doCompare() {
+        const brand = brandSel.value;
+        const line = lineSel.value;
+        const size = sizeSel.value;
+        const zip = zipInp.value.trim();
+
+        if (!brand || !line || !size) {
+          alert('Please select a brand, line, and size first.');
+          return;
+        }
+
+        // Show loading
+        out.innerHTML = '<div class="loading">Scouting prices...</div>';
+        goBtn.disabled = true;
+
+        try {
+          const params = new URLSearchParams({
+            brand: brand,
+            line: line,
+            size: size,
+            zip: zip
+          });
+          
+          const res = await fetch(`/compare?${params}`);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          
+          const data = await res.json();
+          
+          if (!data.results || data.results.length === 0) {
+            out.innerHTML = '<div class="loading">No results found for this selection.</div>';
+            return;
+          }
+
+          // Calculate summary
+          const inStock = data.results.filter(r => !r.oos);
+          const lowestPrice = Math.min(...inStock.map(r => parseFloat(r.delivered_after_promo.replace('$', ''))));
+
+          // Render results
+          out.innerHTML = `
+            <h2>${data.brand} — ${data.line} — ${data.size}</h2>
+            <div class="results-summary">
+              Found ${data.results.length} retailer${data.results.length !== 1 ? 's' : ''} • 
+              ${inStock.length} in stock • 
+              Best price: $${lowestPrice.toFixed(2)} delivered
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Retailer</th>
+                  <th>Base</th>
+                  <th>Shipping</th>
+                  <th>Est. Tax</th>
+                  <th>Delivered</th>
+                  <th>Promo</th>
+                  <th>Final Price</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                ${data.results.map(r => `
+                  <tr style="${r.oos ? 'opacity: 0.6;' : ''}">
+                    <td>
+                      ${r.retailer}
+                      ${r.oos ? ' <span class="oos">Out of Stock</span>' : ''}
+                      ${r.cheapest && !r.oos ? ' <span class="best">Best Price</span>' : ''}
+                    </td>
+                    <td>${r.base}</td>
+                    <td>${r.shipping}</td>
+                    <td>${r.tax}</td>
+                    <td><strong>${r.delivered}</strong></td>
+                    <td>${r.promo ? `${r.promo}${r.promo_code ? ` (${r.promo_code})` : ''}` : '—'}</td>
+                    <td><strong>${r.delivered_after_promo}</strong></td>
+                    <td><a href="${r.url}" target="_blank" rel="nofollow noopener">View →</a></td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+            <div class="fine" style="margin-top:12px">
+              Prices and promotions update regularly. Always verify final pricing at checkout.
+            </div>
+          `;
+          
+        } catch(e) {
+          console.error('Compare failed:', e);
+          out.innerHTML = '<div class="loading">Error loading prices. Please try again.</div>';
+        } finally {
+          updateButtonState();
+        }
+      }
+
+      // Event listeners
+      brandSel.addEventListener('change', onBrandChange);
+      lineSel.addEventListener('change', onLineChange);
+      sizeSel.addEventListener('change', onSizeChange);
+      goBtn.addEventListener('click', doCompare);
+
+      // Initialize
+      loadOptions();
     </script>
   </body>
 </html>

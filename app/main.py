@@ -1,344 +1,283 @@
-import os, base64
-from datetime import datetime, timedelta, date
-from fastapi import FastAPI, Request, Depends, HTTPException, status
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Query
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
-from sqlalchemy import select, func, desc
-from typing import Dict, List
-from .db import get_session, init_db, Event, PricePoint
-from .normalize import normalize_query
-from .affiliate import cj_deeplink
-from .shipping_tax import delivered_cents, zip_to_state
-from .adapters.csv_adapter import load_csv
-import re
+from fastapi.responses import HTMLResponse, FileResponse
+from pathlib import Path
+import csv
+import json
+import time
 from datetime import date
 
-def _canon(s: str) -> str:
-    return (s or "").strip().lower()
+# Import your working shipping/tax functions
+try:
+    from app.shipping_tax import zip_to_state, estimate_shipping_cents, estimate_tax_cents
+except Exception:
+    # Fallback functions if shipping_tax.py is missing
+    def zip_to_state(zip_code):
+        if not zip_code:
+            return 'OR'
+        first_digit = str(zip_code)[0] if zip_code else '9'
+        states = {'0': 'MA', '1': 'NY', '2': 'VA', '3': 'FL', '4': 'OH', '5': 'MN', '6': 'IL', '7': 'TX', '8': 'CO', '9': 'CA'}
+        return states.get(first_digit, 'OR')
 
-def _tok(s: str) -> set[str]:
-    return set(re.findall(r"[a-z0-9]+", (s or "").lower()))
+    def estimate_shipping_cents(base_cents, retailer_key, state=None):
+        if retailer_key == 'famous':
+            return 999
+        elif retailer_key == 'ci':
+            return 895
+        else:
+            return 999
 
-def _size_from_text(s: str) -> str | None:
-    m = re.search(r"(\d+(?:\.\d+)?)\s*[xX]\s*(\d+)", s or "")
-    return f"{m.group(1)}x{m.group(2)}" if m else None
+    def estimate_tax_cents(base_cents, state):
+        if not state:
+            return 0
+        rates = {'CA': 0.08, 'NY': 0.08, 'TX': 0.06, 'FL': 0.06, 'OR': 0.0}
+        return int(base_cents * rates.get(state, 0.05))
 
-def _line_matches(requested: str | None, actual: str | None) -> bool:
-    if not requested or not actual:
-        return False
-    r, a = _canon(requested), _canon(actual)
-    return (r in a) or (a in r)
-
-def _best_titles(q: str, products, brand: str | None = None):
-    qtok = _tok(q)
-    rows = []
-    for p in products:
-        if brand and _canon(p.brand) != _canon(brand):
-            continue
-        ttok = _tok(p.title)
-        overlap = len(qtok & ttok)
-        if overlap == 0:
-            continue
-        size_bonus = 1 if (p.size and p.size.replace("x","") in "".join(qtok)) else 0
-        line_bonus = 1 if any(t in _canon(p.line) for t in qtok) else 0
-        rows.append( (overlap + size_bonus + line_bonus, p) )
-    rows.sort(key=lambda t: t[0], reverse=True)
-    return [p for _,p in rows]
-
-def _sid(brand, line, size) -> str:
-    return "-".join([x for x in [brand, line, size] if x]).replace(" ", "_")[:100]
-
-SITE_NAME = os.environ.get("SITE_NAME", "CigarPriceScout")
-ADMIN_USER = os.environ.get("ADMIN_USER", "admin")
-ADMIN_PASS = os.environ.get("ADMIN_PASS", "admin")
-
-app = FastAPI(title=SITE_NAME)
+app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
 
+# Your working retailer list
 RETAILERS = [
     {"key": "famous", "name": "Famous Smoke Shop", "csv": "static/data/famous.csv"},
     {"key": "ci", "name": "Cigars International", "csv": "static/data/ci.csv"},
     {"key": "jr", "name": "JR Cigar", "csv": "static/data/jr.csv"},
+    {"key": "thompson", "name": "Thompson Cigar", "csv": "static/data/thompson.csv"},
+    {"key": "atlantic", "name": "Atlantic Cigar", "csv": "static/data/atlantic.csv"},
+    {"key": "neptune", "name": "Neptune Cigar", "csv": "static/data/neptune.csv"},
+    {"key": "bestcigar", "name": "Best Cigar Prices", "csv": "static/data/bestcigar.csv"},
+    {"key": "corona", "name": "Corona Cigar", "csv": "static/data/corona.csv"},
+    {"key": "cigarcountry", "name": "Cigar Country", "csv": "static/data/cigarcountry.csv"},
+    {"key": "oldhavana", "name": "Old Havana Cigar Co.", "csv": "static/data/oldhavana.csv"},
+    {"key": "nickscigarworld", "name": "Nick's Cigar World", "csv": "static/data/nickscigarworld.csv"},
+    {"key": "cigarboxpa", "name": "Cigar Box PA", "csv": "static/data/cigarboxpa.csv"},
+    {"key": "tampasweethearts", "name": "Tampa Sweethearts", "csv": "static/data/tampasweethearts.csv"},
+    {"key": "cdmcigars", "name": "CDM Cigars", "csv": "static/data/cdmcigars.csv"},
+    {"key": "smokeinn", "name": "Smoke Inn", "csv": "static/data/smokeinn.csv"},
+    {"key": "holts", "name": "Holt's Cigar Company", "csv": "static/data/holts.csv"},
+    {"key": "cuencacigars", "name": "Cuenca Cigars", "csv": "static/data/cuencacigars.csv"},
+    {"key": "thecigarshop", "name": "The Cigar Shop", "csv": "static/data/thecigarshop.csv"},
+    {"key": "cigarhustler", "name": "Cigar Hustler", "csv": "static/data/cigarhustler.csv"},
+    {"key": "cigarplace", "name": "Cigar Place", "csv": "static/data/cigarplace.csv"},
+    {"key": "tobaccolocker", "name": "Tobacco Locker", "csv": "static/data/tobaccolocker.csv"},
+    {"key": "thecigarstore", "name": "The Cigar Store", "csv": "static/data/thecigarstore.csv"},
+    {"key": "mikescigars", "name": "Mike's Cigars", "csv": "static/data/mikescigars.csv"},
+    {"key": "bonitasmokeshop", "name": "Bonita Smoke Shop", "csv": "static/data/bonitasmokeshop.csv"},
+    {"key": "windycitycigars", "name": "Windy City Cigars", "csv": "static/data/windycitycigars.csv"},
+    {"key": "absolutecigars", "name": "Absolute Cigars", "csv": "static/data/absolutecigars.csv"},
+    {"key": "cubancrafters", "name": "Cuban Crafters", "csv": "static/data/cubancrafters.csv"},
+    {"key": "cigar", "name": "Cigar.com", "csv": "static/data/cigar.csv"},
+    {"key": "pipesandcigars", "name": "Pipes and Cigars", "csv": "static/data/pipesandcigars.csv"},
+    {"key": "planetcigars", "name": "Planet Cigars", "csv": "static/data/planetcigars.csv"},
+    {"key": "smallbatchcigar", "name": "Small Batch Cigar", "csv": "static/data/smallbatchcigar.csv"},
+    {"key": "niceashcigars", "name": "Nice Ash Cigars", "csv": "static/data/niceashcigars.csv"},
+    {"key": "cigarsdirect", "name": "Cigars Direct", "csv": "static/data/cigarsdirect.csv"},
+    {"key": "secretocigarbar", "name": "Secreto Cigar Bar", "csv": "static/data/secretocigarbar.csv"},
+    {"key": "momscigars", "name": "Mom's Cigars", "csv": "static/data/momscigars.csv"},
+    {"key": "bighumidor", "name": "Big Humidor", "csv": "static/data/bighumidor.csv"},
 ]
 
-def load_all_listings():
-    listings = []
-    for r in RETAILERS:
-        listings.extend(load_csv(r["csv"], r["key"], r["name"]))
-    return listings
+# Simple CSV loader
+class Product:
+    def __init__(self, retailer_key, retailer_name, title, url, brand, line, size, box_qty, price, in_stock=True):
+        self.retailer_key = retailer_key
+        self.retailer_name = retailer_name
+        self.title = title
+        self.url = url
+        self.brand = brand
+        self.line = line
+        self.size = size
+        self.box_qty = int(box_qty) if box_qty else 25
+        self.price_cents = int(float(price) * 100) if price else 0
+        self.in_stock = str(in_stock).lower() not in ('false', '0', 'no', '')
 
-KNOWN_BRANDS = ["Arturo Fuente"]  # expand later
+def load_csv(csv_path, retailer_key, retailer_name):
+    """Load products from a CSV file"""
+    items = []
+    csv_file = Path(csv_path)
 
-@app.on_event("startup")
-async def startup():
-    await init_db()
+    if not csv_file.exists():
+        return items
 
+    try:
+        with open(csv_file, 'r', newline='', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                try:
+                    product = Product(
+                        retailer_key=retailer_key,
+                        retailer_name=retailer_name,
+                        title=row.get('title', ''),
+                        url=row.get('url', ''),
+                        brand=row.get('brand', ''),
+                        line=row.get('line', ''),
+                        size=row.get('size', ''),
+                        box_qty=row.get('box_qty', 25),
+                        price=row.get('price', 0),
+                        in_stock=row.get('in_stock', True)
+                    )
+                    if product.brand and product.line and product.size:
+                        items.append(product)
+                except Exception as e:
+                    continue
+    except Exception as e:
+        print(f"Error loading {csv_path}: {e}")
+
+    return items
+
+def load_all_products():
+    """Load all products from all retailer CSV files"""
+    all_products = []
+    for retailer in RETAILERS:
+        products = load_csv(retailer["csv"], retailer["key"], retailer["name"])
+        all_products.extend(products)
+    return all_products
+
+def build_options_tree():
+    """Build the brand -> line -> sizes tree for dropdowns"""
+    products = load_all_products()
+    tree = {}
+
+    for product in products:
+        if not product.brand:
+            continue
+
+        # Initialize brand if not exists
+        if product.brand not in tree:
+            tree[product.brand] = {}
+
+        # Initialize line if not exists
+        if product.line not in tree[product.brand]:
+            tree[product.brand][product.line] = set()
+
+        # Add size
+        tree[product.brand][product.line].add(product.size)
+
+    # Convert to the format expected by frontend
+    brands = []
+    for brand_name in sorted(tree.keys()):
+        lines = []
+        for line_name in sorted(tree[brand_name].keys()):
+            sizes = sorted(list(tree[brand_name][line_name]))
+            lines.append({
+                "line": line_name,
+                "sizes": sizes
+            })
+        brands.append({
+            "brand": brand_name,
+            "lines": lines
+        })
+
+    return brands
+
+# Routes
 @app.get("/", response_class=HTMLResponse)
-async def root():
-    with open("static/index.html", "r") as f:
-        return HTMLResponse(content=f.read())
+def home():
+    return FileResponse("static/index.html")
 
 @app.get("/health")
-async def health():
-    return {"ok": True, "ts": datetime.utcnow().isoformat()}
-
-class SearchOut(BaseModel):
-    intent: str
-    brand: str | None = None
-    line: str | None = None
-    size: str | None = None
-    results: list[dict] = []
-
-def make_sid(brand, line, size):
-    return "-".join([x for x in [brand, line, size] if x]).replace(" ", "_")[:100]
-
-
-def cheapest_by_line(listings, brand, state):
-    out = {}
-    for L in listings:
-        if L.brand != brand: continue
-        d = delivered_cents(L.base_cents, L.retailer_key, state)
-        cur = out.get(L.line)
-        if (cur is None) or (d < cur["delivered_cents"]):
-            out[L.line] = {"line": L.line, "retailer": L.retailer_name, "delivered_cents": d, "url": L.url, "retailer_key": L.retailer_key, "base_cents": L.base_cents}
-    return [{"line": v["line"], "cheapest_delivered": f"${v['delivered_cents']/100:.2f}", "url": v["url"]} for v in out.values()]
-
-def sizes_cheapest(listings, brand, line, state):
-    out = {}
-    for L in listings:
-        if L.brand != brand or L.line != line: continue
-        d = delivered_cents(L.base_cents, L.retailer_key, state)
-        cur = out.get(L.size)
-        if (cur is None) or (d < cur["delivered_cents"]):
-            out[L.size] = {"size": L.size, "delivered_cents": d}
-    return [{"size": s, "cheapest_delivered": f"${v['delivered_cents']/100:.2f}"} for s,v in sorted(out.items())]
-
-def offers_for_sku(listings, brand, line, size, state):
-    out = []
-    for L in listings:
-        if L.brand == brand and L.line == line and L.size == size and L.in_stock:
-            d = delivered_cents(L.base_cents, L.retailer_key, state)
-            out.append({"retailer": L.retailer_name, "retailer_key": L.retailer_key, "base_cents": L.base_cents, "delivered_cents": d, "url": L.url})
-    out.sort(key=lambda x: x["delivered_cents"])
-    return out
-
-@app.get("/search", response_model=SearchOut)
-async def search(q: str, zip: str | None = None, session=Depends(get_session)):
-    state = zip_to_state(zip or "") or "OR"
-    nq = normalize_query(q, KNOWN_BRANDS)
-    all_products = load_all_listings()
-
-    # Use brand list from data if normalize_query missed it
-    if not nq.brand:
-        # choose a brand whose tokens intersect the query
-        qtok = _tok(q)
-        by = {}
-        for p in all_products:
-            bt = _tok(p.brand)
-            sc = len(qtok & bt)
-            if sc:
-                by[p.brand] = max(by.get(p.brand, 0), sc)
-        if by:
-            nq.brand = max(by.items(), key=lambda x: x[1])[0]
-
-    # Pull size from free text if not detected
-    if not nq.size:
-        nq.size = _size_from_text(q)
-
-    # If user typed extra words (e.g., "Hemingway Short Story"), pick the canonical line by best title match
-    if nq.brand and nq.line:
-        tops = _best_titles(q, all_products, brand=nq.brand)
-        if tops:
-            # choose the line that appears most among best titles
-            from collections import Counter
-            c = Counter(p.line for p in tops[:10])
-            nq.line = c.most_common(1)[0][0]
-
-    if nq.brand and not nq.line:
-        intent = "brand"
-        filtered = [p for p in all_products if _canon(p.brand) == _canon(nq.brand)]
-        by_line = {}
-        qtok = _tok(q)
-        for p in filtered:
-            d = delivered_cents(p.base_cents, p.retailer_key, state)
-            rec = by_line.get(p.line)
-            # relevance score by overlap with line/title
-            rel = len(qtok & (_tok(p.line) | _tok(p.title)))
-            if (rec is None) or (d < rec["delivered"]):
-                by_line[p.line] = {"line": p.line, "delivered": d, "rel": rel}
-            else:
-                by_line[p.line]["rel"] = max(by_line[p.line]["rel"], rel)
-        rows = list(by_line.values())
-        rows.sort(key=lambda r: (-r["rel"], r["delivered"]))  # relevant first, then cheapest
-        results = [{"line": r["line"], "cheapest_delivered": f"${r['delivered']/100:.2f}"} for r in rows]
-        return {"intent": intent, "brand": nq.brand, "results": results}
-
-    if nq.brand and nq.line and not nq.size:
-        intent = "line"
-        filtered = [p for p in all_products
-                    if _canon(p.brand) == _canon(nq.brand) and _line_matches(nq.line, p.line)]
-        by_size = {}
-        for p in filtered:
-            d = delivered_cents(p.base_cents, p.retailer_key, state)
-            cur = by_size.get(p.size)
-            if cur is None or d < cur:
-                by_size[p.size] = d
-        results = [{"size": s, "cheapest_delivered": f"${c/100:.2f}"} for s, c in sorted(by_size.items())]
-        return {"intent": intent, "brand": nq.brand, "line": nq.line, "results": results}
-
-    if nq.brand and nq.line and nq.size:
-        intent = "sku"
-        filtered = [p for p in all_products
-                    if _canon(p.brand) == _canon(nq.brand)
-                    and _line_matches(nq.line, p.line)
-                    and _canon(p.size) == _canon(nq.size)
-                    and p.in_stock]
-        rows = []
-        min_del = None
-        for p in filtered:
-            d = delivered_cents(p.base_cents, p.retailer_key, state)
-            rows.append((p, d))
-            min_del = d if (min_del is None or d < min_del) else min_del
-        rows.sort(key=lambda t: t[1])
-
-        results = [{
-            "retailer": p.retailer_name,
-            "base": f"${p.base_cents/100:.2f}",
-            "shipping": f"${(d - p.base_cents)/100:.2f}",
-            "tax": "$0.00",
-            "delivered": f"${d/100:.2f}",
-            "url": cj_deeplink(p.url, sid=_sid(nq.brand, nq.line, nq.size)),
-            "cheapest": (d == min_del),
-        } for (p, d) in rows]
-
-        if min_del is not None:
-            await session.execute(
-                PricePoint.__table__.delete().where(
-                    (PricePoint.day == date.today().isoformat()) &
-                    (PricePoint.brand == nq.brand) &
-                    (PricePoint.line == nq.line) &
-                    (PricePoint.size == nq.size) &
-                    (PricePoint.source == "cheapest")
-                )
-            )
-            session.add(PricePoint(
-                day=date.today().isoformat(),
-                brand=nq.brand, line=nq.line, size=nq.size,
-                delivered_cents=min_del, source="cheapest"
-            ))
-            await session.commit()
-
-        return {"intent": intent, "brand": nq.brand, "line": nq.line, "size": nq.size, "results": results}
-
-    return SearchOut(intent="help", results=[{"message":"Try a brand (e.g., Arturo Fuente) or include a line (e.g., Arturo Fuente Hemingway)."}])
-
-# NEW: catalog of brands→lines→sizes so UI can populate dropdowns
-@app.get("/catalog")
-async def catalog():
-    L = load_all_listings()
-    brands = sorted(set(p.brand for p in L))
-    lines: Dict[str, List[str]] = {}
-    sizes: Dict[str, List[str]] = {}
-    for b in brands:
-        blines = sorted(set(p.line for p in L if p.brand == b))
-        lines[b] = blines
-        for ln in blines:
-            key = f"{b}|{ln}"
-            sizes[key] = sorted(set(p.size for p in L if p.brand == b and p.line == ln))
-    # Expose common box counts the UI can show (informational)
-    box_qty = [10, 12, 20, 24, 25, 50]
-    return {"brands": brands, "lines": lines, "sizes": sizes, "box_qty": box_qty}
-
-# NEW: strict compare endpoint — no fuzzy text; just brand/line/size
-@app.get("/compare")
-async def compare(brand: str, line: str, size: str, zip: str = "", session = Depends(get_session)):
-    state = zip_to_state(zip)
-    L = load_all_listings()
-    rows = []
-    for p in L:
-        if p.brand == brand and p.line == line and p.size == size and p.in_stock:
-            d = delivered_cents(p.base_cents, p.retailer_key, state)
-            rows.append((p, d))
-    rows.sort(key=lambda t: t[1])
-
-    results = [{
-        "retailer": p.retailer_name,
-        "base": f"${p.base_cents/100:.2f}",
-        "shipping": f"${(d - p.base_cents)/100:.2f}",
-        "tax": "$0.00",
-        "delivered": f"${d/100:.2f}",
-        "url": cj_deeplink(p.url, sid="-".join([brand, line, size]).replace(" ", "_")[:100]),
-        "cheapest": (i == 0),
-    } for i,(p,d) in enumerate(rows)]
-
-    # Save today's cheapest so /price_history works
-    if rows:
-        min_del = rows[0][1]
-        await session.execute(
-            PricePoint.__table__.delete().where(
-                (PricePoint.day == date.today().isoformat()) &
-                (PricePoint.brand == brand) &
-                (PricePoint.line == line) &
-                (PricePoint.size == size) &
-                (PricePoint.source == "cheapest")
-            )
-        )
-        session.add(PricePoint(
-            day=date.today().isoformat(),
-            brand=brand, line=line, size=size,
-            delivered_cents=min_del, source="cheapest"
-        ))
-        await session.commit()
-
-    return {"brand": brand, "line": line, "size": size, "results": results}
-
-class EventIn(BaseModel):
-    event_type: str
-    brand: str | None = None
-    line: str | None = None
-    size: str | None = None
-    retailer: str | None = None
-    state: str | None = None
-    delivered_cents: int | None = None
-
-@app.post("/event")
-async def log_event(payload: EventIn, session=Depends(get_session)):
-    session.add(Event(event_type=payload.event_type, brand=payload.brand, line=payload.line, size=payload.size, retailer=payload.retailer, state=payload.state, delivered_cents=payload.delivered_cents))
-    await session.commit()
+def health():
     return {"ok": True}
 
-def check_basic_auth(request: Request):
-    auth = request.headers.get("authorization", "")
-    if not auth.lower().startswith("basic "):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, headers={"WWW-Authenticate":"Basic"})
-    try:
-        userpass = base64.b64decode(auth.split(" ",1)[1]).decode("utf-8"); u,p = userpass.split(":",1)
-    except Exception:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, headers={"WWW-Authenticate":"Basic"})
-    if not (u == ADMIN_USER and p == ADMIN_PASS):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, headers={"WWW-Authenticate":"Basic"})
+@app.get("/options")
+def options():
+    """Return brand -> line -> sizes tree for dropdowns"""
+    return {"brands": build_options_tree()}
 
-@app.get("/api/summary")
-async def get_summary(request: Request, session=Depends(get_session)):
-    check_basic_auth(request)
-    since = datetime.utcnow() - timedelta(days=30)
-    q1 = await session.execute(select(Event.brand, func.count()).where(Event.event_type=="CLICK_LIST", Event.ts >= since, Event.brand.isnot(None)).group_by(Event.brand).order_by(desc(func.count())).limit(10))
-    top_brands = [{"brand": b or "Unknown", "clicks": c} for b,c in q1.all()]
-    q2 = await session.execute(select(Event.size, func.count()).where(Event.event_type=="CLICK_LIST", Event.ts >= since, Event.size.isnot(None)).group_by(Event.size).order_by(desc(func.count())).limit(10))
-    top_sizes = [{"size": s or "Unknown", "clicks": c} for s,c in q2.all()]
-    q3 = await session.execute(select(Event.line, func.avg(Event.delivered_cents)).where(Event.event_type=="CLICK_LIST", Event.ts >= since, Event.delivered_cents.isnot(None), Event.line.isnot(None)).group_by(Event.line).order_by(desc(func.avg(Event.delivered_cents))).limit(10))
-    prices = [{"line": ln or "Unknown", "avg_delivered": int(avg or 0)} for ln,avg in q3.all()]
-    return {"since": since.isoformat(), "top_brands": top_brands, "top_sizes": top_sizes, "avg_delivered_by_line": prices}
+@app.get("/compare")
+def compare(
+    brand: str = Query(...),
+    line: str = Query(...),
+    size: str = Query(...),
+    zip: str = Query("", description="ZIP code for shipping/tax estimates"),
+):
+    """Compare prices for a specific cigar across all retailers"""
 
-@app.get("/admin", response_class=HTMLResponse)
-async def admin(request: Request):
-    return templates.TemplateResponse("admin.html", {"request": request, "site": SITE_NAME})
+    # Get state from ZIP for shipping/tax calculations
+    state = zip_to_state(zip) if zip else 'OR'
 
-@app.get("/price_history")
-async def price_history(brand: str, line: str, size: str, session=Depends(get_session)):
-    rows = await session.execute(select(PricePoint.day, PricePoint.delivered_cents).where(PricePoint.brand==brand, PricePoint.line==line, PricePoint.size==size, PricePoint.source=="cheapest").order_by(PricePoint.day.asc()))
-    pts = [{"day": d, "delivered_cents": v} for d,v in rows.all()]
-    return {"points": pts}
+    # Load all products and filter by criteria
+    all_products = load_all_products()
+    matching_products = [
+        p for p in all_products 
+        if (p.brand.lower() == brand.lower() and 
+            p.line.lower() == line.lower() and 
+            p.size.lower() == size.lower())
+    ]
+
+    if not matching_products:
+        return {
+            "brand": brand,
+            "line": line,
+            "size": size,
+            "state": state,
+            "results": []
+        }
+
+    # Calculate delivered prices and build results
+    results = []
+    in_stock_prices = []
+
+    for product in matching_products:
+        # Calculate costs
+        base_cents = product.price_cents
+        shipping_cents = estimate_shipping_cents(base_cents, product.retailer_key, state)
+        tax_cents = estimate_tax_cents(base_cents, state)
+        delivered_cents = base_cents + shipping_cents + tax_cents
+
+        # Track in-stock prices for determining cheapest
+        if product.in_stock:
+            in_stock_prices.append(delivered_cents)
+
+        # Build result entry
+        result = {
+            "retailer": product.retailer_name,
+            "base": f"${base_cents/100:.2f}",
+            "shipping": f"${shipping_cents/100:.2f}",
+            "tax": f"${tax_cents/100:.2f}",
+            "delivered": f"${delivered_cents/100:.2f}",
+            "promo": None,
+            "promo_code": None,
+            "delivered_after_promo": f"${delivered_cents/100:.2f}",
+            "url": product.url,
+            "oos": not product.in_stock,
+            "cheapest": False  # Will be set below
+        }
+        results.append(result)
+
+    # Mark the cheapest in-stock option
+    if in_stock_prices:
+        cheapest_price = min(in_stock_prices)
+        for result in results:
+            if not result["oos"]:
+                delivered_price = float(result["delivered_after_promo"].replace("$", ""))
+                if abs(delivered_price - cheapest_price/100) < 0.01:
+                    result["cheapest"] = True
+                    break
+
+    # Sort results: in-stock first, then by price
+    results.sort(key=lambda r: (r["oos"], float(r["delivered_after_promo"].replace("$", ""))))
+
+    return {
+        "brand": brand,
+        "line": line,
+        "size": size,
+        "state": state,
+        "results": results
+    }
+
+# Legal page routes
+@app.get("/about.html")
+async def about():
+    return FileResponse("static/about.html")
+
+@app.get("/privacy-policy.html") 
+async def privacy_policy():
+    return FileResponse("static/privacy-policy.html")
+
+@app.get("/terms-of-service.html")
+async def terms_of_service():
+    return FileResponse("static/terms-of-service.html")
+
+@app.get("/contact.html")
+async def contact():
+    return FileResponse("static/contact.html")
