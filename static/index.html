@@ -3,13 +3,48 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Cigar Price Scout</title>
-
+    <title>Cigar Price Scout - Find the Best Cigar Deals with Wrapper & Vitola Search</title>
+    
+    <!-- SEO Meta Tags -->
+    <meta name="description" content="Compare cigar prices across 35+ online retailers. Search by brand, wrapper type, vitola, and size to find the best deals on premium cigars with shipping and tax calculations." />
+    <meta name="keywords" content="cigar prices, cigar deals, wrapper types, vitola sizes, Connecticut, Maduro, Habano, cigar comparison, online cigar shopping" />
+    
+    <!-- Open Graph Tags -->
+    <meta property="og:title" content="Cigar Price Scout - Best Cigar Price Comparison" />
+    <meta property="og:description" content="Compare cigar prices across 35+ retailers. Filter by wrapper type, vitola, and size to find your perfect cigar at the best price." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://cigarpricescout.com" />
+    <meta property="og:image" content="https://cigarpricescout.com/static/cigar-scout-social.png" />
+    
+    <!-- Twitter Cards -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Cigar Price Scout - Find the Best Cigar Deals" />
+    <meta name="twitter:description" content="Compare prices on premium cigars by wrapper type, vitola, and size across 35+ online retailers." />
+    <meta name="twitter:image" content="https://cigarpricescout.com/static/cigar-scout-social.png" />
+    
+    <!-- Schema.org Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "Cigar Price Scout",
+      "description": "Compare cigar prices across multiple online retailers with advanced filtering by wrapper type, vitola, and size",
+      "url": "https://cigarpricescout.com",
+      "applicationCategory": "Shopping",
+      "operatingSystem": "Any",
+      "offers": {
+        "@type": "Offer",
+        "category": "Cigars",
+        "availability": "https://schema.org/InStock"
+      }
+    }
+    </script>
+    
     <!-- Sherlock-esque fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap" rel="stylesheet" />
-
+    
     <style>
       :root{
         --ink:#111;
@@ -45,22 +80,24 @@
         font-size:20px;
         margin-top:2px;
       }
-
-      /* Picker */
-      .picker{display:grid;grid-template-columns:1fr 1fr 1fr 140px 200px;gap:10px;margin:18px auto}
+      
+      /* Enhanced Picker with wrapper support */
+      .picker{
+        display:grid;
+        grid-template-columns:1fr 1fr 1fr 1fr 140px 200px;
+        gap:10px;margin:18px auto;
+      }
       .picker select,.picker input{
         padding:12px 14px;border:1px solid var(--rule);border-radius:12px;background:#fff;
-        font-family:"Cormorant Garamond", serif;font-size:18px
+        font-family:"Cormorant Garamond", serif;font-size:18px;
       }
       .cta{border:none;border-radius:12px;padding:12px 14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
       .cta-primary{background:var(--accent);color:#fff}
       .cta-primary:hover{filter:brightness(.95)}
       .cta:disabled{opacity:0.5;cursor:not-allowed}
       .cta svg{width:18px;height:18px}
-
       .chips{display:flex;gap:8px;justify-content:center;margin-top:12px;flex-wrap:wrap}
       .chip{font-size:14px;padding:6px 10px;border-radius:999px;border:1px solid var(--rule);background:#fff;color:#374151}
-
       h2{font-family:"Cinzel", serif;font-weight:700;letter-spacing:.3px;margin:18px 0 8px;font-size:24px}
       
       /* Clean, Professional Table Styling */
@@ -87,308 +124,361 @@
       td a{color:var(--accent);text-decoration:none;font-weight:600}
       td a:hover{text-decoration:underline}
       
-      /* Loading state */
-      .loading{
-        text-align:center;padding:60px 20px;color:var(--muted);
-        font-style:italic;font-size:20px;
+      /* Wrapper and vitola badges */
+      .wrapper-badge{
+        display:inline-block;
+        background:#f3f4f6;
+        color:#374151;
+        padding:4px 8px;
+        border-radius:6px;
+        font-size:13px;
+        font-weight:600;
+        margin-right:6px;
+      }
+      .vitola-badge{
+        display:inline-block;
+        background:#e0f2fe;
+        color:#0369a1;
+        padding:4px 8px;
+        border-radius:6px;
+        font-size:13px;
+        font-weight:600;
       }
       
-      /* Results summary */
-      .results-summary{
-        background:#f8f9fa;border:1px solid var(--rule);border-radius:8px;
-        padding:12px 16px;margin-bottom:15px;font-size:16px;
+      /* Responsive design */
+      @media(max-width:768px){
+        .picker{
+          grid-template-columns:1fr;
+          gap:12px;
+        }
+        .heroheader{padding:20px 0 8px}
+        .brandname{font-size:24px}
+        .tag{font-size:18px}
+        table{font-size:15px}
+        th,td{padding:10px 12px}
       }
-
-      .foot{border-top:1px solid var(--rule);padding:26px 0;margin-top:28px;text-align:center;color:#6b7280}
-      .foot a{color:inherit;text-decoration:none}
-      .foot a:hover{text-decoration:underline}
-      .fine{color:#6b7280;font-size:14px}
-
-      @media (max-width: 920px){
-        .picker{grid-template-columns:1fr 1fr}
-        th,td{padding:10px 12px;font-size:15px}
+      
+      /* Footer */
+      .footer{
+        margin-top:40px;
+        padding:20px 0;
+        border-top:1px solid var(--rule);
+        text-align:center;
+        color:var(--muted);
+        font-size:16px;
       }
+      .footer a{color:var(--accent);text-decoration:none}
+      .footer a:hover{text-decoration:underline}
     </style>
   </head>
+  
   <body>
     <div class="wrap">
-
       <header class="heroheader">
-        <!-- Minimalist scout hat -->
-        <svg class="scout-hat" viewBox="0 0 200 160" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-          <!-- Hat crown -->
-          <path d="M50 80c0-20 15-35 35-35h30c20 0 35 15 35 35v15H50v-15z" fill="#111"/>
-          <!-- Hat brim -->
-          <ellipse cx="100" cy="95" rx="70" ry="12" fill="#111"/>
-          <!-- Hat band -->
-          <rect x="50" y="85" width="100" height="8" fill="#111"/>
+        <svg class="scout-hat" viewBox="0 0 80 60" fill="none">
+          <path d="M10 45 C10 35, 20 25, 40 25 C60 25, 70 35, 70 45 L70 50 C70 52, 68 54, 65 54 L15 54 C12 54, 10 52, 10 50 Z" fill="#7c5c2e"/>
+          <ellipse cx="40" cy="25" rx="25" ry="8" fill="#5d4e37"/>
+          <path d="M20 30 C25 28, 35 27, 40 28 C45 27, 55 28, 60 30" stroke="#4a3728" stroke-width="2" fill="none"/>
         </svg>
-        <div class="brandname">Cigar Price Scout</div>
-        <div class="tag">Pick a box, we'll scout the stock.</div>
+        <h1 class="brandname">Cigar Price Scout</h1>
+        <p class="tag">Find the best cigar deals by wrapper, vitola & size</p>
       </header>
-
-      <section class="hero">
-        <div class="picker">
-          <select id="brand" aria-label="Brand" disabled>
-            <option value="">Loading brands...</option>
+      
+      <main>
+        <section class="picker">
+          <select id="brandSelect" aria-label="Select cigar brand">
+            <option value="">Select Brand...</option>
           </select>
-          <select id="line" aria-label="Line" disabled>
-            <option value="">Line…</option>
+          
+          <select id="lineSelect" disabled aria-label="Select cigar line">
+            <option value="">Select Line...</option>
           </select>
-          <select id="size" aria-label="Size" disabled>
-            <option value="">Size…</option>
+          
+          <select id="wrapperSelect" disabled aria-label="Select wrapper type">
+            <option value="">Any Wrapper...</option>
           </select>
-          <input id="zip" placeholder="ZIP (shipping est.)" value="97005" inputmode="numeric" />
-          <button id="go" class="cta cta-primary" title="Scout Lowest Price" disabled>
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-              <path d="M10 2a8 8 0 1 1 5.292 13.958l4.375 4.375-1.414 1.414-4.375-4.375A8 8 0 0 1 10 2m0 2a6 6 0 1 0 0 12A6 6 0 0 0 10 4z"/>
+          
+          <select id="vitolaSelect" disabled aria-label="Select vitola">
+            <option value="">Any Vitola...</option>
+          </select>
+          
+          <input type="text" id="zipInput" placeholder="ZIP code" aria-label="ZIP code for shipping calculation" />
+          
+          <button class="cta cta-primary" id="searchBtn" disabled>
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
             </svg>
-            Scout Lowest Price
+            Find Deals
           </button>
-        </div>
-        <div id="chips" class="chips" style="display:none"></div>
-      </section>
-
-      <section id="out" class="wrap"></section>
-
-      <footer class="foot">
-        <div>
-          <strong>Affiliate disclosure.</strong> We may earn a commission when you use our retailer links. 
-          We do not sell tobacco; we compare prices from third-party retailers. 21+ where applicable.
-        </div>
-        <div style="margin-top:10px;font-size:14px">
-          <a href="/about.html">About</a> |
-          <a href="/privacy-policy.html">Privacy Policy</a> |
-          <a href="/terms-of-service.html">Terms of Service</a> |
+        </section>
+        
+        <div class="chips" id="filterChips"></div>
+        
+        <section id="results" style="display:none">
+          <h2 id="resultsTitle">Price Comparison Results</h2>
+          <table id="resultsTable">
+            <thead>
+              <tr>
+                <th>Retailer</th>
+                <th>Product Details</th>
+                <th>Wrapper</th>
+                <th>Vitola</th>
+                <th>Size</th>
+                <th>Base Price</th>
+                <th>Shipping</th>
+                <th>Tax</th>
+                <th>Total</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </section>
+      </main>
+      
+      <footer class="footer">
+        <p>
+          <a href="/about.html">About</a> | 
+          <a href="/privacy-policy.html">Privacy</a> | 
+          <a href="/terms-of-service.html">Terms</a> | 
           <a href="/contact.html">Contact</a>
-        </div>
+        </p>
+        <p>&copy; 2025 Cigar Price Scout. Prices and availability subject to change.</p>
       </footer>
     </div>
 
     <script>
-      // DOM elements
-      const brandSel = document.querySelector('#brand');
-      const lineSel = document.querySelector('#line');
-      const sizeSel = document.querySelector('#size');
-      const zipInp = document.querySelector('#zip');
-      const goBtn = document.querySelector('#go');
-      const out = document.querySelector('#out');
-      const chips = document.querySelector('#chips');
-
-      // Global data store
       let optionsData = null;
+      let currentSelection = {
+        brand: '',
+        line: '',
+        wrapper: '',
+        vitola: ''
+      };
 
-      // Utility functions
-      function setChips(b, l, s) {
-        const arr = [];
-        if (b) arr.push(['Brand', b]);
-        if (l) arr.push(['Line', l]);
-        if (s) arr.push(['Size', s.replace('x', ' × ')]);
-        
-        if (arr.length) {
-          chips.style.display = 'flex';
-          chips.innerHTML = arr.map(([k,v]) => `<span class="chip">${k}: ${v}</span>`).join('');
-        } else {
-          chips.style.display = 'none';
-          chips.innerHTML = '';
-        }
-      }
+      // DOM elements
+      const brandSelect = document.getElementById('brandSelect');
+      const lineSelect = document.getElementById('lineSelect');
+      const wrapperSelect = document.getElementById('wrapperSelect');
+      const vitolaSelect = document.getElementById('vitolaSelect');
+      const zipInput = document.getElementById('zipInput');
+      const searchBtn = document.getElementById('searchBtn');
+      const filterChips = document.getElementById('filterChips');
+      const resultsSection = document.getElementById('results');
+      const resultsTitle = document.getElementById('resultsTitle');
+      const resultsTable = document.getElementById('resultsTable');
 
-      function updateButtonState() {
-        const canSearch = brandSel.value && lineSel.value && sizeSel.value;
-        goBtn.disabled = !canSearch;
-      }
-
-      // Load options from backend
+      // Load options on page load
       async function loadOptions() {
         try {
-          const res = await fetch('/options');
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          
-          optionsData = await res.json();
-          const brands = optionsData.brands || [];
-          
-          brandSel.innerHTML = '<option value="">Brand…</option>' + 
-            brands.map(b => `<option value="${b.brand}">${b.brand}</option>`).join('');
-          brandSel.disabled = false;
-          
-        } catch(e) {
-          console.error('Failed to load options:', e);
-          brandSel.innerHTML = '<option value="">Error loading brands</option>';
+          const response = await fetch('/options');
+          const data = await response.json();
+          optionsData = data.brands;
+          populateBrandSelect();
+        } catch (error) {
+          console.error('Error loading options:', error);
         }
       }
 
-      // Brand selection handler
-      function onBrandChange() {
-        const selectedBrand = brandSel.value;
-        
-        // Reset dependent dropdowns
-        lineSel.innerHTML = '<option value="">Line…</option>';
-        sizeSel.innerHTML = '<option value="">Size…</option>';
-        lineSel.disabled = true;
-        sizeSel.disabled = true;
-        
-        if (!selectedBrand) {
-          setChips();
-          updateButtonState();
-          return;
-        }
-
-        // Find brand data
-        const brandData = optionsData.brands.find(b => b.brand === selectedBrand);
-        if (!brandData || !brandData.lines) {
-          console.error('Brand data not found:', selectedBrand);
-          return;
-        }
-
-        // Populate lines
-        lineSel.innerHTML = '<option value="">Line…</option>' + 
-          brandData.lines.map(l => `<option value="${l.line}">${l.line}</option>`).join('');
-        lineSel.disabled = false;
-        
-        setChips(selectedBrand);
-        updateButtonState();
+      function populateBrandSelect() {
+        brandSelect.innerHTML = '<option value="">Select Brand...</option>';
+        optionsData.forEach(brand => {
+          const option = document.createElement('option');
+          option.value = brand.brand;
+          option.textContent = brand.brand;
+          brandSelect.appendChild(option);
+        });
       }
 
-      // Line selection handler
-      function onLineChange() {
-        const selectedBrand = brandSel.value;
-        const selectedLine = lineSel.value;
+      function populateLineSelect() {
+        lineSelect.innerHTML = '<option value="">Select Line...</option>';
+        lineSelect.disabled = !currentSelection.brand;
         
-        // Reset size dropdown
-        sizeSel.innerHTML = '<option value="">Size…</option>';
-        sizeSel.disabled = true;
-        
-        if (!selectedLine) {
-          setChips(selectedBrand);
-          updateButtonState();
-          return;
-        }
-
-        // Find line data
-        const brandData = optionsData.brands.find(b => b.brand === selectedBrand);
-        const lineData = brandData?.lines.find(l => l.line === selectedLine);
-        
-        if (!lineData || !lineData.sizes) {
-          console.error('Line data not found:', selectedBrand, selectedLine);
-          return;
-        }
-
-        // Populate sizes
-        sizeSel.innerHTML = '<option value="">Size…</option>' + 
-          lineData.sizes.map(s => `<option value="${s}">${s}</option>`).join('');
-        sizeSel.disabled = false;
-        
-        setChips(selectedBrand, selectedLine);
-        updateButtonState();
-      }
-
-      // Size selection handler
-      function onSizeChange() {
-        const selectedBrand = brandSel.value;
-        const selectedLine = lineSel.value;
-        const selectedSize = sizeSel.value;
-        
-        setChips(selectedBrand, selectedLine, selectedSize);
-        updateButtonState();
-      }
-
-      // Compare prices
-      async function doCompare() {
-        const brand = brandSel.value;
-        const line = lineSel.value;
-        const size = sizeSel.value;
-        const zip = zipInp.value.trim();
-
-        if (!brand || !line || !size) {
-          alert('Please select a brand, line, and size first.');
-          return;
-        }
-
-        // Show loading
-        out.innerHTML = '<div class="loading">Scouting prices...</div>';
-        goBtn.disabled = true;
-
-        try {
-          const params = new URLSearchParams({
-            brand: brand,
-            line: line,
-            size: size,
-            zip: zip
-          });
-          
-          const res = await fetch(`/compare?${params}`);
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          
-          const data = await res.json();
-          
-          if (!data.results || data.results.length === 0) {
-            out.innerHTML = '<div class="loading">No results found for this selection.</div>';
-            return;
+        if (currentSelection.brand) {
+          const brand = optionsData.find(b => b.brand === currentSelection.brand);
+          if (brand) {
+            brand.lines.forEach(line => {
+              const option = document.createElement('option');
+              option.value = line.line;
+              option.textContent = line.line;
+              lineSelect.appendChild(option);
+            });
           }
-
-          // Calculate summary
-          const inStock = data.results.filter(r => !r.oos);
-          const lowestPrice = Math.min(...inStock.map(r => parseFloat(r.delivered_after_promo.replace('$', ''))));
-
-          // Render results
-          out.innerHTML = `
-            <h2>${data.brand} — ${data.line} — ${data.size}</h2>
-            <div class="results-summary">
-              Found ${data.results.length} retailer${data.results.length !== 1 ? 's' : ''} • 
-              ${inStock.length} in stock • 
-              Best price: $${lowestPrice.toFixed(2)} delivered
-            </div>
-            <table>
-              <thead>
-                <tr>
-                  <th>Retailer</th>
-                  <th>Base</th>
-                  <th>Shipping</th>
-                  <th>Est. Tax</th>
-                  <th>Delivered</th>
-                  <th>Promo</th>
-                  <th>Final Price</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                ${data.results.map(r => `
-                  <tr style="${r.oos ? 'opacity: 0.6;' : ''}">
-                    <td>
-                      ${r.retailer}
-                      ${r.oos ? ' <span class="oos">Out of Stock</span>' : ''}
-                      ${r.cheapest && !r.oos ? ' <span class="best">Best Price</span>' : ''}
-                    </td>
-                    <td>${r.base}</td>
-                    <td>${r.shipping}</td>
-                    <td>${r.tax}</td>
-                    <td><strong>${r.delivered}</strong></td>
-                    <td>${r.promo ? `${r.promo}${r.promo_code ? ` (${r.promo_code})` : ''}` : '—'}</td>
-                    <td><strong>${r.delivered_after_promo}</strong></td>
-                    <td><a href="${r.url}" target="_blank" rel="nofollow noopener">View →</a></td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-            <div class="fine" style="margin-top:12px">
-              Prices and promotions update regularly. Always verify final pricing at checkout.
-            </div>
-          `;
-          
-        } catch(e) {
-          console.error('Compare failed:', e);
-          out.innerHTML = '<div class="loading">Error loading prices. Please try again.</div>';
-        } finally {
-          updateButtonState();
         }
+      }
+
+      function populateWrapperSelect() {
+        wrapperSelect.innerHTML = '<option value="">Any Wrapper...</option>';
+        wrapperSelect.disabled = !currentSelection.line;
+        
+        if (currentSelection.brand && currentSelection.line) {
+          const brand = optionsData.find(b => b.brand === currentSelection.brand);
+          const line = brand?.lines.find(l => l.line === currentSelection.line);
+          
+          if (line) {
+            // Get unique wrappers
+            const wrappers = [...new Set(line.wrappers.map(w => w.wrapper).filter(w => w))];
+            wrappers.forEach(wrapper => {
+              const option = document.createElement('option');
+              option.value = wrapper;
+              option.textContent = wrapper;
+              wrapperSelect.appendChild(option);
+            });
+          }
+        }
+      }
+
+      function populateVitolaSelect() {
+        vitolaSelect.innerHTML = '<option value="">Any Vitola...</option>';
+        vitolaSelect.disabled = !currentSelection.line;
+        
+        if (currentSelection.brand && currentSelection.line) {
+          const brand = optionsData.find(b => b.brand === currentSelection.brand);
+          const line = brand?.lines.find(l => l.line === currentSelection.line);
+          
+          if (line) {
+            // Get unique vitolas
+            const vitolas = [...new Set(line.wrappers.flatMap(w => w.vitolas).filter(v => v))];
+            vitolas.forEach(vitola => {
+              const option = document.createElement('option');
+              option.value = vitola;
+              option.textContent = vitola;
+              vitolaSelect.appendChild(option);
+            });
+          }
+        }
+      }
+
+      function updateFilterChips() {
+        const chips = [];
+        if (currentSelection.brand) chips.push(`Brand: ${currentSelection.brand}`);
+        if (currentSelection.line) chips.push(`Line: ${currentSelection.line}`);
+        if (currentSelection.wrapper) chips.push(`Wrapper: ${currentSelection.wrapper}`);
+        if (currentSelection.vitola) chips.push(`Vitola: ${currentSelection.vitola}`);
+        
+        filterChips.innerHTML = chips.map(chip => 
+          `<span class="chip">${chip}</span>`
+        ).join('');
+      }
+
+      function updateSearchButton() {
+        const canSearch = currentSelection.brand && currentSelection.line;
+        searchBtn.disabled = !canSearch;
       }
 
       // Event listeners
-      brandSel.addEventListener('change', onBrandChange);
-      lineSel.addEventListener('change', onLineChange);
-      sizeSel.addEventListener('change', onSizeChange);
-      goBtn.addEventListener('click', doCompare);
+      brandSelect.addEventListener('change', (e) => {
+        currentSelection.brand = e.target.value;
+        currentSelection.line = '';
+        currentSelection.wrapper = '';
+        currentSelection.vitola = '';
+        
+        lineSelect.value = '';
+        wrapperSelect.value = '';
+        vitolaSelect.value = '';
+        
+        populateLineSelect();
+        populateWrapperSelect();
+        populateVitolaSelect();
+        updateFilterChips();
+        updateSearchButton();
+      });
+
+      lineSelect.addEventListener('change', (e) => {
+        currentSelection.line = e.target.value;
+        currentSelection.wrapper = '';
+        currentSelection.vitola = '';
+        
+        wrapperSelect.value = '';
+        vitolaSelect.value = '';
+        
+        populateWrapperSelect();
+        populateVitolaSelect();
+        updateFilterChips();
+        updateSearchButton();
+      });
+
+      wrapperSelect.addEventListener('change', (e) => {
+        currentSelection.wrapper = e.target.value;
+        updateFilterChips();
+      });
+
+      vitolaSelect.addEventListener('change', (e) => {
+        currentSelection.vitola = e.target.value;
+        updateFilterChips();
+      });
+
+      searchBtn.addEventListener('click', async () => {
+        if (!currentSelection.brand || !currentSelection.line) return;
+        
+        const params = new URLSearchParams({
+          brand: currentSelection.brand,
+          line: currentSelection.line,
+          zip: zipInput.value
+        });
+        
+        if (currentSelection.wrapper) params.append('wrapper', currentSelection.wrapper);
+        if (currentSelection.vitola) params.append('vitola', currentSelection.vitola);
+        
+        try {
+          searchBtn.disabled = true;
+          searchBtn.textContent = 'Searching...';
+          
+          const response = await fetch(`/compare?${params}`);
+          const data = await response.json();
+          
+          displayResults(data);
+        } catch (error) {
+          console.error('Search error:', error);
+          alert('Search failed. Please try again.');
+        } finally {
+          searchBtn.disabled = false;
+          searchBtn.innerHTML = `
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+            </svg>
+            Find Deals
+          `;
+        }
+      });
+
+      function displayResults(data) {
+        if (!data.results || data.results.length === 0) {
+          resultsTitle.textContent = 'No results found';
+          resultsTable.querySelector('tbody').innerHTML = '<tr><td colspan="10">No matching cigars found.</td></tr>';
+          resultsSection.style.display = 'block';
+          return;
+        }
+        
+        // Update title
+        let titleParts = [data.brand, data.line];
+        if (data.wrapper) titleParts.push(data.wrapper);
+        if (data.vitola) titleParts.push(data.vitola);
+        resultsTitle.textContent = `${titleParts.join(' ')} - Price Comparison`;
+        
+        // Build table rows
+        const tbody = resultsTable.querySelector('tbody');
+        tbody.innerHTML = data.results.map(result => `
+          <tr>
+            <td><a href="${result.url}" target="_blank">${result.retailer}</a></td>
+            <td>${result.product}</td>
+            <td>${result.wrapper ? `<span class="wrapper-badge">${result.wrapper}</span>` : '-'}</td>
+            <td>${result.vitola ? `<span class="vitola-badge">${result.vitola}</span>` : '-'}</td>
+            <td>${result.size}</td>
+            <td>${result.base}</td>
+            <td>${result.shipping}</td>
+            <td>${result.tax}</td>
+            <td><strong>${result.delivered_after_promo}</strong></td>
+            <td>
+              ${result.oos ? '<span class="oos">Out of Stock</span>' : ''}
+              ${result.cheapest ? '<span class="best">Best Deal</span>' : ''}
+            </td>
+          </tr>
+        `).join('');
+        
+        resultsSection.style.display = 'block';
+        resultsSection.scrollIntoView({ behavior: 'smooth' });
+      }
 
       // Initialize
       loadOptions();
