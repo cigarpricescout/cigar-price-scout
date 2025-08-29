@@ -100,28 +100,73 @@
       .chip{font-size:14px;padding:6px 10px;border-radius:999px;border:1px solid var(--rule);background:#fff;color:#374151}
       h2{font-family:"Cinzel", serif;font-weight:700;letter-spacing:.3px;margin:18px 0 8px;font-size:24px}
       
-      /* Clean, Professional Table Styling */
+      /* Clean, Professional Table Styling with Enhanced Readability */
       table{
         width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--rule);
         border-radius:12px;overflow:hidden;margin-top:20px;
         box-shadow:0 1px 3px rgba(0,0,0,0.05);
       }
       th,td{
-        padding:14px 16px;border-bottom:1px solid var(--rule);text-align:left;
-        font-size:17px;line-height:1.4;
+        padding:16px 18px;border-bottom:1px solid var(--rule);text-align:left;
+        font-size:19px;line-height:1.5;
       }
       th{
         background:#fcfbf9;color:var(--ink);font-family:"Cinzel", serif;
-        font-weight:600;font-size:16px;letter-spacing:0.3px;
+        font-weight:600;font-size:17px;letter-spacing:0.3px;
       }
       td{color:var(--ink);background:#fff}
       
+      /* Enhanced Product Details Spacing */
+      .product-details{
+        display:flex;
+        flex-direction:column;
+        gap:4px;
+        line-height:1.4;
+      }
+      .product-name{
+        font-weight:600;
+        font-size:18px;
+        color:var(--ink);
+      }
+      .product-specs{
+        display:flex;
+        gap:8px;
+        flex-wrap:wrap;
+        font-size:16px;
+        color:var(--muted);
+      }
+      
+      /* Authorized Dealer Indicators */
+      .retailer-info{
+        display:flex;
+        align-items:center;
+        gap:8px;
+      }
+      .auth-badge{
+        display:inline-block;
+        padding:3px 8px;
+        border-radius:6px;
+        font-size:12px;
+        font-weight:600;
+        text-transform:uppercase;
+      }
+      .auth-badge.authorized{
+        background:#dcfce7;
+        color:#166534;
+        border:1px solid #bbf7d0;
+      }
+      .auth-badge.unauthorized{
+        background:#fef3c7;
+        color:#92400e;
+        border:1px solid #fde68a;
+      }
+      
       /* Status indicators */
-      .oos{color:#dc2626;font-weight:600;font-size:12px;text-transform:uppercase}
-      .best{color:#059669;font-weight:700;font-size:12px;text-transform:uppercase}
+      .oos{color:#dc2626;font-weight:600;font-size:13px;text-transform:uppercase}
+      .best{color:#059669;font-weight:700;font-size:13px;text-transform:uppercase}
       
       /* Links styling */
-      td a{color:var(--accent);text-decoration:none;font-weight:600}
+      td a{color:var(--accent);text-decoration:none;font-weight:600;font-size:18px}
       td a:hover{text-decoration:underline}
       
       /* Wrapper and vitola badges */
@@ -129,9 +174,9 @@
         display:inline-block;
         background:#f3f4f6;
         color:#374151;
-        padding:4px 8px;
-        border-radius:6px;
-        font-size:13px;
+        padding:5px 10px;
+        border-radius:8px;
+        font-size:14px;
         font-weight:600;
         margin-right:6px;
       }
@@ -139,10 +184,21 @@
         display:inline-block;
         background:#e0f2fe;
         color:#0369a1;
-        padding:4px 8px;
-        border-radius:6px;
-        font-size:13px;
+        padding:5px 10px;
+        border-radius:8px;
+        font-size:14px;
         font-weight:600;
+      }
+      
+      /* Price columns styling */
+      .price-cell{
+        font-weight:600;
+        font-size:18px;
+      }
+      .total-price{
+        font-weight:700;
+        font-size:19px;
+        color:var(--accent);
       }
       
       /* Responsive design */
@@ -221,9 +277,6 @@
               <tr>
                 <th>Retailer</th>
                 <th>Product Details</th>
-                <th>Wrapper</th>
-                <th>Vitola</th>
-                <th>Size</th>
                 <th>Base Price</th>
                 <th>Shipping</th>
                 <th>Tax</th>
@@ -445,7 +498,7 @@
       function displayResults(data) {
         if (!data.results || data.results.length === 0) {
           resultsTitle.textContent = 'No results found';
-          resultsTable.querySelector('tbody').innerHTML = '<tr><td colspan="10">No matching cigars found.</td></tr>';
+          resultsTable.querySelector('tbody').innerHTML = '<tr><td colspan="7">No matching cigars found.</td></tr>';
           resultsSection.style.display = 'block';
           return;
         }
@@ -460,15 +513,28 @@
         const tbody = resultsTable.querySelector('tbody');
         tbody.innerHTML = data.results.map(result => `
           <tr>
-            <td><a href="${result.url}" target="_blank">${result.retailer}</a></td>
-            <td>${result.product}</td>
-            <td>${result.wrapper ? `<span class="wrapper-badge">${result.wrapper}</span>` : '-'}</td>
-            <td>${result.vitola ? `<span class="vitola-badge">${result.vitola}</span>` : '-'}</td>
-            <td>${result.size}</td>
-            <td>${result.base}</td>
-            <td>${result.shipping}</td>
-            <td>${result.tax}</td>
-            <td><strong>${result.delivered_after_promo}</strong></td>
+            <td>
+              <div class="retailer-info">
+                <a href="${result.url}" target="_blank">${result.retailer}</a>
+                <span class="auth-badge ${result.authorized ? 'authorized' : 'unauthorized'}">
+                  ${result.authorized ? 'Authorized' : 'Marketplace'}
+                </span>
+              </div>
+            </td>
+            <td>
+              <div class="product-details">
+                <div class="product-name">${result.product}</div>
+                <div class="product-specs">
+                  ${result.wrapper ? `<span class="wrapper-badge">${result.wrapper}</span>` : ''}
+                  ${result.vitola ? `<span class="vitola-badge">${result.vitola}</span>` : ''}
+                  <span>Size: ${result.size}</span>
+                </div>
+              </div>
+            </td>
+            <td class="price-cell">${result.base}</td>
+            <td class="price-cell">${result.shipping}</td>
+            <td class="price-cell">${result.tax}</td>
+            <td class="price-cell total-price">${result.delivered_after_promo}</td>
             <td>
               ${result.oos ? '<span class="oos">Out of Stock</span>' : ''}
               ${result.cheapest ? '<span class="best">Best Deal</span>' : ''}
