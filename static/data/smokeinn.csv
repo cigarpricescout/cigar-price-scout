@@ -1,4 +1,3 @@
-title,url,brand,line,size,box_qty,price,in_stock
-Arturo Fuente Hemingway 7x48 (Box of 25),https://www.smokeinn.com/arturo-fuente-cigars/fuente-hemingway-classics.html,Arturo Fuente,Hemingway,7x48,25,248.95,true
-Drew Estate Herrera Esteli Norteno 6.5x44 Box of 25,https://www.smokeinn.com/Drew-Estate-Herrera-Esteli-Norteno/,Drew Estate,Herrera Esteli Norteno,6.5x44,25,224.95,true
-
+title,url,brand,line,wrapper,vitola,size,box_qty,price,in_stock
+Arturo Fuente Hemingway 7x48 (Box of 25),https://www.smokeinn.com/arturo-fuente-cigars/fuente-hemingway-classics.html,Arturo Fuente,Hemingway,Natural,,7x48,25,248.95,true
+Drew Estate Herrera Esteli Norteno 6.5x44 Box of 25,https://www.smokeinn.com/Drew-Estate-Herrera-Esteli-Norteno/,Drew Estate,Herrera Esteli Norteno,Natural,,6.5x44,25,224.95,true

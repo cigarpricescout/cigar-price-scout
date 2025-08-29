@@ -7,7 +7,7 @@ from typing import Optional
 
 # Import your working shipping/tax functions
 try:
-    from app.shipping_tax import zip_to_state, estimate_shipping_cents, estimate_tax_cents
+    from shipping_tax import zip_to_state, estimate_shipping_cents, estimate_tax_cents
 except Exception:
     # Fallback functions if shipping_tax.py is missing
     def zip_to_state(zip_code):
@@ -32,46 +32,57 @@ except Exception:
         return int(base_cents * rates.get(state, 0.05))
 
 app = FastAPI()
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", StaticFiles(directory="../static"), name="static")
 
 # Your retailer list (unchanged)
+# Updated RETAILERS list for app/main.py with correct relative paths
 RETAILERS = [
-    {"key": "famous", "name": "Famous Smoke Shop", "csv": "static/data/famous.csv"},
-    {"key": "ci", "name": "Cigars International", "csv": "static/data/ci.csv"},
-    {"key": "jr", "name": "JR Cigar", "csv": "static/data/jr.csv"},
-    {"key": "thompson", "name": "Thompson Cigar", "csv": "static/data/thompson.csv"},
-    {"key": "atlantic", "name": "Atlantic Cigar", "csv": "static/data/atlantic.csv"},
-    {"key": "neptune", "name": "Neptune Cigar", "csv": "static/data/neptune.csv"},
-    {"key": "bestcigar", "name": "Best Cigar Prices", "csv": "static/data/bestcigar.csv"},
-    {"key": "corona", "name": "Corona Cigar", "csv": "static/data/corona.csv"},
-    {"key": "cigarcountry", "name": "Cigar Country", "csv": "static/data/cigarcountry.csv"},
-    {"key": "oldhavana", "name": "Old Havana Cigar Co.", "csv": "static/data/oldhavana.csv"},
-    {"key": "nickscigarworld", "name": "Nick's Cigar World", "csv": "static/data/nickscigarworld.csv"},
-    {"key": "cigarboxpa", "name": "Cigar Box PA", "csv": "static/data/cigarboxpa.csv"},
-    {"key": "tampasweethearts", "name": "Tampa Sweethearts", "csv": "static/data/tampasweethearts.csv"},
-    {"key": "cdmcigars", "name": "CDM Cigars", "csv": "static/data/cdmcigars.csv"},
-    {"key": "smokeinn", "name": "Smoke Inn", "csv": "static/data/smokeinn.csv"},
-    {"key": "holts", "name": "Holt's Cigar Company", "csv": "static/data/holts.csv"},
-    {"key": "cuencacigars", "name": "Cuenca Cigars", "csv": "static/data/cuencacigars.csv"},
-    {"key": "thecigarshop", "name": "The Cigar Shop", "csv": "static/data/thecigarshop.csv"},
-    {"key": "cigarhustler", "name": "Cigar Hustler", "csv": "static/data/cigarhustler.csv"},
-    {"key": "cigarplace", "name": "Cigar Place", "csv": "static/data/cigarplace.csv"},
-    {"key": "tobaccolocker", "name": "Tobacco Locker", "csv": "static/data/tobaccolocker.csv"},
-    {"key": "thecigarstore", "name": "The Cigar Store", "csv": "static/data/thecigarstore.csv"},
-    {"key": "mikescigars", "name": "Mike's Cigars", "csv": "static/data/mikescigars.csv"},
-    {"key": "bonitasmokeshop", "name": "Bonita Smoke Shop", "csv": "static/data/bonitasmokeshop.csv"},
-    {"key": "windycitycigars", "name": "Windy City Cigars", "csv": "static/data/windycitycigars.csv"},
-    {"key": "absolutecigars", "name": "Absolute Cigars", "csv": "static/data/absolutecigars.csv"},
-    {"key": "cubancrafters", "name": "Cuban Crafters", "csv": "static/data/cubancrafters.csv"},
-    {"key": "cigar", "name": "Cigar.com", "csv": "static/data/cigar.csv"},
-    {"key": "pipesandcigars", "name": "Pipes and Cigars", "csv": "static/data/pipesandcigars.csv"},
-    {"key": "planetcigars", "name": "Planet Cigars", "csv": "static/data/planetcigars.csv"},
-    {"key": "smallbatchcigar", "name": "Small Batch Cigar", "csv": "static/data/smallbatchcigar.csv"},
-    {"key": "niceashcigars", "name": "Nice Ash Cigars", "csv": "static/data/niceashcigars.csv"},
-    {"key": "cigarsdirect", "name": "Cigars Direct", "csv": "static/data/cigarsdirect.csv"},
-    {"key": "secretocigarbar", "name": "Secreto Cigar Bar", "csv": "static/data/secretocigarbar.csv"},
-    {"key": "momscigars", "name": "Mom's Cigars", "csv": "static/data/momscigars.csv"},
-    {"key": "bighumidor", "name": "Big Humidor", "csv": "static/data/bighumidor.csv"},
+    {"key": "abcfws", "name": "ABC Fine Wine & Spirits", "csv": "../static/data/abcfws.csv"},
+    {"key": "absolutecigars", "name": "Absolute Cigars", "csv": "../static/data/absolutecigars.csv"},
+    {"key": "atlantic", "name": "Atlantic Cigar", "csv": "../static/data/atlantic.csv"},
+    {"key": "bestcigar", "name": "Best Cigar Prices", "csv": "../static/data/bestcigar.csv"},
+    {"key": "bighumidor", "name": "Big Humidor", "csv": "../static/data/bighumidor.csv"},
+    {"key": "bonitasmokeshop", "name": "Bonita Smoke Shop", "csv": "../static/data/bonitasmokeshop.csv"},
+    {"key": "casademontecristo", "name": "Casa de Montecristo", "csv": "../static/data/casademontecristo.csv"},
+    {"key": "cccrafter", "name": "CC Crafter", "csv": "../static/data/cccrafter.csv"},
+    {"key": "cdmcigars", "name": "CDM Cigars", "csv": "../static/data/cdmcigars.csv"},
+    {"key": "ci", "name": "Cigars International", "csv": "../static/data/ci.csv"},
+    {"key": "cigar", "name": "Cigar.com", "csv": "../static/data/cigar.csv"},
+    {"key": "cigarboxpa", "name": "Cigar Box PA", "csv": "../static/data/cigarboxpa.csv"},
+    {"key": "cigarcellarofmiami", "name": "Cigar Cellar of Miami", "csv": "../static/data/cigarcellarofmiami.csv"},
+    {"key": "cigarcountry", "name": "Cigar Country", "csv": "../static/data/cigarcountry.csv"},
+    {"key": "cigarhustler", "name": "Cigar Hustler", "csv": "../static/data/cigarhustler.csv"},
+    {"key": "cigarking", "name": "Cigar King", "csv": "../static/data/cigarking.csv"},
+    {"key": "cigarplace", "name": "Cigar Place", "csv": "../static/data/cigarplace.csv"},
+    {"key": "cigarsdirect", "name": "Cigars Direct", "csv": "../static/data/cigarsdirect.csv"},
+    {"key": "corona", "name": "Corona Cigar", "csv": "../static/data/corona.csv"},
+    {"key": "cubancrafters", "name": "Cuban Crafters", "csv": "../static/data/cubancrafters.csv"},
+    {"key": "cuencacigars", "name": "Cuenca Cigars", "csv": "../static/data/cuencacigars.csv"},
+    {"key": "famous", "name": "Famous Smoke Shop", "csv": "../static/data/famous.csv"},
+    {"key": "hilands", "name": "Hiland's Cigars", "csv": "../static/data/hilands.csv"},
+    {"key": "holts", "name": "Holt's Cigar Company", "csv": "../static/data/holts.csv"},
+    {"key": "jr", "name": "JR Cigar", "csv": "../static/data/jr.csv"},
+    {"key": "lmcigars", "name": "LM Cigars", "csv": "../static/data/lmcigars.csv"},
+    {"key": "mikescigars", "name": "Mike's Cigars", "csv": "../static/data/mikescigars.csv"},
+    {"key": "momscigars", "name": "Mom's Cigars", "csv": "../static/data/momscigars.csv"},
+    {"key": "neptune", "name": "Neptune Cigar", "csv": "../static/data/neptune.csv"},
+    {"key": "niceashcigars", "name": "Nice Ash Cigars", "csv": "../static/data/niceashcigars.csv"},
+    {"key": "nickscigarworld", "name": "Nick's Cigar World", "csv": "../static/data/nickscigarworld.csv"},
+    {"key": "oldhavana", "name": "Old Havana Cigar Co.", "csv": "../static/data/oldhavana.csv"},
+    {"key": "pipesandcigars", "name": "Pipes and Cigars", "csv": "../static/data/pipesandcigars.csv"},
+    {"key": "planetcigars", "name": "Planet Cigars", "csv": "../static/data/planetcigars.csv"},
+    {"key": "santamonicacigars", "name": "Santa Monica Cigars", "csv": "../static/data/santamonicacigars.csv"},
+    {"key": "secretocigarbar", "name": "Secreto Cigar Bar", "csv": "../static/data/secretocigarbar.csv"},
+    {"key": "smallbatchcigar", "name": "Small Batch Cigar", "csv": "../static/data/smallbatchcigar.csv"},
+    {"key": "smokeinn", "name": "Smoke Inn", "csv": "../static/data/smokeinn.csv"},
+    {"key": "tampasweethearts", "name": "Tampa Sweethearts", "csv": "../static/data/tampasweethearts.csv"},
+    {"key": "thecigarshop", "name": "The Cigar Shop", "csv": "../static/data/thecigarshop.csv"},
+    {"key": "thecigarstore", "name": "The Cigar Store", "csv": "../static/data/thecigarstore.csv"},
+    {"key": "thompson", "name": "Thompson Cigar", "csv": "../static/data/thompson.csv"},
+    {"key": "tobaccolocker", "name": "Tobacco Locker", "csv": "../static/data/tobaccolocker.csv"},
+    {"key": "twoguys", "name": "Two Guys Smoke Shop", "csv": "../static/data/twoguys.csv"},
+    {"key": "watchcity", "name": "Watch City Cigar", "csv": "../static/data/watchcity.csv"},
+    {"key": "windycitycigars", "name": "Windy City Cigars", "csv": "../static/data/windycitycigars.csv"},
 ]
 
 # Enhanced CSV loader with wrapper and vitola support
@@ -196,7 +207,7 @@ def build_options_tree():
 # Routes
 @app.get("/", response_class=HTMLResponse)
 def home():
-    return FileResponse("static/index.html")
+    return FileResponse("../static/index.html")
 
 @app.get("/health")
 def health():
@@ -328,16 +339,19 @@ def compare(
 # Legal page routes
 @app.get("/about.html")
 async def about():
-    return FileResponse("static/about.html")
+    return FileResponse("../static/about.html")
 
 @app.get("/privacy-policy.html") 
 async def privacy_policy():
-    return FileResponse("static/privacy-policy.html")
+    return FileResponse("../static/privacy-policy.html")
 
 @app.get("/terms-of-service.html")
 async def terms_of_service():
-    return FileResponse("static/terms-of-service.html")
+    return FileResponse("../static/terms-of-service.html")
 
 @app.get("/contact.html")
 async def contact():
-    return FileResponse("static/contact.html")
+    return FileResponse("../static/contact.html")
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
