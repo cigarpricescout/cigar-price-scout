@@ -1,0 +1,20 @@
+# Affiliate Links Tracker
+# Updated: 2025-09-03 12:42:13
+
+## Active Affiliate Links
+- Best Cigar Prices: https://sovrn.co/7mxxgdf
+  - Product: Padron 1964 Anniversary Maduro Diplomatico
+  - Date Added: 2025-09-03
+  - Status: Active
+  - Action: NEW ENTRY ADDED
+
+## Next Steps
+1. Visit Best Cigar Prices to get the actual price for this cigar
+2. Update the price field in the CSV if needed
+3. Apply to more affiliate programs
+4. Test the affiliate link on your site
+
+## Notes
+- This is your first commission-earning product!
+- Monitor clicks in your Sovrn dashboard
+- Consider adding more Padron varieties as you get pricing data
