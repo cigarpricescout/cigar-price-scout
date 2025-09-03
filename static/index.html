@@ -22,6 +22,10 @@
     <meta name="twitter:description" content="Compare prices on premium cigars by wrapper type, vitola, and size across 35+ online retailers." />
     <meta name="twitter:image" content="https://cigarpricescout.com/static/cigar-scout-social.png" />
     
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="/static/logo.png">
+    <link rel="apple-touch-icon" href="/static/logo.png">
+    
     <!-- Schema.org Structured Data -->
     <script type="application/ld+json">
     {
@@ -67,7 +71,7 @@
         display:flex;flex-direction:column;align-items:center;justify-content:center;
         gap:8px;padding:28px 0 10px;text-align:center;
       }
-      .scout-hat{width:80px;height:60px}
+      .scout-hat{width:100px;height:80px;object-fit:contain}
       .brandname{
         font-family:"Cinzel", serif;
         font-weight:700;
@@ -79,6 +83,12 @@
         color:var(--muted);
         font-size:20px;
         margin-top:2px;
+      }
+      .last-updated{
+        font-size:14px;
+        color:var(--muted);
+        margin-top:8px;
+        font-style:italic;
       }
       
       /* Enhanced Picker with wrapper support */
@@ -105,68 +115,101 @@
         width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--rule);
         border-radius:12px;overflow:hidden;margin-top:20px;
         box-shadow:0 1px 3px rgba(0,0,0,0.05);
+        min-width:1000px;
       }
       th,td{
-        padding:16px 18px;border-bottom:1px solid var(--rule);text-align:left;
-        font-size:19px;line-height:1.5;
+        padding:20px 16px;border-bottom:1px solid var(--rule);text-align:left;
+        font-size:18px;line-height:1.6;
       }
       th{
         background:#fcfbf9;color:var(--ink);font-family:"Cinzel", serif;
-        font-weight:600;font-size:17px;letter-spacing:0.3px;
+        font-weight:600;font-size:16px;letter-spacing:0.3px;
       }
       td{color:var(--ink);background:#fff}
+      
+      /* Column widths for proper spacing */
+      .retailer-col { width: 180px; }
+      .dealer-col { width: 140px; }
+      .product-col { width: 320px; }
+      .base-col { width: 100px; }
+      .shipping-col { width: 90px; }
+      .tax-col { width: 80px; }
+      .total-col { width: 110px; }
+      .status-col { width: 90px; }
       
       /* Enhanced Product Details Spacing */
       .product-details{
         display:flex;
         flex-direction:column;
-        gap:4px;
-        line-height:1.4;
+        gap:8px;
+        line-height:1.5;
       }
       .product-name{
         font-weight:600;
-        font-size:18px;
+        font-size:17px;
         color:var(--ink);
+        margin-bottom:6px;
       }
       .product-specs{
         display:flex;
         gap:8px;
         flex-wrap:wrap;
-        font-size:16px;
+        font-size:14px;
         color:var(--muted);
+        align-items:center;
+      }
+      
+      /* Marketplace Warning Design */
+      .marketplace-cell{
+        display:flex;
+        flex-direction:column;
+        gap:4px;
+        align-items:center;
+        text-align:center;
+      }
+      .marketplace-warning{
+        font-size:15px;
+        color:#dc2626;
+        font-weight:600;
+        display:flex;
+        align-items:center;
+        gap:6px;
+        justify-content:center;
+      }
+      .risk-text{
+        font-size:12px;
+        color:#dc2626;
+        font-weight:500;
+        text-align:center;
+        line-height:1.2;
+      }
+      .hazard-icon{
+        width:16px;
+        height:16px;
+        fill:#dc2626;
       }
       
       /* Authorized Dealer Indicators */
-      .retailer-info{
-        display:flex;
-        align-items:center;
-        gap:8px;
-      }
       .auth-badge{
         display:inline-block;
-        padding:3px 8px;
+        padding:6px 10px;
         border-radius:6px;
-        font-size:12px;
+        font-size:13px;
         font-weight:600;
         text-transform:uppercase;
       }
-      .auth-badge.authorized{
-        background:#dcfce7;
-        color:#166534;
-        border:1px solid #bbf7d0;
-      }
-      .auth-badge.unauthorized{
-        background:#fef3c7;
-        color:#92400e;
-        border:1px solid #fde68a;
+      .auth-badge.marketplace{
+        background:#fef2f2;
+        color:#dc2626;
+        border:1px solid #fecaca;
       }
       
       /* Status indicators */
-      .oos{color:#dc2626;font-weight:600;font-size:13px;text-transform:uppercase}
-      .best{color:#059669;font-weight:700;font-size:13px;text-transform:uppercase}
+      .oos{color:#dc2626;font-weight:600;font-size:14px;text-transform:uppercase}
+      .best{color:#059669;font-weight:700;font-size:14px;text-transform:uppercase}
       
       /* Links styling */
-      td a{color:var(--accent);text-decoration:none;font-weight:600;font-size:18px}
+      td a{color:var(--accent);text-decoration:none;font-weight:600;font-size:19px}
       td a:hover{text-decoration:underline}
       
       /* Wrapper and vitola badges */
@@ -174,30 +217,30 @@
         display:inline-block;
         background:#f3f4f6;
         color:#374151;
-        padding:5px 10px;
+        padding:6px 12px;
         border-radius:8px;
-        font-size:14px;
+        font-size:15px;
         font-weight:600;
-        margin-right:6px;
+        margin-right:8px;
       }
       .vitola-badge{
         display:inline-block;
         background:#e0f2fe;
         color:#0369a1;
-        padding:5px 10px;
+        padding:6px 12px;
         border-radius:8px;
-        font-size:14px;
+        font-size:15px;
         font-weight:600;
       }
       
       /* Price columns styling */
       .price-cell{
         font-weight:600;
-        font-size:18px;
+        font-size:20px;
       }
       .total-price{
         font-weight:700;
-        font-size:19px;
+        font-size:21px;
         color:var(--accent);
       }
       
@@ -229,15 +272,27 @@
   </head>
   
   <body>
+    <!-- Age Verification Modal -->
+    <div id="ageModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:1000;align-items:center;justify-content:center;">
+      <div style="background:#fff;padding:40px;border-radius:12px;text-align:center;max-width:400px;margin:20px;">
+        <h2 style="font-family:'Cinzel',serif;margin-bottom:20px;">Age Verification Required</h2>
+        <p style="margin-bottom:30px;font-size:18px;line-height:1.5;">You must be 21 years or older to view cigar pricing information. Please confirm your age to continue.</p>
+        <div style="display:flex;gap:15px;justify-content:center;">
+          <button onclick="confirmAge()" style="background:var(--accent);color:#fff;padding:12px 24px;border:none;border-radius:8px;font-size:16px;cursor:pointer;">I am 21 or older</button>
+          <button onclick="denyAge()" style="background:#dc2626;color:#fff;padding:12px 24px;border:none;border-radius:8px;font-size:16px;cursor:pointer;">I am under 21</button>
+        </div>
+      </div>
+    </div>
+
     <div class="wrap">
       <header class="heroheader">
-        <svg class="scout-hat" viewBox="0 0 80 60" fill="none">
-          <path d="M10 45 C10 35, 20 25, 40 25 C60 25, 70 35, 70 45 L70 50 C70 52, 68 54, 65 54 L15 54 C12 54, 10 52, 10 50 Z" fill="#7c5c2e"/>
-          <ellipse cx="40" cy="25" rx="25" ry="8" fill="#5d4e37"/>
-          <path d="M20 30 C25 28, 35 27, 40 28 C45 27, 55 28, 60 30" stroke="#4a3728" stroke-width="2" fill="none"/>
-        </svg>
+        <img src="/static/logo.png" alt="Cigar Price Scout Logo" class="scout-hat" />
         <h1 class="brandname">Cigar Price Scout</h1>
-        <p class="tag">Find the best cigar deals by wrapper, vitola & size</p>
+        <p class="tag">Search the cigar box, we'll scout the stock</p>
+        <div class="last-updated">Data last updated: September 2, 2025</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:4px;font-style:italic;">
+          Stock status verification coming in next update
+        </div>
       </header>
       
       <main>
@@ -272,16 +327,32 @@
         
         <section id="results" style="display:none">
           <h2 id="resultsTitle">Price Comparison Results</h2>
+          
+          <!-- Cost Savings Summary -->
+          <div id="savingsSummary" style="background:#f0f9ff;border:1px solid #0284c7;border-radius:8px;padding:16px;margin-bottom:20px;display:none;">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <div>
+                <strong style="color:#0369a1;font-size:18px;">Potential Savings: <span id="savingsAmount"></span></strong>
+                <div style="font-size:14px;color:#0369a1;margin-top:4px;">Cheapest vs Most Expensive</div>
+              </div>
+              <div style="text-align:right;font-size:14px;color:#374151;">
+                <div>Cheapest: <strong id="cheapestPrice"></strong></div>
+                <div>Most Expensive: <strong id="expensivePrice"></strong></div>
+              </div>
+            </div>
+          </div>
+          
           <table id="resultsTable">
             <thead>
               <tr>
-                <th>Retailer</th>
-                <th>Product Details</th>
-                <th>Base Price</th>
-                <th>Shipping</th>
-                <th>Tax</th>
-                <th>Total</th>
-                <th>Status</th>
+                <th class="retailer-col">Retailer</th>
+                <th class="dealer-col">Dealer Type</th>
+                <th class="product-col">Product Details</th>
+                <th class="base-col">Base Price</th>
+                <th class="shipping-col">Shipping</th>
+                <th class="tax-col">Tax</th>
+                <th class="total-col">Total</th>
+                <th class="status-col">Status</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -320,6 +391,25 @@
       const resultsSection = document.getElementById('results');
       const resultsTitle = document.getElementById('resultsTitle');
       const resultsTable = document.getElementById('resultsTable');
+
+      // Age verification functions
+      let ageVerified = false;
+      
+      function showAgeModal() {
+        if (!ageVerified) {
+          document.getElementById('ageModal').style.display = 'flex';
+        }
+      }
+      
+      function confirmAge() {
+        ageVerified = true;
+        document.getElementById('ageModal').style.display = 'none';
+      }
+      
+      function denyAge() {
+        alert('You must be 21 or older to access this site.');
+        window.location.href = 'https://www.google.com';
+      }
 
       // Load options on page load
       async function loadOptions() {
@@ -498,7 +588,7 @@
       function displayResults(data) {
         if (!data.results || data.results.length === 0) {
           resultsTitle.textContent = 'No results found';
-          resultsTable.querySelector('tbody').innerHTML = '<tr><td colspan="7">No matching cigars found.</td></tr>';
+          resultsTable.querySelector('tbody').innerHTML = '<tr><td colspan="8">No matching cigars found.</td></tr>';
           resultsSection.style.display = 'block';
           return;
         }
@@ -509,19 +599,26 @@
         if (data.vitola) titleParts.push(data.vitola);
         resultsTitle.textContent = `${titleParts.join(' ')} - Price Comparison`;
         
-        // Build table rows
+        // Build table rows with proper column structure
         const tbody = resultsTable.querySelector('tbody');
-        tbody.innerHTML = data.results.map(result => `
+        tbody.innerHTML = data.results.map(result => {
+          return `
           <tr>
-            <td>
-              <div class="retailer-info">
-                <a href="${result.url}" target="_blank">${result.retailer}</a>
-                <span class="auth-badge ${result.authorized ? 'authorized' : 'unauthorized'}">
-                  ${result.authorized ? 'Authorized' : 'Marketplace'}
-                </span>
+            <td class="retailer-col">
+              <a href="${result.url}" target="_blank">${result.retailer}</a>
+            </td>
+            <td class="dealer-col">
+              <div class="marketplace-cell">
+                <div class="marketplace-warning">
+                  <svg class="hazard-icon" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2L1 21h22L12 2zm0 3.5L19.5 19h-15L12 5.5zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z"/>
+                  </svg>
+                  <span class="auth-badge marketplace">Marketplace</span>
+                </div>
+                <div class="risk-text">Buy at own risk</div>
               </div>
             </td>
-            <td>
+            <td class="product-col">
               <div class="product-details">
                 <div class="product-name">${result.product}</div>
                 <div class="product-specs">
@@ -531,23 +628,43 @@
                 </div>
               </div>
             </td>
-            <td class="price-cell">${result.base}</td>
-            <td class="price-cell">${result.shipping}</td>
-            <td class="price-cell">${result.tax}</td>
-            <td class="price-cell total-price">${result.delivered_after_promo}</td>
-            <td>
+            <td class="price-cell base-col">${result.base}</td>
+            <td class="price-cell shipping-col">${result.shipping}</td>
+            <td class="price-cell tax-col">${result.tax}</td>
+            <td class="price-cell total-price total-col">${result.delivered_after_promo}</td>
+            <td class="status-col">
               ${result.oos ? '<span class="oos">Out of Stock</span>' : ''}
               ${result.cheapest ? '<span class="best">Best Deal</span>' : ''}
             </td>
           </tr>
-        `).join('');
+          `;
+        }).join('');
+        
+        // Calculate and display cost savings
+        if (data.results.length > 1) {
+          const inStockResults = data.results.filter(r => !r.oos);
+          if (inStockResults.length > 1) {
+            const prices = inStockResults.map(r => parseFloat(r.delivered_after_promo.replace('$', '')));
+            const cheapest = Math.min(...prices);
+            const mostExpensive = Math.max(...prices);
+            const savings = mostExpensive - cheapest;
+            
+            if (savings > 0) {
+              document.getElementById('cheapestPrice').textContent = `$${cheapest.toFixed(2)}`;
+              document.getElementById('expensivePrice').textContent = `$${mostExpensive.toFixed(2)}`;
+              document.getElementById('savingsAmount').textContent = `$${savings.toFixed(2)}`;
+              document.getElementById('savingsSummary').style.display = 'block';
+            }
+          }
+        }
         
         resultsSection.style.display = 'block';
         resultsSection.scrollIntoView({ behavior: 'smooth' });
       }
 
-      // Initialize
+      // Initialize and show age modal
       loadOptions();
+      window.addEventListener('load', showAgeModal);
     </script>
   </body>
 </html>
