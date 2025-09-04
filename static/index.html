@@ -4,8 +4,6 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Cigar Price Scout - Find the Best Cigar Deals with Wrapper & Vitola Search</title>
-
-    <link rel="stylesheet" href="/static/css/mobile-responsive.css">
     
     <!-- SEO Meta Tags -->
     <meta name="description" content="Compare cigar prices across 35+ online retailers. Search by brand, wrapper type, vitola, and size to find the best deals on premium cigars with shipping and tax calculations." />
@@ -102,6 +100,7 @@
       .picker select,.picker input{
         padding:12px 14px;border:1px solid var(--rule);border-radius:12px;background:#fff;
         font-family:"Cormorant Garamond", serif;font-size:18px;
+        color:#000000 !important; /* Fix blue text color */
       }
       .cta{border:none;border-radius:12px;padding:12px 14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
       .cta-primary{background:var(--accent);color:#fff}
@@ -246,6 +245,88 @@
         color:var(--accent);
       }
       
+      /* Mobile card styles */
+      .mobile-price-cards {
+        display: none;
+      }
+      
+      .price-card {
+        background: #fff;
+        border: 1px solid var(--rule);
+        border-radius: 12px;
+        margin: 15px 0;
+        padding: 20px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      }
+      
+      .price-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 15px;
+        padding-bottom: 15px;
+        border-bottom: 1px solid var(--rule);
+      }
+      
+      .retailer-name {
+        font-family: "Cinzel", serif;
+        font-weight: 600;
+        font-size: 18px;
+        color: var(--ink);
+      }
+      
+      .card-total-price {
+        font-size: 22px;
+        font-weight: 700;
+        color: var(--accent);
+      }
+      
+      .price-breakdown {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+        margin: 15px 0;
+        font-size: 16px;
+      }
+      
+      .price-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 8px 0;
+        border-bottom: 1px solid #f3f4f6;
+      }
+      
+      .price-label {
+        color: var(--muted);
+        font-weight: 500;
+      }
+      
+      .price-value {
+        font-weight: 600;
+        color: var(--ink);
+      }
+      
+      .card-buy-button {
+        display: block;
+        width: 100%;
+        padding: 15px;
+        background: var(--accent);
+        color: white;
+        text-decoration: none;
+        text-align: center;
+        border-radius: 12px;
+        font-weight: 600;
+        font-size: 18px;
+        margin-top: 20px;
+        transition: all 0.3s;
+      }
+      
+      .card-buy-button:hover {
+        filter: brightness(0.95);
+        color: white;
+        text-decoration: none;
+      }
+      
       /* Responsive design */
       @media(max-width:768px){
         .picker{
@@ -255,8 +336,34 @@
         .heroheader{padding:20px 0 8px}
         .brandname{font-size:24px}
         .tag{font-size:18px}
-        table{font-size:15px}
-        th,td{padding:10px 12px}
+        
+        /* Hide table columns on tablet */
+        .hide-tablet {
+          display: none;
+        }
+      }
+      
+      /* Mobile styles */
+      @media(max-width:480px){
+        table{
+          display: none; /* Hide table on mobile */
+        }
+        
+        .mobile-price-cards {
+          display: block; /* Show cards on mobile */
+        }
+        
+        .price-breakdown {
+          grid-template-columns: 1fr; /* Single column on mobile */
+          gap: 8px;
+        }
+        
+        .price-card {
+          margin: 10px -10px; /* Extend to edges */
+          border-radius: 0;
+          border-left: none;
+          border-right: none;
+        }
       }
       
       /* Footer */
@@ -344,25 +451,30 @@
             </div>
           </div>
           
-        <div class="price-table-container">
-    <table id="resultsTable" class="price-table">
-        <thead>
-            <tr>
-                <th>Retailer</th>
-                <th class="hide-tablet">Dealer Type</th>
-                <th class="hide-tablet">Product Details</th>
-                <th>Base Price</th>
-                <th>Shipping</th>
-                <th>Tax</th>
-                <th>Total</th>
-                <th>Status</th>
-            </tr>
-        </thead>
-        <tbody>
-            <!-- Your existing table rows will be here -->
-        </tbody>
-    </table>
-</div>
+          <div class="price-table-container">
+            <table id="resultsTable" class="price-table">
+              <thead>
+                <tr>
+                  <th>Retailer</th>
+                  <th class="hide-tablet">Dealer Type</th>
+                  <th class="hide-tablet">Product Details</th>
+                  <th>Base Price</th>
+                  <th>Shipping</th>
+                  <th>Tax</th>
+                  <th>Total</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Table rows will be populated by JavaScript -->
+              </tbody>
+            </table>
+            
+            <!-- Mobile cards container -->
+            <div id="mobileCards" class="mobile-price-cards">
+              <!-- Mobile cards will be populated by JavaScript -->
+            </div>
+          </div>
         </section>
       </main>
       
@@ -605,7 +717,7 @@
         if (data.vitola) titleParts.push(data.vitola);
         resultsTitle.textContent = `${titleParts.join(' ')} - Price Comparison`;
         
-        // Build table rows with proper column structure
+        // Build table rows
         const tbody = resultsTable.querySelector('tbody');
         tbody.innerHTML = data.results.map(result => {
           return `
@@ -646,19 +758,62 @@
           `;
         }).join('');
         
+        // Create mobile cards
+        const mobileContainer = document.getElementById('mobileCards');
+        mobileContainer.innerHTML = data.results.map((result, index) => {
+          return `
+          <div class="price-card ${result.cheapest ? 'best-deal' : ''}">
+            <div class="price-card-header">
+              <div class="retailer-name">${result.retailer}</div>
+              <div class="card-total-price">${result.delivered_after_promo}</div>
+            </div>
+            
+            <div class="price-breakdown">
+              <div class="price-item">
+                <span class="price-label">Base Price:</span>
+                <span class="price-value">${result.base}</span>
+              </div>
+              <div class="price-item">
+                <span class="price-label">Shipping:</span>
+                <span class="price-value">${result.shipping}</span>
+              </div>
+              <div class="price-item">
+                <span class="price-label">Tax:</span>
+                <span class="price-value">${result.tax}</span>
+              </div>
+              <div class="price-item">
+                <span class="price-label">Status:</span>
+                <span class="price-value">${result.oos ? 'Out of Stock' : 'In Stock'}</span>
+              </div>
+            </div>
+            
+            ${result.wrapper || result.vitola ? `
+            <div style="margin: 10px 0; font-size: 14px;">
+              ${result.wrapper ? `<span class="wrapper-badge">${result.wrapper}</span>` : ''}
+              ${result.vitola ? `<span class="vitola-badge">${result.vitola}</span>` : ''}
+            </div>
+            ` : ''}
+            
+            <a href="${result.url}" class="card-buy-button" target="_blank" rel="noopener">
+              View Deal at ${result.retailer}
+            </a>
+          </div>
+          `;
+        }).join('');
+        
         // Calculate and display cost savings
         if (data.results.length > 1) {
           const inStockResults = data.results.filter(r => !r.oos);
           if (inStockResults.length > 1) {
-            const prices = inStockResults.map(r => parseFloat(r.delivered_after_promo.replace('$', '')));
+            const prices = inStockResults.map(r => parseFloat(r.delivered_after_promo.replace(', '')));
             const cheapest = Math.min(...prices);
             const mostExpensive = Math.max(...prices);
             const savings = mostExpensive - cheapest;
             
             if (savings > 0) {
-              document.getElementById('cheapestPrice').textContent = `$${cheapest.toFixed(2)}`;
-              document.getElementById('expensivePrice').textContent = `$${mostExpensive.toFixed(2)}`;
-              document.getElementById('savingsAmount').textContent = `$${savings.toFixed(2)}`;
+              document.getElementById('cheapestPrice').textContent = `${cheapest.toFixed(2)}`;
+              document.getElementById('expensivePrice').textContent = `${mostExpensive.toFixed(2)}`;
+              document.getElementById('savingsAmount').textContent = `${savings.toFixed(2)}`;
               document.getElementById('savingsSummary').style.display = 'block';
             }
           }
@@ -667,8 +822,6 @@
         resultsSection.style.display = 'block';
         resultsSection.scrollIntoView({ behavior: 'smooth' });
       }
-
-<script src="/static/js/mobile-integration.js"></script>
 
       // Initialize and show age modal
       loadOptions();
