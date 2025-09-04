@@ -13,9 +13,15 @@ except Exception:
     def zip_to_state(zip_code):
         if not zip_code:
             return 'OR'
-        first_digit = str(zip_code)[0] if zip_code else '9'
-        states = {'0': 'MA', '1': 'NY', '2': 'VA', '3': 'FL', '4': 'OH', '5': 'MN', '6': 'IL', '7': 'TX', '8': 'CO', '9': 'CA'}
-        return states.get(first_digit, 'OR')
+        zip_str = str(zip_code)
+        if zip_str.startswith('19'):
+            return 'PA'
+        elif zip_str.startswith('90'):
+            return 'CA'
+        else:
+            first_digit = zip_str[0]
+            states = {'0': 'MA', '1': 'NY', '2': 'VA', '3': 'FL', '4': 'OH', '5': 'MN', '6': 'IL', '7': 'TX', '8': 'CO', '9': 'CA'}
+            return states.get(first_digit, 'OR')
     
     def estimate_shipping_cents(base_cents, retailer_key, state=None):
         if retailer_key == 'famous':
@@ -25,7 +31,7 @@ except Exception:
         else:
             return 999
     
-    def estimate_tax_cents(base_cents, retailer_key, state):
+    def estimate_tax_cents(taxable_amount_cents, retailer_key, state):
         # Retailer nexus - states where they charge tax
         retailer_nexus = {
             'abcfws': ['FL'],
@@ -83,13 +89,18 @@ except Exception:
         }
         
         # Load tax rates
-        rates = {'CA': 0.0825, 'NY': 0.086, 'TX': 0.082, 'FL': 0.07, 'PA': 0.062, 'SC': 0.073, 'NC': 0.07, 'OR': 0.0, 'VA': 0.057, 'DE': 0.0, 'IL': 0.089, 'NV': 0.0825, 'TN': 0.07, 'DC': 0.06, 'NJ': 0.066, 'AZ': 0.084, 'OH': 0.0725, 'MI': 0.06, 'MA': 0.0625, 'NH': 0.0, 'WA': 0.092}
+        rates = {
+            'PA': 0.08, 'FL': 0.07, 'TX': 0.082, 'AZ': 0.084, 'NC': 0.07, 'NJ': 0.066, 
+            'SC': 0.073, 'NY': 0.086, 'WA': 0.092, 'IL': 0.089, 'NV': 0.0825, 'TN': 0.07,
+            'DC': 0.06, 'VA': 0.057, 'DE': 0.0, 'OH': 0.0725, 'MI': 0.06, 'MA': 0.0625,
+            'CA': 0.0825, 'NH': 0.0
+    }
         
         # Only charge tax if customer is in a state where retailer has nexus
-        if retailer_key in retailer_nexus and state in retailer_nexus[retailer_key]:
-            return int(base_cents * rates.get(state, 0))
-        
-        return 0  # No tax charged
+        if  retailer_key in retailer_nexus and state in retailer_nexus[retailer_key]:
+            return int(taxable_amount_cents * rates.get(state, 0))
+    
+            return 0
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="../static"), name="static")
@@ -346,7 +357,10 @@ def compare(
         # Calculate costs
         base_cents = product.price_cents
         shipping_cents = estimate_shipping_cents(base_cents, product.retailer_key, state)
-        tax_cents = estimate_tax_cents(base_cents, product.retailer_key, state)        
+        tax_cents = estimate_tax_cents(base_cents + shipping_cents, product.retailer_key, state)        
+        # Ensure all values are integers, not None
+        shipping_cents = shipping_cents or 0
+        tax_cents = tax_cents or 0
         delivered_cents = base_cents + shipping_cents + tax_cents
         
         # Track in-stock prices for determining cheapest
