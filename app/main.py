@@ -125,7 +125,7 @@ except Exception:
             'mikescigars': ['FL'],
             'momscigars': ['VA'],
             'neptune': ['FL'],
-            'niceashcigars': ['PA'],
+            'niceashcigars': ['NY','PA'],
             'nickscigarworld': ['SC'],
             'oldhavana': ['OH'],
             'pipesandcigars': ['PA'],
