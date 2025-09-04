@@ -24,7 +24,68 @@ except Exception:
             return states.get(first_digit, 'OR')
     
     def estimate_shipping_cents(base_cents, retailer_key, state=None):
-        if retailer_key == 'famous':
+        base_dollars = base_cents / 100
+    
+        # Free shipping thresholds
+        if retailer_key == 'smallbatchcigar':
+            return 0  # Always free
+        elif retailer_key == 'atlantic' and base_dollars >= 99:
+            return 0
+        elif retailer_key == 'bestcigar' and base_dollars >= 99:
+            return 0
+        elif retailer_key == 'bonitasmokeshop' and base_dollars >= 150:
+            return 0
+        elif retailer_key == 'casademontecristo' and base_dollars >= 200:
+            return 0
+        elif retailer_key == 'cccrafter' and base_dollars >= 100:
+            return 0
+        elif retailer_key == 'cdmcigars' and base_dollars >= 100:
+            return 0
+        elif retailer_key == 'cigar' and base_dollars >= 150:
+            return 0
+        elif retailer_key == 'cigarboxpa' and base_dollars >= 175:
+            return 0
+        elif retailer_key == 'cigarcountry' and base_dollars >= 150:
+            return 0
+        elif retailer_key == 'cigarking' and base_dollars >= 150:
+            return 0
+        elif retailer_key == 'cigarsdirect' and base_dollars >= 99:
+            return 0
+        elif retailer_key == 'corona' and base_dollars >= 125:
+            return 0
+        elif retailer_key == 'cubancrafters' and base_dollars >= 100:
+            return 0
+        elif retailer_key == 'cuencacigars' and base_dollars >= 99:
+            return 0
+        elif retailer_key == 'holts' and base_dollars >= 150:
+            return 0
+        elif retailer_key == 'lmcigars' and base_dollars >= 100:
+            return 0
+        elif retailer_key == 'neptune' and base_dollars >= 99:
+            return 0
+        elif retailer_key == 'pipesandcigars' and base_dollars >= 99:
+            return 0
+        elif retailer_key == 'planetcigars' and base_dollars >= 200:
+            return 0
+        elif retailer_key == 'tampasweethearts' and base_dollars >= 200:
+            return 0
+        elif retailer_key == 'thecigarshop' and base_dollars >= 100:
+            return 0
+        elif retailer_key == 'thecigarstore' and base_dollars >= 75:
+            return 0
+        elif retailer_key == 'thompson' and base_dollars >= 125:
+            return 0
+        elif retailer_key == 'watchcity' and base_dollars >= 99.99:
+            return 0
+        
+        # Flat rate shipping
+        elif retailer_key == 'cigarpairingparlor':
+            return 995  # $9.95
+        elif retailer_key == 'smokeinn':
+            return 995  # $9.95
+        
+        # Standard rates
+        elif retailer_key == 'famous':
             return 999
         elif retailer_key == 'ci':
             return 895
