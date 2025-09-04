@@ -26,70 +26,7 @@ except Exception:
             return 999
     
     def estimate_tax_cents(base_cents, retailer_key, state):
-        # Retailer nexus - states where they charge tax
-        retailer_nexus = {
-            'abcfws': ['FL'],
-            'absolutecigars': ['VA'],
-            'atlantic': ['PA'],
-            'bestcigar': ['PA'],
-            'bighumidor': ['DE'],
-            'bonitasmokeshop': ['FL'],
-            'casademontecristo': ['FL','IL','NV','TN','TX','DC','NJ','NC'],
-            'cccrafter': ['FL'],
-            'cdmcigars': ['CA'],
-            'ci': ['PA','TX','FL','AZ'],
-            'cigar': ['PA'],
-            'cigarboxpa': ['PA'],
-            'cigarcellarofmiami': ['FL'],
-            'cigarhustler': ['FL'],
-            'cigarking': ['AZ'],
-            'cigarplace': ['FL'],
-            'cigarsdirect': ['FL'],
-            'corona': ['FL'],
-            'cubancrafters': ['FL'],
-            'cuencacigars': ['FL'],
-            'famous': ['PA'],
-            'hilands': ['AZ'],
-            'holts': ['PA'],
-            'jr': ['NC','NJ'],
-            'lmcigars': ['FL'],
-            'mikescigars': ['FL'],
-            'momscigars': ['VA'],
-            'neptune': ['FL'],
-            'niceashcigars': ['NY','PA'],
-            'nickscigarworld': ['SC'],
-            'oldhavana': ['OH'],
-            'pipesandcigars': ['PA'],
-            'planetcigars': ['FL'],
-            'santamonicacigars': ['CA'],
-            'secretocigarbar': ['MI'],
-            'smallbatchcigar': ['CA'],
-            'smokeinn': ['FL'],
-            'tampasweethearts': ['FL'],
-            'thecigarshop': ['SC','NC'],
-            'thecigarstore': ['CA'],
-            'thompson': ['PA'],
-            'tobaccolocker': ['FL'],
-            'twoguys': ['NH'],
-            'watchcity': ['MA'],
-            'windycitycigars': ['IL'],
-            'buitragocigars': ['FL'],
-            'cheaplittlecigars': ['SC'],
-            'cigaroasis': ['NY'],
-            'cigarpage': ['PA'],
-            'escobarcigars': ['FL'],
-            'gothamcigars': ['FL'],
-            'cigarpairingparlor': ['WA'],
-        }
-        
-        # Load tax rates
-        rates = {'CA': 0.0825, 'NY': 0.086, 'TX': 0.082, 'FL': 0.07, 'PA': 0.062, 'SC': 0.073, 'NC': 0.07, 'OR': 0.0, 'VA': 0.057, 'DE': 0.0, 'IL': 0.089, 'NV': 0.0825, 'TN': 0.07, 'DC': 0.06, 'NJ': 0.066, 'AZ': 0.084, 'OH': 0.0725, 'MI': 0.06, 'MA': 0.0625, 'NH': 0.0, 'WA': 0.092}
-        
-        # Only charge tax if customer is in a state where retailer has nexus
-        if retailer_key in retailer_nexus and state in retailer_nexus[retailer_key]:
-            return int(base_cents * rates.get(state, 0))
-        
-        return 0  # No tax charged
+        return 0  # No tax for now        
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="../static"), name="static")
@@ -346,7 +283,7 @@ def compare(
         # Calculate costs
         base_cents = product.price_cents
         shipping_cents = estimate_shipping_cents(base_cents, product.retailer_key, state)
-        tax_cents = estimate_tax_cents(base_cents, product.retailer_key, state)        
+        tax_cents = estimate_tax_cents(base_cents, state)        
         delivered_cents = base_cents + shipping_cents + tax_cents
         
         # Track in-stock prices for determining cheapest
