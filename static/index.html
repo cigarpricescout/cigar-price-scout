@@ -323,7 +323,8 @@
       
       .card-button {
         display: block;
-        width: 100%;
+        width: calc(100% - 10px);
+        margin: 20px 5px 0 5px;
         padding: 15px;
         background: var(--accent);
         color: white;
@@ -471,10 +472,10 @@
                   <th>Retailer</th>
                   <th class="hide-tablet">Dealer Type</th>
                   <th class="hide-tablet">Product Details</th>
-                  <th>Base Price</th>
-                  <th>Shipping</th>
-                  <th>Tax</th>
-                  <th>Total</th>
+                  <th>Advertised Price</th>
+                  <th>Est. Shipping</th>
+                  <th>Est. Tax</th>
+                  <th style="font-weight: 700;">Est. Total</th>
                   <th>Status</th>
                 </tr>
               </thead>
@@ -793,10 +794,6 @@
             '<td class="price-cell">' + result.shipping + '</td>' +
             '<td class="price-cell">' + result.tax + '</td>' +
             '<td class="price-cell total-price">' + result.delivered_after_promo + '</td>' +
-            '<td>' +
-            (result.oos ? '<span class="oos">Out of Stock</span>' : '') +
-            (result.cheapest ? '<span class="best">Best Deal</span>' : '') +
-            '</td>' +
             '</tr>';
         }).join('');
         
@@ -804,12 +801,12 @@
         const mobileContainer = document.getElementById('mobileCards');
         mobileContainer.innerHTML = data.results.map(function(result) {
           const dealerBadge = result.authorized 
-            ? '<span class="auth-badge authorized">Authorized</span>' 
-            : '<span class="auth-badge marketplace">Marketplace</span>';
-          
+          ? '<span class="auth-badge authorized">Authorized</span>' 
+          : '<span class="auth-badge marketplace">Marketplace</span>';
+  
           return '<div class="price-card ' + (result.cheapest ? 'best-deal' : '') + '">' +
             '<div class="card-header">' +
-            '<div class="card-retailer">' + result.retailer + '</div>' +
+            '<div class="card-retailer" style="color: var(--ink); text-decoration: none;">' + result.retailer + '</div>' +
             '</div>' +
             '<div style="margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">' + 
             dealerBadge +
@@ -817,24 +814,20 @@
             '</div>' +
             '<div class="card-breakdown">' +
             '<div class="card-item">' +
-            '<span class="card-label">Base Price:</span>' +
+            '<span class="card-label">Advertised Price:</span>' +
             '<span class="card-value">' + result.base + '</span>' +
             '</div>' +
             '<div class="card-item">' +
-            '<span class="card-label">Shipping:</span>' +
+            '<span class="card-label">Est. Shipping:</span>' +
             '<span class="card-value">' + result.shipping + '</span>' +
             '</div>' +
             '<div class="card-item">' +
-            '<span class="card-label">Tax:</span>' +
+            '<span class="card-label">Est. Tax:</span>' +
             '<span class="card-value">' + result.tax + '</span>' +
             '</div>' +
             '<div class="card-item" style="border-top: 2px solid var(--accent); padding-top: 12px; margin-top: 8px;">' +
-            '<span class="card-label" style="font-weight: 600;">Total:</span>' +
+            '<span class="card-label" style="font-weight: 600;">Est. Total:</span>' +
             '<span class="card-value" style="font-size: 20px; font-weight: 700; color: var(--accent);">' + result.delivered_after_promo + '</span>' +
-            '</div>' +
-            '<div class="card-item">' +
-            '<span class="card-label">Status:</span>' +
-            '<span class="card-value">' + (result.oos ? 'Out of Stock' : 'In Stock') + '</span>' +
             '</div>' +
             '</div>' +
             (result.wrapper || result.vitola ? 
@@ -842,8 +835,8 @@
               (result.wrapper ? '<span class="wrapper-badge">' + result.wrapper + '</span>' : '') +
               (result.vitola ? '<span class="vitola-badge">' + result.vitola + '</span>' : '') +
               '</div>' : '') +
-            '<a href="' + result.url + '" class="card-button" target="_blank" rel="noopener">' +
-            'Scout Deal' +
+            '<a href="' + result.url + '" class="card-button" target="_blank" rel="noopener" style="display: flex; justify-content: center; align-items: center; width: calc(100% - 10px); margin: 20px 5px 0 5px;">' +
+            '<img src="/static/logo.png" alt="Scout" style="width: 24px; height: 24px;">' +
             '</a>' +
             '</div>';
         }).join('');
