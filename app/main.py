@@ -25,11 +25,26 @@ except Exception:
         else:
             return 999
     
-    def estimate_tax_cents(base_cents, state):
-        if not state:
-            return 0
-        rates = {'CA': 0.08, 'NY': 0.08, 'TX': 0.06, 'FL': 0.06, 'OR': 0.0}
-        return int(base_cents * rates.get(state, 0.05))
+    def estimate_tax_cents(base_cents, retailer_key, state):
+    # Retailer nexus - states where they charge tax
+    retailer_nexus = {
+        'famous': ['PA'],     # Famous Smoke Shop in Pennsylvania
+        'ci': ['PA'],         # Cigars International in Pennsylvania  
+        'thompson': ['FL'],   # Thompson Cigar in Florida
+        'cigar': ['PA'],      # Cigar.com (same as CI)
+        'nickscigarworld': ['SC'], # Nick's in South Carolina
+        'jr': ['NC'],         # JR Cigar in North Carolina
+        'neptune': ['FL'],    # Neptune in Florida
+    }
+    
+    # Load tax rates
+    rates = {'CA': 0.0825, 'NY': 0.086, 'TX': 0.082, 'FL': 0.07, 'PA': 0.062, 'SC': 0.073, 'NC': 0.07, 'OR': 0.0}
+    
+    # Only charge tax if customer is in a state where retailer has nexus
+    if retailer_key in retailer_nexus and state in retailer_nexus[retailer_key]:
+        return int(base_cents * rates.get(state, 0))
+    
+    return 0  # No tax charged
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="../static"), name="static")
@@ -292,7 +307,7 @@ def compare(
         # Calculate costs
         base_cents = product.price_cents
         shipping_cents = estimate_shipping_cents(base_cents, product.retailer_key, state)
-        tax_cents = estimate_tax_cents(base_cents, state)
+        tax_cents = estimate_tax_cents(base_cents, product.retailer_key, state)        
         delivered_cents = base_cents + shipping_cents + tax_cents
         
         # Track in-stock prices for determining cheapest
