@@ -4,6 +4,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Cigar Price Scout - Find the Best Cigar Deals with Wrapper & Vitola Search</title>
+
+    <link rel="stylesheet" href="/static/css/mobile-responsive.css">
     
     <!-- SEO Meta Tags -->
     <meta name="description" content="Compare cigar prices across 35+ online retailers. Search by brand, wrapper type, vitola, and size to find the best deals on premium cigars with shipping and tax calculations." />
@@ -342,21 +344,25 @@
             </div>
           </div>
           
-          <table id="resultsTable">
-            <thead>
-              <tr>
-                <th class="retailer-col">Retailer</th>
-                <th class="dealer-col">Dealer Type</th>
-                <th class="product-col">Product Details</th>
-                <th class="base-col">Base Price</th>
-                <th class="shipping-col">Shipping</th>
-                <th class="tax-col">Tax</th>
-                <th class="total-col">Total</th>
-                <th class="status-col">Status</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
+        <div class="price-table-container">
+    <table id="resultsTable" class="price-table">
+        <thead>
+            <tr>
+                <th>Retailer</th>
+                <th class="hide-tablet">Dealer Type</th>
+                <th class="hide-tablet">Product Details</th>
+                <th>Base Price</th>
+                <th>Shipping</th>
+                <th>Tax</th>
+                <th>Total</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- Your existing table rows will be here -->
+        </tbody>
+    </table>
+</div>
         </section>
       </main>
       
@@ -661,6 +667,8 @@
         resultsSection.style.display = 'block';
         resultsSection.scrollIntoView({ behavior: 'smooth' });
       }
+
+<script src="/static/js/mobile-integration.js"></script>
 
       // Initialize and show age modal
       loadOptions();
