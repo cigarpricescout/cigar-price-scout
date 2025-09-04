@@ -261,6 +261,11 @@
         color:var(--accent);
       }
       
+      .best-total {
+        color: #059669 !important;
+        font-weight: 700 !important;
+      }
+
       /* Mobile card styles */
       .mobile-cards {
         display: none;
@@ -793,7 +798,7 @@
             '<td class="price-cell">' + result.base + '</td>' +
             '<td class="price-cell">' + result.shipping + '</td>' +
             '<td class="price-cell">' + result.tax + '</td>' +
-            '<td class="price-cell total-price">' + result.delivered_after_promo + '</td>' +
+            '<td class="price-cell total-price ' + (result.cheapest ? 'best-total' : '') + '">' + result.delivered_after_promo + '</td>' +
             '</tr>';
         }).join('');
         
@@ -827,7 +832,7 @@
             '</div>' +
             '<div class="card-item" style="border-top: 2px solid var(--accent); padding-top: 12px; margin-top: 8px;">' +
             '<span class="card-label" style="font-weight: 600;">Est. Total:</span>' +
-            '<span class="card-value" style="font-size: 20px; font-weight: 700; color: var(--accent);">' + result.delivered_after_promo + '</span>' +
+            '<span class="card-value" style="font-size: 20px; font-weight: 700; color: ' + (result.cheapest ? '#059669' : 'var(--accent)') + ';">' + result.delivered_after_promo + '</span>' +
             '</div>' +
             '</div>' +
             (result.wrapper || result.vitola ? 
@@ -835,7 +840,7 @@
               (result.wrapper ? '<span class="wrapper-badge">' + result.wrapper + '</span>' : '') +
               (result.vitola ? '<span class="vitola-badge">' + result.vitola + '</span>' : '') +
               '</div>' : '') +
-            '<a href="' + result.url + '" class="card-button" target="_blank" rel="noopener" style="display: flex; justify-content: center; align-items: center; width: calc(100% - 10px); margin: 20px 5px 0 5px;">' +
+            '<a href="' + result.url + '" class="card-button" target="_blank" rel="noopener" style="display: flex; justify-content: center; align-items: center; width: calc(100% - 40px); margin: 20px 20px 0 20px; box-sizing: border-box;">' +
             '<img src="/static/logo.png" alt="Scout" style="width: 24px; height: 24px;">' +
             '</a>' +
             '</div>';
