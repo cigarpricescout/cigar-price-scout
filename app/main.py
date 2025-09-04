@@ -82,7 +82,7 @@ except Exception:
             'cigarpairingparlor': ['WA'],
         }
         
-        # Load tax rates from your tax_rates.json
+        # Load tax rates
         rates = {'CA': 0.0825, 'NY': 0.086, 'TX': 0.082, 'FL': 0.07, 'PA': 0.062, 'SC': 0.073, 'NC': 0.07, 'OR': 0.0, 'VA': 0.057, 'DE': 0.0, 'IL': 0.089, 'NV': 0.0825, 'TN': 0.07, 'DC': 0.06, 'NJ': 0.066, 'AZ': 0.084, 'OH': 0.0725, 'MI': 0.06, 'MA': 0.0625, 'NH': 0.0, 'WA': 0.092}
         
         # Only charge tax if customer is in a state where retailer has nexus
@@ -93,11 +93,6 @@ except Exception:
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="../static"), name="static")
-
-# Your retailer list (unchanged)
-# Updated RETAILERS list for app/main.py with correct relative paths
-# Updated RETAILERS list for app/main.py with authorized dealer status
-# You'll need to replace this in your app/main.py file
 
 RETAILERS = [
     {"key": "abcfws", "name": "ABC Fine Wine & Spirits", "csv": "../static/data/abcfws.csv", "authorized": False},
@@ -126,7 +121,6 @@ RETAILERS = [
     {"key": "corona", "name": "Corona Cigar", "csv": "../static/data/corona.csv", "authorized": False},
     {"key": "cubancrafters", "name": "Cuban Crafters", "csv": "../static/data/cubancrafters.csv", "authorized": False},
     {"key": "cuencacigars", "name": "Cuenca Cigars", "csv": "../static/data/cuencacigars.csv", "authorized": False},
-    {"key": "electroniccigar", "name": "Electronic Cigar", "csv": "../static/data/electroniccigar.csv", "authorized": True},
     {"key": "escobarcigars", "name": "Escobar Cigars", "csv": "../static/data/escobarcigars.csv", "authorized": True},
     {"key": "famous", "name": "Famous Smoke Shop", "csv": "../static/data/famous.csv", "authorized": True},
     {"key": "gothamcigars", "name": "Gotham Cigars", "csv": "../static/data/gothamcigars.csv", "authorized": True},
@@ -385,7 +379,7 @@ def compare(
             "url": product.url,
             "oos": not product.in_stock,
             "cheapest": False,  # Will be set below
-            "authorized": is_authorized  # Add this line
+            "authorized": is_authorized
         }
         results.append(result)
     
@@ -428,6 +422,7 @@ async def terms_of_service():
 @app.get("/contact.html")
 async def contact():
     return FileResponse("../static/contact.html")
+
 if __name__ == "__main__":
     import uvicorn
     import os
