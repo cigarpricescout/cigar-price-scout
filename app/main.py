@@ -63,6 +63,8 @@ except Exception:
             return 0
         elif retailer_key == 'neptune' and base_dollars >= 99:
             return 0
+        elif retailer_key == 'niceashcigars':
+            return 0
         elif retailer_key == 'pipesandcigars' and base_dollars >= 99:
             return 0
         elif retailer_key == 'planetcigars' and base_dollars >= 200:
@@ -123,7 +125,7 @@ except Exception:
             'mikescigars': ['FL'],
             'momscigars': ['VA'],
             'neptune': ['FL'],
-            'niceashcigars': ['NY','PA'],
+            'niceashcigars': ['PA'],
             'nickscigarworld': ['SC'],
             'oldhavana': ['OH'],
             'pipesandcigars': ['PA'],
