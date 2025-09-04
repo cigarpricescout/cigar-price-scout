@@ -810,10 +810,10 @@
           return '<div class="price-card ' + (result.cheapest ? 'best-deal' : '') + '">' +
             '<div class="card-header">' +
             '<div class="card-retailer">' + result.retailer + '</div>' +
-            '<div class="card-total">' + result.delivered_after_promo + '</div>' +
             '</div>' +
-            '<div style="margin-bottom: 15px;">' + dealerBadge +
-            (result.authorized ? '' : '<div class="risk-text" style="margin-top: 5px;">Buy at own risk</div>') +
+            '<div style="margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">' + 
+            dealerBadge +
+            (result.authorized ? '' : '<span style="font-size: 13px; color: #dc2626; font-weight: 500;">Buy at own risk</span>') +
             '</div>' +
             '<div class="card-breakdown">' +
             '<div class="card-item">' +
@@ -828,6 +828,10 @@
             '<span class="card-label">Tax:</span>' +
             '<span class="card-value">' + result.tax + '</span>' +
             '</div>' +
+            '<div class="card-item" style="border-top: 2px solid var(--accent); padding-top: 12px; margin-top: 8px;">' +
+            '<span class="card-label" style="font-weight: 600;">Total:</span>' +
+            '<span class="card-value" style="font-size: 20px; font-weight: 700; color: var(--accent);">' + result.delivered_after_promo + '</span>' +
+            '</div>' +
             '<div class="card-item">' +
             '<span class="card-label">Status:</span>' +
             '<span class="card-value">' + (result.oos ? 'Out of Stock' : 'In Stock') + '</span>' +
@@ -839,7 +843,7 @@
               (result.vitola ? '<span class="vitola-badge">' + result.vitola + '</span>' : '') +
               '</div>' : '') +
             '<a href="' + result.url + '" class="card-button" target="_blank" rel="noopener">' +
-            'View Deal at ' + result.retailer +
+            'Scout Deal' +
             '</a>' +
             '</div>';
         }).join('');
