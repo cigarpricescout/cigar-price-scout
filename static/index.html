@@ -125,7 +125,7 @@
       .chips{display:flex;gap:8px;justify-content:center;margin-top:12px;flex-wrap:wrap}
       .chip{font-size:14px;padding:6px 10px;border-radius:999px;border:1px solid var(--rule);background:#fff;color:#374151}
       
-      h2{font-family:"Cinzel", serif;font-weight:700;letter-spacing:.3px;margin:18px 0 8px;font-size:24px}
+      h2{font-family:"Cinzel", serif;font-weight:700;letter-spacing:.3px;margin:18px 0 8px;font-size:24px;text-align:center}
       
       /* Desktop table styles */
       table{
@@ -136,7 +136,7 @@
       }
       
       th,td{
-        padding:20px 16px;border-bottom:1px solid var(--rule);text-align:left;
+        padding:20px 16px;border-bottom:1px solid var(--rule);text-align:center;
         font-size:18px;line-height:1.6;
       }
       
@@ -415,10 +415,10 @@
       <header class="heroheader">
         <img src="/static/logo.png" alt="Cigar Price Scout Logo" class="scout-hat" />
         <h1 class="brandname">Cigar Price Scout</h1>
-        <p class="tag">Search the cigar box, we'll scout the stock</p>
-        <div class="last-updated">Data last updated: September 2, 2025</div>
+        <p class="tag">Search the cigar box, we'll scout the lowest-cost stock</p>
+        <div class="last-updated">Data last updated: September 4, 2025</div>
         <div style="font-size:13px;color:var(--muted);margin-top:4px;font-style:italic;">
-          Stock status verification coming in next update
+          Upcoming features: Stock status verification and promotion visibility
         </div>
       </header>
       
@@ -446,7 +446,7 @@
             <svg viewBox="0 0 24 24" fill="currentColor">
               <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
             </svg>
-            Find Deals
+            Scout
           </button>
         </section>
         
@@ -455,6 +455,10 @@
         <section id="results" style="display:none">
           <h2 id="resultsTitle">Price Comparison Results</h2>
           
+          <div id="disclosure" style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 10px; margin: 10px auto; color: #856404; font-size: 14px; font-weight: bold; text-align: center; max-width: 800px;">
+            <strong>Disclosure:</strong> We earn a commission when you purchase through our affiliate links. This helps support our price comparison service at no extra cost to you.
+          </div>
+
           <!-- Cost Savings Summary -->
           <div id="savingsSummary" style="background:#f0f9ff;border:1px solid #0284c7;border-radius:8px;padding:16px;margin-bottom:20px;display:none;">
             <div style="display:flex;justify-content:space-between;align-items:center;">
@@ -840,7 +844,7 @@
               (result.vitola ? '<span class="vitola-badge">' + result.vitola + '</span>' : '') +
               '</div>' : '') +
             '<a href="' + result.url + '" class="card-button" target="_blank" rel="noopener" style="display: flex; justify-content: center; align-items: center; width: calc(100% - 40px); margin: 20px 20px 0 20px; box-sizing: border-box;">' +
-            '<img src="/static/logo.png" alt="Scout" style="width: 24px; height: 24px;">' +
+            '<img src="/static/logo.png" alt="Scout" style="width: 32px; height: 32px;">' +
             '</a>' +
             '</div>';
         }).join('');
