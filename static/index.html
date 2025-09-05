@@ -864,15 +864,15 @@
             '<span class="card-label">Est. Tax:</span>' +
             '<span class="card-value">' + result.tax + '</span>' +
             '</div>' +
-            (result.price_context ? 
-            '<div class="card-item">' +
-            '<span class="card-label">Price Context:</span>' +
-            '<span class="card-value price-context ' + result.price_context.toLowerCase() + '">' + result.price_context + '</span>' +
-            '</div>' : '') +
             '<div class="card-item" style="border-top: 2px solid var(--accent); padding-top: 12px; margin-top: 8px;">' +
             '<span class="card-label" style="font-weight: 600;">Est. Total:</span>' +
             '<span class="card-value" style="font-size: 20px; font-weight: 700; color: ' + (result.cheapest ? '#059669' : 'var(--accent)') + ';">' + result.delivered_after_promo + '</span>' +
             '</div>' +
+             (result.price_context ? 
+            '<div class="card-item">' +
+            '<span class="card-label">Price Context:</span>' +
+            '<span class="card-value price-context ' + result.price_context.toLowerCase() + '">' + result.price_context + '</span>' +
+            '</div>' : '') +
             '</div>' +
             (result.wrapper || result.vitola ? 
               '<div style="margin: 15px 0;">' +
@@ -880,7 +880,7 @@
               (result.vitola ? '<span class="vitola-badge">' + result.vitola + '</span>' : '') +
               '</div>' : '') +
             '<a href="' + result.url + '" class="card-button" target="_blank" rel="noopener" style="display: flex; justify-content: center; align-items: center; width: calc(100% - 40px); margin: 20px 20px 0 20px; box-sizing: border-box;">' +
-            '<img src="/static/logo.png" alt="Scout" style="width: 32px; height: 32px;">' +
+            '<img src="/static/logo.png" alt="Scout" style="width: 40px; height: 40px;">' +
             '</a>' +
             '</div>';
         }).join('');
