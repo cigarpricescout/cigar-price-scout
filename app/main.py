@@ -157,13 +157,13 @@ except Exception:
             'SC': 0.073, 'NY': 0.086, 'WA': 0.092, 'IL': 0.089, 'NV': 0.0825, 'TN': 0.07,
             'DC': 0.06, 'VA': 0.057, 'DE': 0.0, 'OH': 0.0725, 'MI': 0.06, 'MA': 0.0625,
             'CA': 0.0825, 'NH': 0.0
-    }
+        }
         
         # Only charge tax if customer is in a state where retailer has nexus
-        if  retailer_key in retailer_nexus and state in retailer_nexus[retailer_key]:
+        if retailer_key in retailer_nexus and state in retailer_nexus[retailer_key]:
             return int(taxable_amount_cents * rates.get(state, 0))
-    
-            return 0
+        
+        return 0
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="../static"), name="static")
@@ -365,6 +365,7 @@ def compare(
     vitola: Optional[str] = Query(None),
     size: Optional[str] = Query(None),
     zip: str = Query("", description="ZIP code for shipping/tax estimates"),
+    authorized_only: bool = Query(False, description="Show only authorized dealers"),
 ):
     """Compare prices for a specific cigar across all retailers with wrapper/vitola support"""
     
@@ -400,7 +401,28 @@ def compare(
             continue
         
         matching_products.append(p)
-    
+
+    # Filter by authorized dealers if requested
+    if authorized_only:
+        authorized_retailer_keys = {r["key"] for r in RETAILERS if r["authorized"]}
+        matching_products = [p for p in matching_products if p.retailer_key in authorized_retailer_keys]
+
+    # Calculate price context (median comparison) - AFTER filtering
+    if len(matching_products) >= 3:  # Need at least 3 prices for meaningful comparison
+        delivered_prices = []
+        for product in matching_products:
+            base_cents = product.price_cents
+            shipping_cents = estimate_shipping_cents(base_cents, product.retailer_key, state) or 0
+            tax_cents = estimate_tax_cents(base_cents + shipping_cents, product.retailer_key, state) or 0
+            delivered_prices.append(base_cents + shipping_cents + tax_cents)
+        
+        # Calculate median
+        delivered_prices.sort()
+        n = len(delivered_prices)
+        median_price = delivered_prices[n//2] if n % 2 == 1 else (delivered_prices[n//2-1] + delivered_prices[n//2]) / 2
+    else:
+        median_price = None
+
     if not matching_products:
         return {
             "brand": brand,
@@ -425,6 +447,17 @@ def compare(
         shipping_cents = shipping_cents or 0
         tax_cents = tax_cents or 0
         delivered_cents = base_cents + shipping_cents + tax_cents
+
+        # Calculate price context vs median (10% thresholds)
+        price_context = None
+        if median_price:
+            diff_percent = ((delivered_cents - median_price) / median_price) * 100
+            if diff_percent <= -10:
+                price_context = "Value"
+            elif diff_percent >= 10:
+                price_context = "Premium"
+            else:
+                price_context = "Market"
         
         # Track in-stock prices for determining cheapest
         if product.in_stock:
@@ -456,7 +489,8 @@ def compare(
             "url": product.url,
             "oos": not product.in_stock,
             "cheapest": False,  # Will be set below
-            "authorized": is_authorized
+            "authorized": is_authorized,
+            "price_context": price_context,
         }
         results.append(result)
     
