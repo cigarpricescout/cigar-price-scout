@@ -56,7 +56,7 @@
         --rule:#e5e7eb;
         --accent:#7c5c2e;
       }
-      
+
       body{
         margin:0;
         color:var(--ink);
@@ -111,7 +111,24 @@
         font-size:18px;
         color:#000000;
       }
-      
+
+      .price-context {
+        font-weight: 700;
+        font-size: 18px;
+      }
+
+      .price-context.value {
+        color: #059669;
+      }
+
+      .price-context.market {
+        color: #6b7280;
+      }
+
+      .price-context.premium {
+        color: #2563eb;
+      }
+
       .cta{
         border:none;border-radius:12px;padding:12px 14px;font-weight:700;cursor:pointer;
         display:flex;align-items:center;justify-content:center;gap:8px
@@ -449,6 +466,14 @@
             Scout
           </button>
         </section>
+
+        <!-- Authorized Dealer Filter -->
+        <div style="display: flex; justify-content: center; margin: 10px 0;">
+          <div style="display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: #fff; border: 1px solid var(--rule); border-radius: 8px; font-size: 16px;">
+            <input type="checkbox" id="authorizedOnly" style="margin: 0; cursor: pointer;">
+            <label for="authorizedOnly" style="color: var(--ink); cursor: pointer; margin: 0; font-weight: 500;">Show Authorized Dealers Only</label>
+          </div>
+        </div>
         
         <div class="chips" id="filterChips"></div>
         
@@ -485,6 +510,7 @@
                   <th>Est. Shipping</th>
                   <th>Est. Tax</th>
                   <th style="font-weight: 700;">Est. Total</th>
+                  <th>Price Context <span style="color: #6b7280; font-size: 14px; cursor: help;" title="Based on 10% median price threshold">❓</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -743,6 +769,9 @@
         
         if (currentSelection.wrapper) params.append('wrapper', currentSelection.wrapper);
         if (currentSelection.vitola) params.append('vitola', currentSelection.vitola);
+        if (document.getElementById('authorizedOnly').checked) {
+          params.append('authorized_only', 'true');
+        }
         
         try {
           searchBtn.disabled = true;
@@ -754,6 +783,7 @@
           }
           
           const data = await response.json();
+          console.log('API Response', data);
           displayResults(data);
         } catch (error) {
           console.error('Search error:', error);
@@ -767,7 +797,7 @@
       function displayResults(data) {
         if (!data.results || data.results.length === 0) {
           resultsTitle.textContent = 'No results found';
-          resultsTable.querySelector('tbody').innerHTML = '<tr><td colspan="7">No matching cigars found.</td></tr>';
+          resultsTable.querySelector('tbody').innerHTML = '<tr><td colspan="8">No matching cigars found.</td></tr>';
           document.getElementById('mobileCards').innerHTML = '<div class="price-card">No matching cigars found.</div>';
           resultsSection.style.display = 'block';
           return;
@@ -802,6 +832,7 @@
             '<td class="price-cell">' + result.shipping + '</td>' +
             '<td class="price-cell">' + result.tax + '</td>' +
             '<td class="price-cell total-price ' + (result.cheapest ? 'best-total' : '') + '">' + result.delivered_after_promo + '</td>' +
+            '<td class="price-context ' + (result.price_context ? result.price_context.toLowerCase() : '') + '">' + (result.price_context || '') + '</td>' +
             '</tr>';
         }).join('');
         
@@ -833,6 +864,11 @@
             '<span class="card-label">Est. Tax:</span>' +
             '<span class="card-value">' + result.tax + '</span>' +
             '</div>' +
+            (result.price_context ? 
+            '<div class="card-item">' +
+            '<span class="card-label">Price Context:</span>' +
+            '<span class="card-value price-context ' + result.price_context.toLowerCase() + '">' + result.price_context + '</span>' +
+            '</div>' : '') +
             '<div class="card-item" style="border-top: 2px solid var(--accent); padding-top: 12px; margin-top: 8px;">' +
             '<span class="card-label" style="font-weight: 600;">Est. Total:</span>' +
             '<span class="card-value" style="font-size: 20px; font-weight: 700; color: ' + (result.cheapest ? '#059669' : 'var(--accent)') + ';">' + result.delivered_after_promo + '</span>' +
