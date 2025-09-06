@@ -441,12 +441,12 @@
       
       <main>
         <section class="picker">
-          <select id="brandSelect" aria-label="Select cigar brand" required>
-            <option value="">Select Brand... *</option>
+          <select id="brandSelect" aria-label="Select cigar brand">
+            <option value="">Select Brand...</option>
           </select>
           
-          <select id="lineSelect" disabled aria-label="Select cigar line" required>
-            <option value="">Select Line... *</option>
+          <select id="lineSelect" disabled aria-label="Select cigar line">
+            <option value="">Select Line...</option>
           </select>
           
           <select id="wrapperSelect" disabled aria-label="Select wrapper type">
@@ -457,13 +457,13 @@
             <option value="">Any Vitola...</option>
           </select>
           
-          <input type="text" id="zipInput" placeholder="ZIP code *" aria-label="ZIP code for shipping calculation" required />
+          <input type="text" id="zipInput" placeholder="ZIP code" aria-label="ZIP code for shipping calculation" />
           
           <button class="cta cta-primary" id="searchBtn" disabled>
             <svg viewBox="0 0 24 24" fill="currentColor">
               <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
             </svg>
-            Fill Required Fields
+            Scout
           </button>
         </section>
 
@@ -473,11 +473,6 @@
             <input type="checkbox" id="authorizedOnly" style="margin: 0; cursor: pointer;">
             <label for="authorizedOnly" style="color: var(--ink); cursor: pointer; margin: 0; font-weight: 500;">Show Authorized Dealers Only</label>
           </div>
-        </div>
-
-        <!-- Help text explaining requirements -->
-        <div style="text-align: center; margin: 10px 0; font-size: 14px; color: var(--muted);">
-          * Required fields: Brand, Line, ZIP code, and at least one of Wrapper or Vitola
         </div>
         
         <div class="chips" id="filterChips"></div>
@@ -515,7 +510,7 @@
                   <th>Est. Shipping</th>
                   <th>Est. Tax</th>
                   <th style="font-weight: 700;">Est. Total</th>
-                  <th>Price Context <span style="color: #6b7280; font-size: 14px; cursor: help;" title="Based on 10% median price threshold">ⓘ</span></th>
+                  <th>Price Context <span style="color: #6b7280; font-size: 14px; cursor: help;" title="Based on 10% median price threshold">❓</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -610,7 +605,7 @@
       }
 
       function populateBrandSelect() {
-        brandSelect.innerHTML = '<option value="">Select Brand... *</option>';
+        brandSelect.innerHTML = '<option value="">Select Brand...</option>';
         if (optionsData) {
           optionsData.forEach(function(brand) {
             const option = document.createElement('option');
@@ -622,7 +617,7 @@
       }
 
       function populateLineSelect() {
-        lineSelect.innerHTML = '<option value="">Select Line... *</option>';
+        lineSelect.innerHTML = '<option value="">Select Line...</option>';
         lineSelect.disabled = !currentSelection.brand;
         
         if (currentSelection.brand) {
@@ -717,24 +712,8 @@
       }
 
       function updateSearchButton() {
-        const hasRequiredFields = currentSelection.brand && 
-                                  currentSelection.line && 
-                                  zipInput.value.trim() !== '';
-        
-        // Optional: Also require at least wrapper OR vitola to be selected
-        const hasSpecificSelection = currentSelection.wrapper || currentSelection.vitola;
-        
-        const canSearch = hasRequiredFields && hasSpecificSelection;
+        const canSearch = currentSelection.brand && currentSelection.line;
         searchBtn.disabled = !canSearch;
-        
-        // Update button text to reflect requirements
-        if (!hasRequiredFields) {
-          searchBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg> Fill Required Fields';
-        } else if (!hasSpecificSelection) {
-          searchBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg> Select Wrapper or Vitola';
-        } else {
-          searchBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg> Scout';
-        }
       }
 
       // Event listeners
@@ -772,17 +751,11 @@
       wrapperSelect.addEventListener('change', function(e) {
         currentSelection.wrapper = e.target.value;
         updateFilterChips();
-        updateSearchButton();
       });
 
       vitolaSelect.addEventListener('change', function(e) {
         currentSelection.vitola = e.target.value;
         updateFilterChips();
-        updateSearchButton();
-      });
-
-      zipInput.addEventListener('input', function() {
-        updateSearchButton();
       });
 
       searchBtn.addEventListener('click', async function() {
@@ -817,7 +790,7 @@
           alert('Search failed. Please try again.');
         } finally {
           searchBtn.disabled = false;
-          searchBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg> Scout';
+          searchBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg> Find Deals';
         }
       });
 
@@ -924,9 +897,9 @@
             const savings = mostExpensive - cheapest;
             
             if (savings > 0) {
-              document.getElementById('cheapestPrice').textContent = ' + cheapest.toFixed(2);
-              document.getElementById('expensivePrice').textContent = ' + mostExpensive.toFixed(2);
-              document.getElementById('savingsAmount').textContent = ' + savings.toFixed(2);
+              document.getElementById('cheapestPrice').textContent = '$' + cheapest.toFixed(2);
+              document.getElementById('expensivePrice').textContent = '$' + mostExpensive.toFixed(2);
+              document.getElementById('savingsAmount').textContent = '$' + savings.toFixed(2);
               document.getElementById('savingsSummary').style.display = 'block';
             }
           }
