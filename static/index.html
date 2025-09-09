@@ -954,12 +954,15 @@
             '<span class="card-label" style="font-weight: 600;">Est. Total:</span>' +
             '<span class="card-value" style="font-size: 20px; font-weight: 700; color: ' + (result.cheapest ? '#059669' : 'var(--accent)') + ';">' + result.delivered_after_promo + '</span>' +
             '</div>' +
-             (result.price_context ? 
+            '<div class="card-item">' +
+            '<span class="card-label">Stock Status:</span>' +
+            '<span class="card-value">' + (result.oos ? '<span style="color: #dc2626; font-weight: 600;">Out of Stock</span>' : '<span style="color: #059669; font-weight: 600;">In Stock</span>') + '</span>' +
+            '</div>' +
+            (result.price_context ? 
             '<div class="card-item">' +
             '<span class="card-label">Price Context:</span>' +
             '<span class="card-value price-context ' + result.price_context.toLowerCase() + '">' + result.price_context + '</span>' +
             '</div>' : '') +
-            '</div>' +
             (result.wrapper || result.vitola ? 
               '<div style="margin: 15px 0;">' +
               (result.wrapper ? '<span class="wrapper-badge">' + result.wrapper + '</span>' : '') +
