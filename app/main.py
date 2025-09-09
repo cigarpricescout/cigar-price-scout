@@ -197,7 +197,7 @@ RETAILERS = [
     {"key": "cuencacigars", "name": "Cuenca Cigars", "csv": "../static/data/cuencacigars.csv", "authorized": False},
     {"key": "escobarcigars", "name": "Escobar Cigars", "csv": "../static/data/escobarcigars.csv", "authorized": False},
     {"key": "famous", "name": "Famous Smoke Shop", "csv": "../static/data/famous.csv", "authorized": False},
-    {"key": "gothamcigars", "name": "Gotham Cigars", "csv": "../static/data/gothamcigars.csv", "authorized": False},
+    {"key": "gothamcigars", "name": "Gotham Cigars", "csv": "../static/data/gothamcigars.csv", "authorized": True},
     {"key": "hilands", "name": "Hiland's Cigars", "csv": "../static/data/hilands.csv", "authorized": False},
     {"key": "holts", "name": "Holt's Cigar Company", "csv": "../static/data/holts.csv", "authorized": False},
     {"key": "jr", "name": "JR Cigar", "csv": "../static/data/jr.csv", "authorized": False},
@@ -306,13 +306,15 @@ def build_options_tree():
         if wrapper_key not in tree[product.brand][product.line]:
             tree[product.brand][product.line][wrapper_key] = {
                 'vitolas': set(),
-                'sizes': set()
+                'sizes': set(),
+                'box_qtys': set()  # Add this line
             }
         
-        # Add vitola and size
+        # Add vitola, size, and box_qty
         if product.vitola:
             tree[product.brand][product.line][wrapper_key]['vitolas'].add(product.vitola)
         tree[product.brand][product.line][wrapper_key]['sizes'].add(product.size)
+        tree[product.brand][product.line][wrapper_key]['box_qtys'].add(product.box_qty)  # Add this line
     
     # Convert to the format expected by frontend
     brands = []
@@ -328,7 +330,9 @@ def build_options_tree():
                 wrappers.append({
                     "wrapper": wrapper_name if wrapper_name != "No Wrapper Specified" else "",
                     "vitolas": vitolas,
-                    "sizes": sizes
+                    "sizes": sizes,
+                    "box_qtys": sorted(list(wrapper_data['box_qtys']))  # Add this line
+
                 })
             
             lines.append({
@@ -479,6 +483,7 @@ def compare(
             "wrapper": product.wrapper,
             "vitola": product.vitola,
             "size": product.size,
+            "box_qty": product.box_qty,
             "base": f"${base_cents/100:.2f}",
             "shipping": f"${shipping_cents/100:.2f}",
             "tax": f"${tax_cents/100:.2f}",

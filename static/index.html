@@ -100,7 +100,7 @@
       
       .picker{
         display:grid;
-        grid-template-columns:1fr 1fr 1fr 1fr 140px 200px;
+        grid-template-columns:1fr 1fr 1fr 1fr 120px 140px 200px;
         gap:10px;margin:18px auto;
       }
       
@@ -458,6 +458,8 @@
           <select id="vitolaSelect" disabled aria-label="Select vitola">
             <option value="">Any Vitola...</option>
           </select>
+
+          <input type="text" id="qtyInput" placeholder="Box Qty" aria-label="Box quantity" readonly style="background:#f9fafb;cursor:not-allowed;" />
           
           <input type="text" id="zipInput" placeholder="ZIP code" aria-label="ZIP code for shipping calculation" />
           
@@ -507,11 +509,11 @@
                 <tr>
                   <th>Retailer</th>
                   <th class="hide-tablet">Dealer Type</th>
-                  <th class="hide-tablet">Product Details</th>
                   <th>Advertised Price</th>
                   <th>Est. Shipping</th>
                   <th>Est. Tax</th>
-                  <th style="font-weight: 700;">Est. Total</th>
+                  <th style="font-weight: 750;">Est. Total</th>
+                  <th>Stock Status</th>
                   <th>Price Context <span style="color: #6b7280; font-size: 14px; cursor: help;" title="Based on 10% median price threshold">❓</span></th>
                 </tr>
               </thead>
@@ -714,7 +716,12 @@
       }
 
       function updateSearchButton() {
-        const canSearch = currentSelection.brand && currentSelection.line;
+        const zipValue = zipInput.value.trim();
+        const canSearch = currentSelection.brand && 
+                   currentSelection.line && 
+                   currentSelection.wrapper && 
+                   currentSelection.vitola && 
+                   zipValue;
         searchBtn.disabled = !canSearch;
       }
 
@@ -748,17 +755,84 @@
         populateVitolaSelect();
         updateFilterChips();
         updateSearchButton();
+        updateQuantityDisplay(); // Add this line
       });
 
       wrapperSelect.addEventListener('change', function(e) {
         currentSelection.wrapper = e.target.value;
         updateFilterChips();
+        updateQuantityDisplay();
+        updateSearchButton(); // Add this line
       });
 
       vitolaSelect.addEventListener('change', function(e) {
         currentSelection.vitola = e.target.value;
         updateFilterChips();
+        updateQuantityDisplay();
+        updateSearchButton(); // Add this line
       });
+
+      zipInput.addEventListener('input', function() {
+        updateSearchButton();
+      });
+
+      // Add this new function
+      function updateQuantityDisplay() {
+        const qtyInput = document.getElementById('qtyInput');
+        
+        if (!currentSelection.brand || !currentSelection.line) {
+          qtyInput.value = '';
+          return;
+        }
+        
+        // Find matching products to get quantity
+        const brand = optionsData.find(function(b) {
+          return b.brand === currentSelection.brand;
+        });
+        
+        if (!brand) {
+          qtyInput.value = '';
+          return;
+        }
+        
+        const line = brand.lines.find(function(l) {
+          return l.line === currentSelection.line;
+        });
+        
+        if (!line) {
+          qtyInput.value = '';
+          return;
+        }
+        
+        // Get box quantities from the matching wrapper/vitola combination
+        let boxQtys = new Set();
+
+        line.wrappers.forEach(function(wrapper) {
+          // Filter by wrapper if selected
+          if (!currentSelection.wrapper || !currentSelection.wrapper.trim() || wrapper.wrapper === currentSelection.wrapper) {
+            // Filter by vitola if selected - handle both arrays and sets
+            const vitolaMatch = !currentSelection.vitola || !currentSelection.vitola.trim() || 
+                              (Array.isArray(wrapper.vitolas) ? wrapper.vitolas.includes(currentSelection.vitola) : 
+                                wrapper.vitolas.has && wrapper.vitolas.has(currentSelection.vitola));
+            
+            if (vitolaMatch) {
+              wrapper.box_qtys.forEach(function(qty) {
+                boxQtys.add(Number(qty)); // Ensure it's a number
+              });
+            }
+          }
+        });
+  
+  const qtys = Array.from(boxQtys).sort((a, b) => a - b);
+  
+  if (qtys.length === 1) {
+    qtyInput.value = 'Box of ' + qtys[0];
+  } else if (qtys.length > 1) {
+    qtyInput.value = 'Box of ' + qtys.join(', '); // Show multiple quantities if they vary
+  } else {
+    qtyInput.value = '';
+  }
+}
 
       searchBtn.addEventListener('click', async function() {
         if (!currentSelection.brand || !currentSelection.line) return;
@@ -792,7 +866,7 @@
           alert('Search failed. Please try again.');
         } finally {
           searchBtn.disabled = false;
-          searchBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg> Find Deals';
+          searchBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg> Scout';
         }
       });
 
@@ -804,12 +878,28 @@
           resultsSection.style.display = 'block';
           return;
         }
+
+       // Sort results by price only (in-stock and out-of-stock mixed by price)
+        data.results.sort(function(a, b) {
+          const priceA = parseFloat(a.delivered_after_promo.replace("$", ""));
+          const priceB = parseFloat(b.delivered_after_promo.replace("$", ""));
+          return priceA - priceB;
+        });
         
         // Update title
         let titleParts = [data.brand, data.line];
         if (data.wrapper) titleParts.push(data.wrapper);
         if (data.vitola) titleParts.push(data.vitola);
-        resultsTitle.textContent = titleParts.join(' ') + ' - Price Comparison';
+
+        // Add specific box quantity from the first result
+        let boxQtyText = '';
+        if (data.results.length > 0) {
+          const boxQty = data.results[0].box_qty;
+          boxQtyText = `, Box of ${boxQty}`;
+        }
+
+        resultsTitle.textContent = titleParts.join(', ') + boxQtyText + ' - Price Comparison';
+
         
         // Build desktop table
         const tbody = resultsTable.querySelector('tbody');
@@ -823,17 +913,11 @@
             '<td class="hide-tablet"><div class="marketplace-cell">' + dealerBadge + 
             (result.authorized ? '' : '<div class="risk-text">Buy at own risk</div>') +
             '</div></td>' +
-            '<td class="hide-tablet"><div class="product-details">' +
-            '<div class="product-name">' + result.product + '</div>' +
-            '<div class="product-specs">' +
-            (result.wrapper ? '<span class="wrapper-badge">' + result.wrapper + '</span>' : '') +
-            (result.vitola ? '<span class="vitola-badge">' + result.vitola + '</span>' : '') +
-            '<span>Size: ' + result.size + '</span>' +
-            '</div></div></td>' +
             '<td class="price-cell">' + result.base + '</td>' +
             '<td class="price-cell">' + result.shipping + '</td>' +
             '<td class="price-cell">' + result.tax + '</td>' +
             '<td class="price-cell total-price ' + (result.cheapest ? 'best-total' : '') + '">' + result.delivered_after_promo + '</td>' +
+            '<td class="price-cell">' + (result.oos ? '<span class="oos">Out of Stock</span>' : '<span style="color: #059669; font-weight: 600;">In Stock</span>') + '</td>' +
             '<td class="price-context ' + (result.price_context ? result.price_context.toLowerCase() : '') + '">' + (result.price_context || '') + '</td>' +
             '</tr>';
         }).join('');
