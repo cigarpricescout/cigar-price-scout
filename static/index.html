@@ -36,20 +36,43 @@
     <link rel="icon" type="image/png" href="/static/logo.png">
     <link rel="apple-touch-icon" href="/static/logo.png">
     
-    <!-- Schema.org Structured Data -->
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
-      "@type": "WebApplication",
+      "@type": ["WebSite", "WebApplication"],
       "name": "Cigar Price Scout",
-      "description": "Compare cigar prices across multiple online retailers with advanced filtering by wrapper type, vitola, and size",
+      "alternateName": "CigarPriceScout.com",
       "url": "https://cigarpricescout.com",
+      "description": "Compare cigar prices across 35+ online retailers. Search by brand, wrapper type, vitola, and size to find the best deals on premium cigars with shipping and tax calculations.",
       "applicationCategory": "Shopping",
       "operatingSystem": "Any",
-      "offers": {
-        "@type": "Offer",
-        "category": "Cigars",
-        "availability": "https://schema.org/InStock"
+      "browserRequirements": "Requires JavaScript",
+      "potentialAction": [
+        {
+          "@type": "SearchAction",
+          "target": {
+            "@type": "EntryPoint",
+            "urlTemplate": "https://cigarpricescout.com/compare?brand={brand}&line={line}&wrapper={wrapper}&vitola={vitola}&zip={zip_code}"
+          },
+          "query-input": [
+            "required name=brand",
+            "required name=line", 
+            "name=wrapper",
+            "name=vitola",
+            "name=zip_code"
+          ]
+        }
+      ],
+      "publisher": {
+        "@type": "Organization",
+        "name": "Cigar Price Scout",
+        "url": "https://cigarpricescout.com",
+        "logo": {
+          "@type": "ImageObject",
+          "url": "https://cigarpricescout.com/static/logo.png",
+          "width": 100,
+          "height": 80
+        }
       }
     }
     </script>
@@ -858,6 +881,55 @@
   }
 }
 
+      // Schema.org functions for dynamic product markup
+      function generateComparisonSchema(results, searchData) {
+        return {
+          "@context": "https://schema.org",
+          "@type": "ItemList",
+          "name": searchData.brand + " " + searchData.line + " Price Comparison",
+          "description": "Price comparison for " + searchData.brand + " " + searchData.line + " cigars across multiple retailers",
+          "numberOfItems": results.length,
+          "itemListElement": results.map(function(result, index) {
+            return {
+              "@type": "ListItem",
+              "position": index + 1,
+              "item": {
+                "@type": "Offer",
+                "name": result.retailer + " - " + searchData.brand + " " + searchData.line,
+                "price": parseFloat(result.delivered_after_promo.replace(/[$,]/g, '')),
+                "priceCurrency": "USD",
+                "availability": result.oos ? "https://schema.org/OutOfStock" : "https://schema.org/InStock",
+                "seller": {
+                  "@type": "Organization",
+                  "name": result.retailer
+                },
+                "url": result.url,
+                "itemOffered": {
+                  "@type": "Product",
+                  "name": searchData.brand + " " + searchData.line + (searchData.wrapper ? " " + searchData.wrapper : "") + (searchData.vitola ? " " + searchData.vitola : ""),
+                  "brand": searchData.brand
+                }
+              }
+            };
+          })
+        };
+      }
+
+      function injectSchema(schemaObject) {
+        // Remove existing product/comparison schemas
+        var existingSchemas = document.querySelectorAll('script[type="application/ld+json"][data-dynamic]');
+        existingSchemas.forEach(function(script) {
+          script.remove();
+        });
+        
+        // Add new schema
+        var script = document.createElement('script');
+        script.type = 'application/ld+json';
+        script.setAttribute('data-dynamic', 'true');
+        script.textContent = JSON.stringify(schemaObject);
+        document.head.appendChild(script);
+      }
+
       searchBtn.addEventListener('click', async function() {
         if (!currentSelection.brand || !currentSelection.line) return;
         
@@ -1018,6 +1090,15 @@
             }
           }
         }
+        
+        // Generate and inject comparison schema
+        var comparisonSchema = generateComparisonSchema(data.results, {
+          brand: data.brand,
+          line: data.line,
+          wrapper: data.wrapper,
+          vitola: data.vitola
+        });
+        injectSchema(comparisonSchema);
         
         resultsSection.style.display = 'block';
         resultsSection.scrollIntoView({ behavior: 'smooth' });
