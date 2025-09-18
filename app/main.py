@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Query
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse, FileResponse, Response
 from pathlib import Path
 import csv
 from typing import Optional
@@ -538,6 +538,35 @@ async def terms_of_service():
 @app.get("/contact.html")
 async def contact():
     return FileResponse("../static/contact.html")
+
+@app.get("/sitemap.xml", response_class=Response)
+async def sitemap():
+    # Your site's base URL
+    base_url = "https://cigarpricescout.com"
+    
+    # Static pages
+    urls = [
+        {"url": base_url, "priority": "1.0", "changefreq": "daily"},
+        {"url": f"{base_url}/about.html", "priority": "0.8", "changefreq": "monthly"},
+        {"url": f"{base_url}/privacy-policy.html", "priority": "0.5", "changefreq": "yearly"},
+        {"url": f"{base_url}/terms-of-service.html", "priority": "0.5", "changefreq": "yearly"},
+        {"url": f"{base_url}/contact.html", "priority": "0.5", "changefreq": "yearly"},
+    ]
+    
+    # Generate XML
+    xml_content = '<?xml version="1.0" encoding="UTF-8"?>\n'
+    xml_content += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+    
+    for url_data in urls:
+        xml_content += f'  <url>\n'
+        xml_content += f'    <loc>{url_data["url"]}</loc>\n'
+        xml_content += f'    <priority>{url_data["priority"]}</priority>\n'
+        xml_content += f'    <changefreq>{url_data["changefreq"]}</changefreq>\n'
+        xml_content += f'  </url>\n'
+    
+    xml_content += '</urlset>'
+    
+    return Response(content=xml_content, media_type="application/xml")
 
 if __name__ == "__main__":
     import uvicorn
