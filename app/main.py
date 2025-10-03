@@ -522,6 +522,132 @@ def compare(
         "results": results
     }
 
+@app.get("/compare-all")
+def compare_all(
+    brand: str = Query(...),
+    line: str = Query(...),
+    zip: str = Query("", description="ZIP code for shipping/tax estimates"),
+    authorized_only: bool = Query(False, description="Show only authorized dealers"),
+):
+    """
+    Compare prices for ALL variations of a brand/line (for landing pages)
+    Shows all wrappers, vitolas, and box quantities
+    """
+    
+    # Get state from ZIP for shipping/tax calculations
+    state = zip_to_state(zip) if zip else 'OR'
+    
+    # Load all products and filter by brand/line only
+    all_products = load_all_products()
+    matching_products = []
+    
+    for p in all_products:
+        # Brand and line must match
+        if p.brand.lower() != brand.lower() or p.line.lower() != line.lower():
+            continue
+        
+        matching_products.append(p)
+
+    # Filter by authorized dealers if requested
+    if authorized_only:
+        authorized_retailer_keys = {r["key"] for r in RETAILERS if r["authorized"]}
+        matching_products = [p for p in matching_products if p.retailer_key in authorized_retailer_keys]
+
+    # Calculate price context (median comparison)
+    if len(matching_products) >= 3:
+        delivered_prices = []
+        for product in matching_products:
+            base_cents = product.price_cents
+            shipping_cents = estimate_shipping_cents(base_cents, product.retailer_key, state) or 0
+            tax_cents = estimate_tax_cents(base_cents + shipping_cents, product.retailer_key, state) or 0
+            delivered_prices.append(base_cents + shipping_cents + tax_cents)
+        
+        delivered_prices.sort()
+        n = len(delivered_prices)
+        median_price = delivered_prices[n//2] if n % 2 == 1 else (delivered_prices[n//2-1] + delivered_prices[n//2]) / 2
+    else:
+        median_price = None
+
+    if not matching_products:
+        return {
+            "brand": brand,
+            "line": line,
+            "state": state,
+            "results": []
+        }
+
+    # Calculate delivered prices and build results
+    results = []
+    in_stock_prices = []
+
+    for product in matching_products:
+        base_cents = product.price_cents
+        shipping_cents = estimate_shipping_cents(base_cents, product.retailer_key, state) or 0
+        tax_cents = estimate_tax_cents(base_cents + shipping_cents, product.retailer_key, state) or 0
+        delivered_cents = base_cents + shipping_cents + tax_cents
+
+        price_context = None
+        if median_price:
+            diff_percent = ((delivered_cents - median_price) / median_price) * 100
+            if diff_percent <= -10:
+                price_context = "Value"
+            elif diff_percent >= 10:
+                price_context = "Premium"
+            else:
+                price_context = "Market"
+        
+        if product.in_stock:
+            in_stock_prices.append(delivered_cents)
+        
+        wrapper_text = f" {product.wrapper}" if product.wrapper else ""
+        vitola_text = f" {product.vitola}" if product.vitola else ""
+        product_name = f"{product.brand} {product.line}{wrapper_text}{vitola_text} ({product.size})"
+        
+        retailer_info = next((r for r in RETAILERS if r["key"] == product.retailer_key), None)
+        is_authorized = retailer_info.get("authorized", False) if retailer_info else False
+
+        result = {
+            "retailer": product.retailer_name,
+            "product": product_name,
+            "wrapper": product.wrapper,
+            "vitola": product.vitola,
+            "size": product.size,
+            "box_qty": product.box_qty,
+            "base": f"${base_cents/100:.2f}",
+            "shipping": f"${shipping_cents/100:.2f}",
+            "tax": f"${tax_cents/100:.2f}",
+            "delivered": f"${delivered_cents/100:.2f}",
+            "promo": None,
+            "promo_code": None,
+            "delivered_after_promo": f"${delivered_cents/100:.2f}",
+            "url": product.url,
+            "oos": not product.in_stock,
+            "cheapest": False,
+            "authorized": is_authorized,
+            "price_context": price_context,
+        }
+        results.append(result)
+
+    if in_stock_prices:
+        cheapest_price = min(in_stock_prices)
+        for result in results:
+            if not result["oos"]:
+                delivered_price = float(result["delivered_after_promo"].replace("$", ""))
+                if abs(delivered_price - cheapest_price/100) < 0.01:
+                    result["cheapest"] = True
+                    break
+
+    results.sort(key=lambda r: (r["oos"], float(r["delivered_after_promo"].replace("$", ""))))
+
+    return {
+        "brand": brand,
+        "line": line,
+        "state": state,
+        "results": results
+    }
+
+# Legal page routes
+
 # Legal page routes
 @app.get("/about.html")
 async def about():
@@ -539,9 +665,64 @@ async def terms_of_service():
 async def contact():
     return FileResponse("../static/contact.html")
 
+@app.get("/cigars/{brand}/{line}", response_class=HTMLResponse)
+async def cigar_landing_page(brand: str, line: str):
+    """
+    SEO-friendly landing page for specific cigar brands/lines
+    URL format: /cigars/padron/1964-anniversary-series
+    """
+    # Read the template
+    template_path = Path("../static/cigar-template.html")
+    
+    if not template_path.exists():
+        # Fallback if template doesn't exist yet
+        return HTMLResponse(content="<h1>Page not found</h1>", status_code=404)
+    
+    with open(template_path, 'r', encoding='utf-8') as f:
+        template = f.read()
+    
+    # Replace placeholders with actual values
+    # Convert URL-friendly format back to display format
+    brand_display = brand.replace('-', ' ').title()
+    line_display = line.replace('-', ' ').title()
+    
+    html = template.replace('{{BRAND}}', brand_display)
+    html = html.replace('{{LINE}}', line_display)
+    
+    return HTMLResponse(content=html)
+
+
+# Helper function to generate URL-friendly slugs
+def create_slug(text: str) -> str:
+    """Convert 'Padron 1964' to 'padron-1964'"""
+    return text.lower().replace(' ', '-').replace('/', '-')
+
+
+@app.get("/generate-landing-pages")
+async def generate_landing_page_list():
+    """
+    Utility endpoint to see what landing pages you should create
+    Visit this in your browser to get a list
+    """
+    brands = build_options_tree()
+    
+    pages = []
+    for brand in brands[:20]:  # Start with top 20 brands
+        for line in brand['lines'][:3]:  # Top 3 lines per brand
+            brand_slug = create_slug(brand['brand'])
+            line_slug = create_slug(line['line'])
+            url = f"/cigars/{brand_slug}/{line_slug}"
+            pages.append({
+                'url': url,
+                'brand': brand['brand'],
+                'line': line['line'],
+                'full_url': f"https://cigarpricescout.com{url}"
+            })
+    
+    return {"pages": pages, "count": len(pages)}
+
 @app.get("/sitemap.xml", response_class=Response)
 async def sitemap():
-    # Your site's base URL
     base_url = "https://cigarpricescout.com"
     
     # Static pages
@@ -552,6 +733,33 @@ async def sitemap():
         {"url": f"{base_url}/terms-of-service.html", "priority": "0.5", "changefreq": "yearly"},
         {"url": f"{base_url}/contact.html", "priority": "0.5", "changefreq": "yearly"},
     ]
+    
+    # Add dynamic cigar landing pages
+    brands = build_options_tree()
+    for brand in brands[:50]:  # Increase from 20 to 50 brands
+        for line in brand['lines'][:5]:  # Increase from 3 to 5 lines per brand
+            brand_slug = create_slug(brand['brand'])
+            line_slug = create_slug(line['line'])
+            urls.append({
+                "url": f"{base_url}/cigars/{brand_slug}/{line_slug}",
+                "priority": "0.9",
+                "changefreq": "weekly"
+            })
+    
+    # Generate XML
+    xml_content = '<?xml version="1.0" encoding="UTF-8"?>\n'
+    xml_content += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+    
+    for url_data in urls:
+        xml_content += f'  <url>\n'
+        xml_content += f'    <loc>{url_data["url"]}</loc>\n'
+        xml_content += f'    <priority>{url_data["priority"]}</priority>\n'
+        xml_content += f'    <changefreq>{url_data["changefreq"]}</changefreq>\n'
+        xml_content += f'  </url>\n'
+    
+    xml_content += '</urlset>'
+    
+    return Response(content=xml_content, media_type="application/xml")
     
     # Generate XML
     xml_content = '<?xml version="1.0" encoding="UTF-8"?>\n'
