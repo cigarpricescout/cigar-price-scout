@@ -217,7 +217,7 @@ RETAILERS = [
     {"key": "tampasweethearts", "name": "Tampa Sweethearts", "csv": "../static/data/tampasweethearts.csv", "authorized": False},
     {"key": "thecigarshop", "name": "The Cigar Shop", "csv": "../static/data/thecigarshop.csv", "authorized": False},
     {"key": "thecigarstore", "name": "The Cigar Store", "csv": "../static/data/thecigarstore.csv", "authorized": False},
-    {"key": "thompson", "name": "Thompson Cigar", "csv": "../static/data/thompson.csv", "authorized": False},
+    {"key": "thompson", "name": "Thompson Cigar", "csv": "../static/data/thompson.csv", "authorized": True},
     {"key": "tobaccolocker", "name": "Tobacco Locker", "csv": "../static/data/tobaccolocker.csv", "authorized": False},
     {"key": "twoguys", "name": "Two Guys Smoke Shop", "csv": "../static/data/twoguys.csv", "authorized": False},
     {"key": "watchcity", "name": "Watch City Cigar", "csv": "../static/data/watchcity.csv", "authorized": False},
