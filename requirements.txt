@@ -6,3 +6,6 @@ sqlalchemy
 aiosqlite
 python-dotenv
 httpx
+APScheduler==3.10.4
+requests==2.31.0
+pandas==2.2.0

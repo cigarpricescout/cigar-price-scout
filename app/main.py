@@ -5,6 +5,11 @@ from pathlib import Path
 import csv
 from typing import Optional
 
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
+import subprocess
+import logging
+
 # Import your working shipping/tax functions
 try:
     from shipping_tax import zip_to_state, estimate_shipping_cents, estimate_tax_cents
@@ -50,6 +55,8 @@ except Exception:
         elif retailer_key == 'cigarking' and base_dollars >= 150:
             return 0
         elif retailer_key == 'cigarsdirect' and base_dollars >= 99:
+            return 0
+        elif retailer_key == 'cigora':
             return 0
         elif retailer_key == 'corona' and base_dollars >= 125:
             return 0
@@ -114,6 +121,7 @@ except Exception:
             'cigarking': ['AZ'],
             'cigarplace': ['FL'],
             'cigarsdirect': ['FL'],
+            'cigora': ['PA'],
             'corona': ['FL'],
             'cubancrafters': ['FL'],
             'cuencacigars': ['FL'],
@@ -165,8 +173,53 @@ except Exception:
         
         return 0
 
+ # Configure logging  ← NO INDENTATION
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+def run_feed_processor():
+    """Run the CJ feed processing script"""
+    try:
+        logger.info("Starting CJ feed processor...")
+        result = subprocess.run(
+            ['python', 'scripts/process_cj_feeds.py'],
+            capture_output=True,
+            text=True,
+            cwd=Path(__file__).parent.parent
+        )
+        logger.info(f"Feed processor output: {result.stdout}")
+        if result.stderr:
+            logger.error(f"Feed processor errors: {result.stderr}")
+        if result.returncode == 0:
+            logger.info("Feed processor completed successfully")
+        else:
+            logger.error(f"Feed processor failed with code {result.returncode}")
+    except Exception as e:
+        logger.error(f"Failed to run feed processor: {e}")
+
+def start_scheduler():
+    """Start the background scheduler"""
+    scheduler = BackgroundScheduler()
+    
+    scheduler.add_job(
+        run_feed_processor,
+        CronTrigger(hour=3, minute=0, timezone='America/Los_Angeles'),
+        id='cj_feed_processor',
+        name='Process CJ affiliate feeds',
+        replace_existing=True
+    )
+    
+    scheduler.start()
+    logger.info("✓ Scheduler started - CJ feeds will process daily at 3 AM Pacific")     
+
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="../static"), name="static")
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize scheduler when app starts"""
+    start_scheduler()
+    logger.info("✓ Application started with scheduled feed processing")
 
 RETAILERS = [
     {"key": "abcfws", "name": "ABC Fine Wine & Spirits", "csv": "../static/data/abcfws.csv", "authorized": False},
@@ -192,6 +245,7 @@ RETAILERS = [
     {"key": "cigarpairingparlor", "name": "The Cigar Pairing Parlor LLC", "csv": "../static/data/cigarpairingparlor.csv", "authorized": False},
     {"key": "cigarplace", "name": "Cigar Place", "csv": "../static/data/cigarplace.csv", "authorized": False},
     {"key": "cigarsdirect", "name": "Cigars Direct", "csv": "../static/data/cigarsdirect.csv", "authorized": False},
+    {"key": "cigora", "name": "Cigora", "csv": "../static/data/cigora.csv", "authorized": True},
     {"key": "corona", "name": "Corona Cigar", "csv": "../static/data/corona.csv", "authorized": False},
     {"key": "cubancrafters", "name": "Cuban Crafters", "csv": "../static/data/cubancrafters.csv", "authorized": False},
     {"key": "cuencacigars", "name": "Cuenca Cigars", "csv": "../static/data/cuencacigars.csv", "authorized": False},
@@ -775,6 +829,12 @@ async def sitemap():
     xml_content += '</urlset>'
     
     return Response(content=xml_content, media_type="application/xml")
+
+@app.post("/admin/trigger-feed-update")
+async def trigger_feed_update():
+    """Manual trigger for testing (remove in production or add auth)"""
+    run_feed_processor()
+    return {"status": "Feed processor triggered"}
 
 if __name__ == "__main__":
     import uvicorn
