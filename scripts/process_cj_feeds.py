@@ -50,24 +50,22 @@ def extract_box_qty_from_title(title):
 
 def extract_line_from_title(title, brand):
     """Extract product line (between brand and vitola/size)"""
-    clean = title.replace('"""', '"').replace('\\"', '"')
+    clean = title.replace('"""', '"').replace('\\"', '"').strip('"')
     
-    # Remove brand from beginning
+    # Remove brand from beginning (case insensitive)
     brand_pattern = re.escape(brand)
-    after_brand = re.sub(f'^{brand_pattern}\\s*', '', clean, flags=re.IGNORECASE).strip()
+    after_brand = re.sub(f'^{brand_pattern}\\s+', '', clean, flags=re.IGNORECASE).strip()
     
-    # Remove everything after the vitola or size
-    vitola_pattern = r'\b(Robusto|Toro|Corona|Churchill|Torpedo|Gordo|Belicoso|Lancero|Lonsdale|Perfecto|Figurado|Double Corona|Gran Toro|Double Toro|Short Robusto|Petit Corona|Petit|Nub|Tubo)\b'
-    line = re.split(vitola_pattern, after_brand, flags=re.IGNORECASE)[0].strip()
+    # Split at first vitola word
+    vitola_pattern = r'\s+(Robusto|Toro|Corona|Churchill|Torpedo|Gordo|Belicoso|Lancero|Lonsdale|Perfecto|Figurado|Double Corona|Gran Toro|Double Toro|Short Robusto|Petit Corona|Petit|Nub|Tubo|Belicoso|Emperor|No\.\s*4)\s'
+    parts = re.split(vitola_pattern, after_brand, maxsplit=1, flags=re.IGNORECASE)
+    line = parts[0].strip()
     
-    # Remove size pattern
-    line = re.sub(r'\s*\(\d+\.?\d*"*\s*x\s*\d+\).*$', '', line).strip()
+    # Remove size pattern from end
+    line = re.sub(r'\s*\([0-9.]+.*?\).*$', '', line).strip()
     
-    # Remove "BOX (20)" or "PACK (5)" suffix
-    line = re.sub(r'\s*-?\s*(?:BOX|PACK)\s*(?:of\s*)?\d+', '', line, flags=re.IGNORECASE).strip()
-    
-    # Remove trailing dash
-    line = line.rstrip(' -')
+    # Remove "BOX" or "PACK" suffix
+    line = re.sub(r'\s*-?\s*(?:BOX|PACK|Box|Pack).*$', '', line, flags=re.IGNORECASE).strip()
     
     return line if line else 'Unknown'
 
@@ -136,6 +134,9 @@ def process_feed():
                     # Extract data
                     size = extract_size_from_title(title)
                     vitola = extract_vitola_from_title(title)
+                    # Skip products without a vitola
+                    if not vitola:
+                        continue
                     line = extract_line_from_title(title, brand)
                     box_qty = extract_box_qty_from_title(title)
                     
@@ -156,10 +157,12 @@ def process_feed():
                     in_stock = row.get('AVAILABILITY', '').lower() == 'in stock'
                     
                     products.append({
-                        'title': title.replace('"""', '"').strip('"'),
+                        'title': re.sub(r'"{2,}', '"', title).strip('"'),
                         'url': row.get('LINK', ''),
                         'brand': brand,
                         'line': line,
+                        'wrapper': '',  # Leave blank - add manually later
+                        'vitola': vitola or '',  # Extract from title
                         'size': size or '',
                         'box_qty': box_qty,
                         'price': price,

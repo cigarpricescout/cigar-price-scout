@@ -215,11 +215,11 @@ def start_scheduler():
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="../static"), name="static")
 
-@app.on_event("startup")
-async def startup_event():
-    """Initialize scheduler when app starts"""
-    start_scheduler()
-    logger.info("✓ Application started with scheduled feed processing")
+#@app.on_event("startup")
+#async def startup_event():
+#    """Initialize scheduler when app starts"""
+#    start_scheduler()
+#    logger.info("✓ Application started with scheduled feed processing")
 
 RETAILERS = [
     {"key": "abcfws", "name": "ABC Fine Wine & Spirits", "csv": "../static/data/abcfws.csv", "authorized": False},
