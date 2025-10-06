@@ -765,10 +765,8 @@
       function updateSearchButton() {
         const zipValue = zipInput.value.trim();
         const canSearch = currentSelection.brand && 
-                   currentSelection.line && 
-                   currentSelection.wrapper && 
-                   currentSelection.vitola && 
-                   zipValue;
+                  currentSelection.line && 
+                  zipValue;
         searchBtn.disabled = !canSearch;
       }
 

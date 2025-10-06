@@ -454,9 +454,9 @@ def compare(
             if p.size.lower() != size.lower():
                 continue
         
-        # Need at least wrapper, vitola, OR size to match
-        if not wrapper and not vitola and not size:
-            continue
+        # Size matching is handled by the compare endpoint naturally
+        # Wrapper and vitola are optional filters
+        pass
         
         matching_products.append(p)
 
