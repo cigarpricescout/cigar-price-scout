@@ -38,6 +38,8 @@ except Exception:
             return 0
         elif retailer_key == 'bestcigar' and base_dollars >= 99:
             return 0
+        elif retailer_key == 'bnbtobacco' and base_dollars >= 199:
+            return 0  # Adjust threshold as needed
         elif retailer_key == 'bonitasmokeshop' and base_dollars >= 150:
             return 0
         elif retailer_key == 'casademontecristo' and base_dollars >= 200:
@@ -109,6 +111,7 @@ except Exception:
             'atlantic': ['PA'],
             'bestcigar': ['PA'],
             'bighumidor': ['DE'],
+            'bnbtobacco': ['VA'],  # Update with BnB's actual tax states
             'bonitasmokeshop': ['FL'],
             'casademontecristo': ['FL','IL','NV','TN','TX','DC','NJ','NC'],
             'cccrafter': ['FL'],
@@ -197,10 +200,31 @@ def run_feed_processor():
     except Exception as e:
         logger.error(f"Failed to run feed processor: {e}")
 
+def run_awin_processor():
+    """Run the Awin BnB Tobacco feed processing script"""
+    try:
+        logger.info("Starting Awin BnB Tobacco feed processor...")
+        result = subprocess.run(
+            ['python', 'scripts/process_awin_feed.py'],
+            capture_output=True,
+            text=True,
+            cwd=Path(__file__).parent.parent
+        )
+        logger.info(f"Awin processor output: {result.stdout}")
+        if result.stderr:
+            logger.error(f"Awin processor errors: {result.stderr}")
+        if result.returncode == 0:
+            logger.info("Awin BnB Tobacco processor completed successfully")
+        else:
+            logger.error(f"Awin processor failed with code {result.returncode}")
+    except Exception as e:
+        logger.error(f"Failed to run Awin processor: {e}")
+
 def start_scheduler():
     """Start the background scheduler"""
     scheduler = BackgroundScheduler()
     
+    # CJ feeds at 3:00 AM Pacific
     scheduler.add_job(
         run_feed_processor,
         CronTrigger(hour=3, minute=0, timezone='America/Los_Angeles'),
@@ -209,8 +233,17 @@ def start_scheduler():
         replace_existing=True
     )
     
+    # Awin BnB Tobacco feed at 3:30 AM Pacific
+    scheduler.add_job(
+        run_awin_processor,
+        CronTrigger(hour=3, minute=30, timezone='America/Los_Angeles'),
+        id='awin_feed_processor',
+        name='Process Awin BnB Tobacco feed',
+        replace_existing=True
+    )
+    
     scheduler.start()
-    logger.info("✓ Scheduler started - CJ feeds will process daily at 3 AM Pacific")     
+    logger.info("✓ Scheduler started - CJ feeds at 3 AM, Awin at 3:30 AM Pacific")    
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="../static"), name="static")
@@ -227,6 +260,7 @@ RETAILERS = [
     {"key": "atlantic", "name": "Atlantic Cigar", "csv": "../static/data/atlantic.csv", "authorized": False},
     {"key": "bestcigar", "name": "Best Cigar Prices", "csv": "../static/data/bestcigar.csv", "authorized": False},
     {"key": "bighumidor", "name": "Big Humidor", "csv": "../static/data/bighumidor.csv", "authorized": False},
+    {"key": "bnbtobacco", "name": "BnB Tobacco", "csv": "../static/data/bnbtobacco.csv", "authorized": True},
     {"key": "bonitasmokeshop", "name": "Bonita Smoke Shop", "csv": "../static/data/bonitasmokeshop.csv", "authorized": False},
     {"key": "buitragocigars", "name": "Buitrago Cigars", "csv": "../static/data/buitragocigars.csv", "authorized": False},
     {"key": "casademontecristo", "name": "Casa de Montecristo", "csv": "../static/data/casademontecristo.csv", "authorized": False},
