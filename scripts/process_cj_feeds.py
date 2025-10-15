@@ -161,9 +161,9 @@ class CigarMatcher:
                 best_score = score
                 best_line_match = line_value
         
-        # Require at least 40% similarity on line name
-        if best_score < 0.4:
-            logger.debug(f"No line match for: {brand} - {line_from_title}")
+        # Require at least 90% similarity on line name (very strict - near exact match)
+        if best_score < 0.9:
+            logger.debug(f"No line match for: {brand} - {line_from_title} (best score: {best_score:.2f})")
             return None
         
         # Filter by matched line
