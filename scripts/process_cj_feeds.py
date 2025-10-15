@@ -169,18 +169,22 @@ class CigarMatcher:
         # Filter by matched line
         line_matches = brand_matches[brand_matches['line_lower'] == best_line_match]
         
-        # STRICT: Require vitola match if present in title
+        # STRICT: Require vitola in title - reject if missing
         vitola_from_title = self.extract_vitola_from_title(title)
-        if vitola_from_title:
-            vitola_matches = line_matches[
-                line_matches['vitola_lower'] == vitola_from_title.lower()
-            ]
-            if len(vitola_matches) > 0:
-                line_matches = vitola_matches
-            else:
-                # No vitola match - reject this product
-                logger.debug(f"Vitola mismatch: '{vitola_from_title}' not found for {brand} {line_from_title}")
-                return None
+        if not vitola_from_title:
+            logger.debug(f"No vitola found in title: {title}")
+            return None
+        
+        # STRICT: Require vitola match
+        vitola_matches = line_matches[
+            line_matches['vitola_lower'] == vitola_from_title.lower()
+        ]
+        if len(vitola_matches) > 0:
+            line_matches = vitola_matches
+        else:
+            # No vitola match - reject this product
+            logger.debug(f"Vitola mismatch: '{vitola_from_title}' not found for {brand} {line_from_title}")
+            return None
         
         # Try to match by size if present
         size_from_title = self.extract_size_from_title(title)
