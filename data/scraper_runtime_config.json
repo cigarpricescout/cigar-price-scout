@@ -1,0 +1,26 @@
+{
+  "ua": "CigarPriceScoutBot/1.0 (+https://cigarpricescout.com/bot)",
+  "rates_rps": {
+    "WooCommerce": [0.5, 1.0],
+    "BigCommerce": [0.3, 0.5],
+    "Shopify": [0.15, 0.3],
+    "Magento": [0.2, 0.4],
+    "Legacy": [0.1, 0.2]
+  },
+  "jitter_ms": [800, 1500],
+  "concurrency_per_host": 1,
+  "daily_caps": {
+    "WooCommerce": 1500,
+    "BigCommerce": 1000,
+    "Shopify": 500,
+    "Magento": 600,
+    "Legacy": 300
+  },
+  "global_daily_target": [8000, 12000],
+  "retry": {
+    "5xx": {"retries": 2, "backoff_ms": [1000, 5000]},
+    "429_or_403": {"snooze_minutes": [5, 15, 60], "halve_rate": true}
+  },
+  "persist_headers": ["ETag","Last-Modified"],
+  "dedupe_key": "brand|line|wrapper_norm|vitola|box_count|retailer_domain"
+}

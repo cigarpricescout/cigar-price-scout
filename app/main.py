@@ -66,6 +66,8 @@ except Exception:
             return 0
         elif retailer_key == 'cuencacigars' and base_dollars >= 99:
             return 0
+        elif retailer_key == 'foxcigar' and base_dollars >= 25:
+            return 0
         elif retailer_key == 'holts' and base_dollars >= 150:
             return 0
         elif retailer_key == 'lmcigars' and base_dollars >= 100:
@@ -129,6 +131,7 @@ except Exception:
             'cubancrafters': ['FL'],
             'cuencacigars': ['FL'],
             'famous': ['PA'],
+            'foxcigar': ['AZ'],
             'hilands': ['AZ'],
             'holts': ['PA'],
             'jr': ['NC','NJ'],
@@ -285,6 +288,7 @@ RETAILERS = [
     {"key": "cuencacigars", "name": "Cuenca Cigars", "csv": "../static/data/cuencacigars.csv", "authorized": False},
     {"key": "escobarcigars", "name": "Escobar Cigars", "csv": "../static/data/escobarcigars.csv", "authorized": False},
     {"key": "famous", "name": "Famous Smoke Shop", "csv": "../static/data/famous.csv", "authorized": True},
+    {"key": "foxcigar", "name": "Fox Cigar", "csv": "../static/data/fox_cigar.csv", "authorized": False},
     {"key": "gothamcigars", "name": "Gotham Cigars", "csv": "../static/data/gothamcigars.csv", "authorized": True},
     {"key": "hilands", "name": "Hiland's Cigars", "csv": "../static/data/hilands.csv", "authorized": False},
     {"key": "holts", "name": "Holt's Cigar Company", "csv": "../static/data/holts.csv", "authorized": False},

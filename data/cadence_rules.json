@@ -1,0 +1,9 @@
+{
+  "WooCommerce": {"frequency": "daily"},
+  "BigCommerce": {"frequency": "daily"},
+  "Shopify": {"frequency": "every_1_to_2_days"},
+  "Magento": {"frequency": "every_2_to_3_days"},
+  "Legacy": {"frequency": "weekly"},
+  "ManufacturerDirect": {"frequency": "weekly_or_biweekly"},
+  "Enterprise": {"frequency": "blocked"}
+}
