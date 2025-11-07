@@ -437,46 +437,49 @@
     </div>
 
     <script>
-        document.getElementById('boxPricingForm').addEventListener('submit', function(e) {
+        document.getElementById('boxPricingForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             
             // Get form data
             const formData = new FormData(this);
             const data = Object.fromEntries(formData.entries());
             
-            // Create email subject and body
-            const subject = `Box Pricing Request: ${data.brand} ${data.line}`;
-            const body = `Box Pricing Request Details:
-
-CIGAR INFORMATION:
-Brand: ${data.brand}
-Line: ${data.line}
-Wrapper: ${data.wrapper || 'Any'}
-Vitola: ${data.vitola || 'Any'}
-Preferred Box Size: ${data.boxSize || 'Any'}
-
-CUSTOMER INFORMATION:
-Name: ${data.name}
-Email: ${data.email}
-ZIP Code: ${data.zip}
-
-ADDITIONAL NOTES:
-${data.notes || 'None'}
-
-Please respond with available box pricing options from retail partners.
-`;
-
-            // Create mailto link
-            const mailtoLink = `mailto:mikeyjoneill@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+            // Show loading state
+            const submitBtn = document.querySelector('.submit-btn');
+            const originalText = submitBtn.textContent;
+            submitBtn.textContent = 'Submitting...';
+            submitBtn.disabled = true;
             
-            // Open email client
-            window.location.href = mailtoLink;
-            
-            // Show success message
-            alert('Your box pricing request has been sent! We\'ll email you with available options.');
-            
-            // Reset form
-            this.reset();
+            try {
+                // Submit to your API endpoint
+                const response = await fetch('/api/box-pricing-request', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    // Show success message
+                    alert('Thank you! Your box pricing request has been submitted successfully. We\'ll email you with available options.');
+                    
+                    // Reset form
+                    this.reset();
+                } else {
+                    throw new Error(result.message || 'Submission failed');
+                }
+                
+            } catch (error) {
+                console.error('Error submitting form:', error);
+                alert('There was an error submitting your request. Please try again or contact us directly.');
+            } finally {
+                // Reset button state
+                submitBtn.textContent = originalText;
+                submitBtn.disabled = false;
+            }
         });
         
         // ZIP code validation
