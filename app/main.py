@@ -757,6 +757,10 @@ async def terms_of_service():
 async def contact():
     return FileResponse("../static/contact.html")
 
+@app.get("/request-box-pricing.html")
+async def request_box_pricing():
+    return FileResponse("../static/request-box-pricing.html")
+
 @app.get("/cigars/{brand}/{line}", response_class=HTMLResponse)
 async def cigar_landing_page(brand: str, line: str):
     """
