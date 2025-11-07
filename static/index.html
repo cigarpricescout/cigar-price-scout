@@ -17,7 +17,7 @@
 
     <!-- SEO Meta Tags -->
     <meta name="description" content="Compare cigar prices across 35+ online retailers. Search by brand, wrapper type, vitola, and size to find the best deals on premium cigars with shipping and tax calculations." />
-    <meta name="keywords" content="cigar prices, cigar deals, wrapper types, vitola sizes, Connecticut, Maduro, Habano, cigar comparison, online cigar shopping" />
+    <meta name="keywords" content="cigar prices, cigar box prices, cigar box deals, cigar deals, wrapper types, vitola sizes, Connecticut, Maduro, Habano, cigar comparison, online cigar shopping" />
     
     <!-- Open Graph Tags -->
     <meta property="og:title" content="Cigar Price Scout - Best Cigar Price Comparison" />
@@ -528,8 +528,37 @@
             <label for="authorizedOnly" style="color: var(--ink); cursor: pointer; margin: 0; font-weight: 500;">Show Authorized Dealers Only</label>
           </div>
         </div>
+
+        <!-- Request Box to Scout Button -->
+        <div style="display: flex; justify-content: center; margin: 20px 0;">
+          <a href="/request-box-pricing.html" style="
+            display: inline-block;
+            background: #7c5c2e;
+            color: #fff;
+            padding: 12px 24px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 18px;
+            font-weight: 600;
+            transition: all 0.3s;
+            box-shadow: 0 2px 4px rgba(124, 92, 46, 0.3);
+          ">
+            Request a Box to Scout
+          </a>
+        </div>
+
+        <style>
+        /* Hover effect for the button */
+        a[href="/request-box-pricing.html"]:hover {
+          filter: brightness(0.95);
+          transform: translateY(-1px);
+          box-shadow: 0 4px 8px rgba(124, 92, 46, 0.4);
+        }
+        </style>
         
         <div class="chips" id="filterChips"></div>
+        
         
         <section id="results" style="display:none">
           <h2 id="resultsTitle">Price Comparison Results</h2>

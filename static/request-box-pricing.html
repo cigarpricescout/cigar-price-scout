@@ -1,0 +1,488 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-QV9XYRECFK"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-QV9XYRECFK');
+    </script>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    
+    <!-- Canonical URL -->
+    <link rel="canonical" href="https://cigarpricescout.com/request-box-pricing.html" />
+    
+    <title>Request Box Pricing - Cigar Price Scout</title>
+    <meta name="description" content="Request personalized box pricing for your favorite cigars. Our retail partners will provide competitive quotes on full boxes.">
+    
+    <!-- Same fonts as main site -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap" rel="stylesheet">
+    <link rel="icon" type="image/png" href="/static/logo.png">
+    
+    <style>
+        :root{
+            --ink:#111;
+            --muted:#4b5563;
+            --rule:#e5e7eb;
+            --accent:#7c5c2e;
+        }
+        
+        body{
+            margin:0;
+            color:var(--ink);
+            background:#faf7f2;
+            font-family:"Cormorant Garamond", serif;
+            font-size:18px;
+            line-height:1.5;
+        }
+        
+        .wrap{
+            max-width:600px;
+            margin:0 auto;
+            padding:0 20px;
+        }
+        
+        .header{
+            text-align:center;
+            padding:40px 0 30px;
+        }
+        
+        .logo{
+            width:80px;
+            height:64px;
+            object-fit:contain;
+            margin-bottom:20px;
+        }
+        
+        .brandname{
+            font-family:"Cinzel", serif;
+            font-weight:700;
+            font-size:32px;
+            margin:0 0 10px;
+            letter-spacing:0.3px;
+        }
+        
+        .tagline{
+            font-style:italic;
+            color:var(--muted);
+            margin:0 0 30px;
+            font-size:18px;
+        }
+        
+        .back-link{
+            text-align:center;
+            margin-bottom:30px;
+        }
+        
+        .back-link a{
+            color:var(--accent);
+            text-decoration:none;
+            font-weight:600;
+            font-size:16px;
+        }
+        
+        .back-link a:hover{
+            text-decoration:underline;
+        }
+        
+        .form-container{
+            background:#fff;
+            border-radius:12px;
+            padding:40px;
+            box-shadow:0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom:30px;
+        }
+        
+        .form-header{
+            text-align:center;
+            margin-bottom:30px;
+        }
+        
+        .form-header h1{
+            font-family:"Cinzel", serif;
+            font-weight:700;
+            font-size:28px;
+            margin:0 0 15px;
+            color:var(--accent);
+        }
+        
+        .form-header p{
+            color:var(--muted);
+            margin:0;
+            line-height:1.6;
+        }
+        
+        .form-group{
+            margin-bottom:20px;
+        }
+        
+        .form-row{
+            display:grid;
+            grid-template-columns:1fr 1fr;
+            gap:15px;
+        }
+        
+        label{
+            display:block;
+            font-weight:600;
+            margin-bottom:6px;
+            font-family:"Cinzel", serif;
+            color:var(--ink);
+        }
+        
+        .required{
+            color:#dc2626;
+        }
+        
+        input, select, textarea{
+            width:100%;
+            padding:12px 16px;
+            border:1px solid var(--rule);
+            border-radius:8px;
+            font-family:"Cormorant Garamond", serif;
+            font-size:16px;
+            box-sizing:border-box;
+            background:#fff;
+        }
+        
+        input:focus, select:focus, textarea:focus{
+            outline:none;
+            border-color:var(--accent);
+            box-shadow:0 0 0 3px rgba(124, 92, 46, 0.1);
+        }
+        
+        textarea{
+            resize:vertical;
+            height:100px;
+        }
+        
+        .submit-container{
+            text-align:center;
+            margin-top:30px;
+        }
+        
+        .submit-btn{
+            background:var(--accent);
+            color:#fff;
+            border:none;
+            padding:16px 32px;
+            border-radius:8px;
+            font-size:18px;
+            font-weight:600;
+            cursor:pointer;
+            font-family:"Cormorant Garamond", serif;
+            transition:all 0.3s;
+            box-shadow:0 2px 4px rgba(124, 92, 46, 0.3);
+        }
+        
+        .submit-btn:hover{
+            filter:brightness(0.95);
+            transform:translateY(-1px);
+            box-shadow:0 4px 8px rgba(124, 92, 46, 0.4);
+        }
+        
+        .benefits{
+            background:#f8fafc;
+            border-radius:8px;
+            padding:20px;
+            margin:20px 0;
+        }
+        
+        .benefits h3{
+            font-family:"Cinzel", serif;
+            font-weight:600;
+            margin-top:0;
+            color:var(--accent);
+        }
+        
+        .benefits ul{
+            margin:0;
+            padding-left:20px;
+        }
+        
+        .benefits li{
+            margin-bottom:5px;
+        }
+        
+        .footer{
+            margin-top:40px;
+            padding:20px 0;
+            border-top:1px solid var(--rule);
+            text-align:center;
+            color:var(--muted);
+            font-size:16px;
+        }
+        
+        .footer a{
+            color:var(--accent);
+            text-decoration:none;
+        }
+        
+        .footer a:hover{
+            text-decoration:underline;
+        }
+        
+        @media (max-width: 600px){
+            .form-container{
+                padding:25px;
+                margin:0 -10px 30px;
+                border-radius:0;
+            }
+            
+            .form-row{
+                grid-template-columns:1fr;
+                gap:20px;
+            }
+            
+            .brandname{
+                font-size:28px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="wrap">
+        <div class="header">
+            <img src="/static/logo.png" alt="Cigar Price Scout Logo" class="logo">
+            <h1 class="brandname">Cigar Price Scout</h1>
+            <p class="tagline">Request personalized box pricing from our retail partners</p>
+        </div>
+        
+        <div class="back-link">
+            <a href="/">&larr; Back to Price Comparison</a>
+        </div>
+        
+        <div class="form-container">
+            <div class="form-header">
+                <h1>Request a Box to Scout</h1>
+                <p>Tell us what you're looking for and we'll find the best box deals from our retail partners. We'll email you competitive quotes from multiple sources.</p>
+            </div>
+            
+            <div class="benefits">
+                <h3>Why Request Box Pricing?</h3>
+                <ul>
+                    <li>Better pricing than single cigar purchases</li>
+                    <li>Quotes from multiple authorized retailers</li>
+                    <li>Personalized service and recommendations</li>
+                    <li>No obligation — completely free service</li>
+                </ul>
+            </div>
+            
+            <form id="boxPricingForm">
+                <!-- Cigar Information -->
+                <div class="form-group">
+                    <h3 style="font-family:'Cinzel',serif;color:var(--accent);margin-bottom:15px;">Cigar Information</h3>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="brand">Brand <span class="required">*</span></label>
+                        <select id="brand" name="brand" required>
+                            <option value="">Select Brand...</option>
+                            <option value="601">601</option>
+                            <option value="Acid">Acid</option>
+                            <option value="Aging Room">Aging Room</option>
+                            <option value="Alec Bradley">Alec Bradley</option>
+                            <option value="AJ Fernandez">AJ Fernandez</option>
+                            <option value="Arturo Fuente">Arturo Fuente</option>
+                            <option value="Ashton">Ashton</option>
+                            <option value="Ave Maria">Ave Maria</option>
+                            <option value="Avo">Avo</option>
+                            <option value="Baccarat">Baccarat</option>
+                            <option value="Bolivar">Bolivar</option>
+                            <option value="CAO">CAO</option>
+                            <option value="Camacho">Camacho</option>
+                            <option value="Casa Magna">Casa Magna</option>
+                            <option value="Cohiba">Cohiba</option>
+                            <option value="Cu-Avana">Cu-Avana</option>
+                            <option value="Davidoff">Davidoff</option>
+                            <option value="Don Carlos">Don Carlos</option>
+                            <option value="Don Pepin Garcia">Don Pepin Garcia</option>
+                            <option value="Drew Estate">Drew Estate</option>
+                            <option value="Dunbarton">Dunbarton</option>
+                            <option value="E.P. Carrillo">E.P. Carrillo</option>
+                            <option value="Esteban Carreras">Esteban Carreras</option>
+                            <option value="Flor de las Antillas">Flor de las Antillas</option>
+                            <option value="Foundation">Foundation</option>
+                            <option value="General Cigar">General Cigar</option>
+                            <option value="Gurkha">Gurkha</option>
+                            <option value="H. Upmann">H. Upmann</option>
+                            <option value="Hemingway">Hemingway</option>
+                            <option value="Herrera Esteli">Herrera Esteli</option>
+                            <option value="Hoyo de Monterrey">Hoyo de Monterrey</option>
+                            <option value="Illusione">Illusione</option>
+                            <option value="Joya de Nicaragua">Joya de Nicaragua</option>
+                            <option value="JR Cigars">JR Cigars</option>
+                            <option value="La Aurora">La Aurora</option>
+                            <option value="La Flor Dominicana">La Flor Dominicana</option>
+                            <option value="La Gloria Cubana">La Gloria Cubana</option>
+                            <option value="La Palina">La Palina</option>
+                            <option value="Leaf by Oscar">Leaf by Oscar</option>
+                            <option value="Liga Privada">Liga Privada</option>
+                            <option value="Macanudo">Macanudo</option>
+                            <option value="Montecristo">Montecristo</option>
+                            <option value="My Father">My Father</option>
+                            <option value="Nub">Nub</option>
+                            <option value="Oliva">Oliva</option>
+                            <option value="Opus X">Opus X</option>
+                            <option value="Padron">Padron</option>
+                            <option value="Partagas">Partagas</option>
+                            <option value="Perdomo">Perdomo</option>
+                            <option value="Plasencia">Plasencia</option>
+                            <option value="Punch">Punch</option>
+                            <option value="Quesada">Quesada</option>
+                            <option value="Rocky Patel">Rocky Patel</option>
+                            <option value="Romeo y Julieta">Romeo y Julieta</option>
+                            <option value="San Cristobal">San Cristobal</option>
+                            <option value="Southern Draw">Southern Draw</option>
+                            <option value="Tatuaje">Tatuaje</option>
+                            <option value="Undercrown">Undercrown</option>
+                            <option value="Warped">Warped</option>
+                            <option value="Xikar">Xikar</option>
+                            <option value="Other">Other (specify in notes)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="line">Line <span class="required">*</span></label>
+                        <input type="text" id="line" name="line" placeholder="e.g., Hemingway, 1875, Anniversary..." required>
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="wrapper">Wrapper</label>
+                        <select id="wrapper" name="wrapper">
+                            <option value="">Any Wrapper...</option>
+                            <option value="Connecticut">Connecticut</option>
+                            <option value="Maduro">Maduro</option>
+                            <option value="Habano">Habano</option>
+                            <option value="Natural">Natural</option>
+                            <option value="Corojo">Corojo</option>
+                            <option value="Ecuadorian">Ecuadorian</option>
+                            <option value="Candela">Candela</option>
+                            <option value="Cameroon">Cameroon</option>
+                            <option value="Sumatra">Sumatra</option>
+                            <option value="Broadleaf">Broadleaf</option>
+                            <option value="Other">Other (specify in notes)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="vitola">Vitola</label>
+                        <input type="text" id="vitola" name="vitola" placeholder="e.g., Robusto, Churchill, Toro...">
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="boxSize">Preferred Box Size</label>
+                    <select id="boxSize" name="boxSize">
+                        <option value="">Any Size...</option>
+                        <option value="20">20 count box</option>
+                        <option value="25">25 count box</option>
+                        <option value="50">50 count box</option>
+                        <option value="other">Other (specify in notes)</option>
+                    </select>
+                </div>
+                
+                <!-- Contact Information -->
+                <div class="form-group" style="margin-top:30px;">
+                    <h3 style="font-family:'Cinzel',serif;color:var(--accent);margin-bottom:15px;">Contact Information</h3>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="name">Name <span class="required">*</span></label>
+                        <input type="text" id="name" name="name" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="zip">ZIP Code <span class="required">*</span></label>
+                        <input type="text" id="zip" name="zip" maxlength="5" pattern="[0-9]{5}" required>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="email">Email <span class="required">*</span></label>
+                    <input type="email" id="email" name="email" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="notes">Additional Notes</label>
+                    <textarea id="notes" name="notes" placeholder="Any specific preferences, timing requirements, or questions..."></textarea>
+                </div>
+                
+                <div class="submit-container">
+                    <button type="submit" class="submit-btn">Request Box Pricing</button>
+                </div>
+            </form>
+        </div>
+        
+        <footer class="footer">
+            <p>
+                <a href="/">Home</a> | 
+                <a href="/about.html">About</a> | 
+                <a href="/privacy-policy.html">Privacy</a> | 
+                <a href="/terms-of-service.html">Terms</a> | 
+                <a href="/contact.html">Contact</a>
+            </p>
+            <p>&copy; 2025 Cigar Price Scout. All rights reserved.</p>
+        </footer>
+    </div>
+
+    <script>
+        document.getElementById('boxPricingForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Get form data
+            const formData = new FormData(this);
+            const data = Object.fromEntries(formData.entries());
+            
+            // Create email subject and body
+            const subject = `Box Pricing Request: ${data.brand} ${data.line}`;
+            const body = `Box Pricing Request Details:
+
+CIGAR INFORMATION:
+Brand: ${data.brand}
+Line: ${data.line}
+Wrapper: ${data.wrapper || 'Any'}
+Vitola: ${data.vitola || 'Any'}
+Preferred Box Size: ${data.boxSize || 'Any'}
+
+CUSTOMER INFORMATION:
+Name: ${data.name}
+Email: ${data.email}
+ZIP Code: ${data.zip}
+
+ADDITIONAL NOTES:
+${data.notes || 'None'}
+
+Please respond with available box pricing options from retail partners.
+`;
+
+            // Create mailto link
+            const mailtoLink = `mailto:mikeyjoneill@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+            
+            // Open email client
+            window.location.href = mailtoLink;
+            
+            // Show success message
+            alert('Your box pricing request has been sent! We\'ll email you with available options.');
+            
+            // Reset form
+            this.reset();
+        });
+        
+        // ZIP code validation
+        document.getElementById('zip').addEventListener('input', function(e) {
+            this.value = this.value.replace(/\D/g, '').substring(0, 5);
+        });
+    </script>
+</body>
+</html>
