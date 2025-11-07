@@ -1,3 +1,63 @@
+#!/bin/bash
+
+# Cigar Price Scout - Website File Update Script
+# This script updates your HTML files with SEO improvements and canonical tags
+
+echo "🔧 Updating Cigar Price Scout website files..."
+
+# Check if we're in the right directory
+if [ ! -d "static" ]; then
+    echo "❌ Error: 'static' directory not found. Please run this script from your cigar-price-scout project root directory."
+    exit 1
+fi
+
+echo "📁 Found static directory. Proceeding with updates..."
+
+# Backup existing files
+echo "💾 Creating backups of existing files..."
+mkdir -p backups/$(date +%Y%m%d_%H%M%S)
+cp static/*.html backups/$(date +%Y%m%d_%H%M%S)/ 2>/dev/null || echo "No HTML files found to backup"
+
+# Update index.html - Add canonical URL after Twitter cards
+echo "🏠 Updating index.html..."
+sed -i 's|    <meta name="twitter:image" content="https://cigarpricescout.com/static/cigar-scout-social.png" />|    <meta name="twitter:image" content="https://cigarpricescout.com/static/cigar-scout-social.png" />\
+    \
+    <!-- Canonical URL -->\
+    <link rel="canonical" href="https://cigarpricescout.com/" />|' static/index.html
+
+# Update about.html - Add canonical URL after viewport meta
+echo "ℹ️  Updating about.html..."
+sed -i 's|    <meta name="viewport" content="width=device-width,initial-scale=1" />|    <meta name="viewport" content="width=device-width,initial-scale=1" />\
+    \
+    <!-- Canonical URL -->\
+    <link rel="canonical" href="https://cigarpricescout.com/about.html" />|' static/about.html
+
+# Update privacy-policy.html - Add canonical URL after viewport meta
+echo "🔐 Updating privacy-policy.html..."
+sed -i 's|    <meta name="viewport" content="width=device-width,initial-scale=1" />|    <meta name="viewport" content="width=device-width,initial-scale=1" />\
+    \
+    <!-- Canonical URL -->\
+    <link rel="canonical" href="https://cigarpricescout.com/privacy-policy.html" />|' static/privacy-policy.html
+
+# Update contact.html - Add canonical URL after viewport meta
+echo "📞 Updating contact.html..."
+sed -i 's|    <meta name="viewport" content="width=device-width,initial-scale=1">|    <meta name="viewport" content="width=device-width,initial-scale=1">\
+    \
+    <!-- Canonical URL -->\
+    <link rel="canonical" href="https://cigarpricescout.com/contact.html" />|' static/contact.html
+
+# Update terms-of-service.html - Add canonical URL after viewport meta
+echo "📋 Updating terms-of-service.html..."
+sed -i 's|    <meta name="viewport" content="width=device-width,initial-scale=1" />|    <meta name="viewport" content="width=device-width,initial-scale=1" />\
+    \
+    <!-- Canonical URL -->\
+    <link rel="canonical" href="https://cigarpricescout.com/terms-of-service.html" />|' static/terms-of-service.html
+
+# Create disclaimer.html if it doesn't exist or is empty
+echo "⚠️  Checking disclaimer.html..."
+if [ ! -f "static/disclaimer.html" ] || [ ! -s "static/disclaimer.html" ]; then
+    echo "📝 Creating disclaimer.html..."
+    cat > static/disclaimer.html << 'EOF'
 <!doctype html>
 <html lang="en">
   <head>
@@ -162,3 +222,29 @@
     </div>
   </body>
 </html>
+EOF
+else
+    echo "📝 disclaimer.html exists and has content, adding canonical tag..."
+    sed -i 's|    <meta name="viewport" content="width=device-width,initial-scale=1" />|    <meta name="viewport" content="width=device-width,initial-scale=1" />\
+    \
+    <!-- Canonical URL -->\
+    <link rel="canonical" href="https://cigarpricescout.com/disclaimer.html" />|' static/disclaimer.html
+fi
+
+echo ""
+echo "✅ Website files updated successfully!"
+echo ""
+echo "📋 Changes made:"
+echo "   • Added canonical URLs to all pages"
+echo "   • Created/updated disclaimer.html"
+echo "   • Improved meta tag structure"
+echo "   • Backed up original files to backups/ directory"
+echo ""
+echo "🚀 Next steps:"
+echo "   1. Test your website locally to ensure everything works"
+echo "   2. Deploy these changes to your live site"
+echo "   3. Submit your sitemap to Google Search Console"
+echo "   4. Request re-indexing of your pages"
+echo ""
+echo "💡 These changes should resolve the Google indexing issues within 2-4 weeks."
+EOF
