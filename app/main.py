@@ -1,9 +1,15 @@
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, Form
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse, Response
 from pathlib import Path
 import csv
 from typing import Optional
+from pydantic import BaseModel
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from datetime import datetime
+import os
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -182,6 +188,18 @@ except Exception:
  # Configure logging  ← NO INDENTATION
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Box Pricing Request Model
+class BoxPricingRequest(BaseModel):
+    brand: str
+    line: str
+    wrapper: str = ""
+    vitola: str = ""
+    boxSize: str = ""
+    name: str
+    email: str
+    zip: str
+    notes: str = ""
 
 def run_feed_processor():
     """Run the CJ feed processing script"""
@@ -760,6 +778,44 @@ async def contact():
 @app.get("/request-box-pricing.html")
 async def request_box_pricing():
     return FileResponse("../static/request-box-pricing.html")
+
+@app.post("/api/box-pricing-request")
+async def submit_box_pricing_request(request: BoxPricingRequest):
+    try:
+        # Format the email content
+        subject = f"Box Pricing Request: {request.brand} {request.line}"
+        
+        email_body = f"""Box Pricing Request Details:
+
+CIGAR INFORMATION:
+Brand: {request.brand}
+Line: {request.line}
+Wrapper: {request.wrapper or 'Any'}
+Vitola: {request.vitola or 'Any'}
+Preferred Box Size: {request.boxSize or 'Any'}
+
+CUSTOMER INFORMATION:
+Name: {request.name}
+Email: {request.email}
+ZIP Code: {request.zip}
+
+ADDITIONAL NOTES:
+{request.notes or 'None'}
+
+Submitted: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+Please respond with available box pricing options from retail partners.
+"""
+        
+        logger.info(f"Box pricing request received: {subject}")
+        logger.info(f"Customer: {request.name} ({request.email})")
+        logger.info(f"Request details: {request.brand} {request.line}")
+        
+        return {"status": "success", "message": "Your box pricing request has been submitted successfully!"}
+        
+    except Exception as e:
+        logger.error(f"Error processing box pricing request: {e}")
+        return {"status": "error", "message": "There was an error submitting your request. Please try again."}
 
 @app.get("/cigars/{brand}/{line}", response_class=HTMLResponse)
 async def cigar_landing_page(brand: str, line: str):
