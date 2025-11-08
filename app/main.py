@@ -807,9 +807,50 @@ Submitted: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 Please respond with available box pricing options from retail partners.
 """
         
-        logger.info(f"Box pricing request received: {subject}")
-        logger.info(f"Customer: {request.name} ({request.email})")
-        logger.info(f"Request details: {request.brand} {request.line}")
+       # Log the complete request details
+        full_request = f"""
+========== NEW BOX PRICING REQUEST ==========
+CIGAR DETAILS:
+- Brand: {request.brand}
+- Line: {request.line}
+- Wrapper: {request.wrapper or 'Any wrapper'}
+- Vitola: {request.vitola or 'Any vitola'}
+- Preferred Box Size: {request.boxSize or 'Any size'}
+
+CUSTOMER INFO:
+- Name: {request.name}
+- Email: {request.email}
+- ZIP Code: {request.zip}
+
+ADDITIONAL NOTES:
+{request.notes or 'None'}
+
+Submitted: {datetime.now().strftime('%Y-%m-%d at %H:%M:%S')}
+============================================
+"""
+        logger.info(full_request)
+```
+
+This will give you a complete, readable summary of each request in your Railway logs, formatted like:
+```
+========== NEW BOX PRICING REQUEST ==========
+CIGAR DETAILS:
+- Brand: Aging Room
+- Line: Something
+- Wrapper: Cameroon
+- Vitola: Robusto
+- Preferred Box Size: 25
+
+CUSTOMER INFO:
+- Name: Michael
+- Email: mikeyjoneill@gmail.com
+- ZIP Code: 97008
+
+ADDITIONAL NOTES:
+Looking for best pricing on this specific vitola
+
+Submitted: 2025-11-07 at 15:30:39
+============================================
         
         return {"status": "success", "message": "Your box pricing request has been submitted successfully!"}
         
