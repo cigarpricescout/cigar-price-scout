@@ -785,30 +785,8 @@ async def submit_box_pricing_request(request: BoxPricingRequest):
         # Format the email content
         subject = f"Box Pricing Request: {request.brand} {request.line}"
         
-        email_body = f"""Box Pricing Request Details:
-
-CIGAR INFORMATION:
-Brand: {request.brand}
-Line: {request.line}
-Wrapper: {request.wrapper or 'Any'}
-Vitola: {request.vitola or 'Any'}
-Preferred Box Size: {request.boxSize or 'Any'}
-
-CUSTOMER INFORMATION:
-Name: {request.name}
-Email: {request.email}
-ZIP Code: {request.zip}
-
-ADDITIONAL NOTES:
-{request.notes or 'None'}
-
-Submitted: {datetime.now().strftime('%Y-%m-%d at %H:%M:%S')}
-
-Please respond with available box pricing options from retail partners.
-"""
-        
-       # Log the complete request details
-submission_time = datetime.now().strftime('%Y-%m-%d at %H:%M:%S')
+        # Log the complete request details
+        submission_time = datetime.now().strftime('%Y-%m-%d at %H:%M:%S')
         full_request = f"""
 ========== NEW BOX PRICING REQUEST ==========
 CIGAR DETAILS:
@@ -830,28 +808,6 @@ Submitted: {submission_time}
 ============================================
 """
         logger.info(full_request)
-```
-
-This will give you a complete, readable summary of each request in your Railway logs, formatted like:
-```
-========== NEW BOX PRICING REQUEST ==========
-CIGAR DETAILS:
-- Brand: Aging Room
-- Line: Something
-- Wrapper: Cameroon
-- Vitola: Robusto
-- Preferred Box Size: 25
-
-CUSTOMER INFO:
-- Name: Michael
-- Email: mikeyjoneill@gmail.com
-- ZIP Code: 97008
-
-ADDITIONAL NOTES:
-Looking for best pricing on this specific vitola
-
-Submitted: 2025-11-07 at 15:30:39
-============================================
         
         return {"status": "success", "message": "Your box pricing request has been submitted successfully!"}
         
