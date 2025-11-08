@@ -802,12 +802,13 @@ ZIP Code: {request.zip}
 ADDITIONAL NOTES:
 {request.notes or 'None'}
 
-Submitted: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+Submitted: {datetime.now().strftime('%Y-%m-%d at %H:%M:%S')}
 
 Please respond with available box pricing options from retail partners.
 """
         
        # Log the complete request details
+submission_time = datetime.now().strftime('%Y-%m-%d at %H:%M:%S')
         full_request = f"""
 ========== NEW BOX PRICING REQUEST ==========
 CIGAR DETAILS:
@@ -825,7 +826,7 @@ CUSTOMER INFO:
 ADDITIONAL NOTES:
 {request.notes or 'None'}
 
-Submitted: {datetime.now().strftime('%Y-%m-%d at %H:%M:%S')}
+Submitted: {submission_time}
 ============================================
 """
         logger.info(full_request)
