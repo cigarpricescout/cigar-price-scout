@@ -169,6 +169,14 @@ except Exception:
             'escobarcigars': ['FL'],
             'gothamcigars': ['FL'],
             'cigarpairingparlor': ['WA'],
+            'baysidecigars': ['FL'],  # Sounds like Florida-based
+            'cigarboxinc': ['PA'],  # Many cigar retailers are PA-based
+            'cigarprimestore': ['FL'],  # Estimated
+            'karmacigar': ['CA'],  # Many cigar bars are CA-based
+            'mailcubancigars': [],  # Swiss company - likely no US tax nexus
+            'pyramidcigars': ['FL'],  # Estimated Florida
+            'thecigarshouse': ['FL'],  # Estimated Florida  
+            'tobacconistofgreenwich': ['CT'],  # Greenwich is in Connecticut
         }
         
         # Load tax rates
@@ -176,7 +184,7 @@ except Exception:
             'PA': 0.08, 'FL': 0.07, 'TX': 0.082, 'AZ': 0.084, 'NC': 0.07, 'NJ': 0.066, 
             'SC': 0.073, 'NY': 0.086, 'WA': 0.092, 'IL': 0.089, 'NV': 0.0825, 'TN': 0.07,
             'DC': 0.06, 'VA': 0.057, 'DE': 0.0, 'OH': 0.0725, 'MI': 0.06, 'MA': 0.0625,
-            'CA': 0.0825, 'NH': 0.0
+            'CA': 0.0825, 'NH': 0.0, 'CT': 0.0635
         }
         
         # Only charge tax if customer is in a state where retailer has nexus
@@ -332,6 +340,14 @@ RETAILERS = [
     {"key": "twoguys", "name": "Two Guys Smoke Shop", "csv": "../static/data/twoguys.csv", "authorized": False},
     {"key": "watchcity", "name": "Watch City Cigar", "csv": "../static/data/watchcity.csv", "authorized": False},
     {"key": "windycitycigars", "name": "Windy City Cigars", "csv": "../static/data/windycitycigars.csv", "authorized": False},
+    {"key": "baysidecigars", "name": "Bayside Cigars", "csv": "../static/data/baysidecigars.csv", "authorized": False},
+    {"key": "cigarboxinc", "name": "Cigar Box Inc", "csv": "../static/data/cigarboxinc.csv", "authorized": False},
+    {"key": "cigarprimestore", "name": "Cigar Prime Store", "csv": "../static/data/cigarprimestore.csv", "authorized": False},
+    {"key": "karmacigar", "name": "Karma Cigar Bar", "csv": "../static/data/karmacigar.csv", "authorized": False},
+    {"key": "mailcubancigars", "name": "Mail Cuban Cigars", "csv": "../static/data/mailcubancigars.csv", "authorized": False},
+    {"key": "pyramidcigars", "name": "Pyramid Cigars", "csv": "../static/data/pyramidcigars.csv", "authorized": False},
+    {"key": "thecigarshouse", "name": "The Cigars House", "csv": "../static/data/thecigarshouse.csv", "authorized": False},
+    {"key": "tobacconistofgreenwich", "name": "Tobacconist of Greenwich", "csv": "../static/data/tobacconistofgreenwich.csv", "authorized": False},
 ]
 
 # Enhanced CSV loader with wrapper and vitola support
