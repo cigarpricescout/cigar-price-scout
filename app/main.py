@@ -314,7 +314,7 @@ RETAILERS = [
     {"key": "cuencacigars", "name": "Cuenca Cigars", "csv": "../static/data/cuencacigars.csv", "authorized": False},
     {"key": "escobarcigars", "name": "Escobar Cigars", "csv": "../static/data/escobarcigars.csv", "authorized": False},
     {"key": "famous", "name": "Famous Smoke Shop", "csv": "../static/data/famous.csv", "authorized": True},
-    {"key": "foxcigar", "name": "Fox Cigar", "csv": "../static/data/fox_cigar.csv", "authorized": False},
+    {"key": "foxcigar", "name": "Fox Cigar", "csv": "../static/data/foxcigar.csv", "authorized": False},
     {"key": "gothamcigars", "name": "Gotham Cigars", "csv": "../static/data/gothamcigars.csv", "authorized": True},
     {"key": "hilands", "name": "Hiland's Cigars", "csv": "../static/data/hilands.csv", "authorized": False},
     {"key": "holts", "name": "Holt's Cigar Company", "csv": "../static/data/holts.csv", "authorized": False},
