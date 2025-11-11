@@ -6,7 +6,6 @@ Prepares your cigar price automation system for Railway deployment
 
 import os
 import shutil
-import zipfile
 from pathlib import Path
 
 def prepare_railway_deployment():
@@ -23,7 +22,7 @@ def prepare_railway_deployment():
     
     print(f"[INFO] Created deployment directory: {deploy_dir}")
     
-    # Core automation files
+    # Core automation files needed
     core_files = [
         "automation_master.py",
         "requirements.txt", 
@@ -32,7 +31,7 @@ def prepare_railway_deployment():
         "railway.env.template"
     ]
     
-    # Copy core files
+    # Copy core files if they exist
     for file in core_files:
         if Path(file).exists():
             shutil.copy2(file, deploy_dir / file)
@@ -59,7 +58,7 @@ def prepare_railway_deployment():
         "nicks_cigars.py"
     ]
     
-    # Copy extractors (you'll need to provide these)
+    # List extractors needed
     print("\n[EXTRACTORS] Files needed in tools/price_monitoring/retailers/:")
     for file in extractor_files:
         print(f"[NEED] {file}")
@@ -71,7 +70,7 @@ def prepare_railway_deployment():
     updater_files = [
         "update_atlantic_prices_final.py",
         "update_foxcigar_prices_final.py",
-        "update_nicks_prices_final.py"  # You'll create this
+        "update_nicks_prices_final.py"
     ]
     
     print("\n[UPDATERS] Files needed in app/:")
@@ -93,6 +92,68 @@ def prepare_railway_deployment():
         sample_csv.write_text("cigar_id,title,url,brand,line,wrapper,vitola,size,box_qty,price,in_stock\n")
         print(f"[OK] Created sample {csv_file}")
     
+    # Create deployment README
+    readme_content = """# Cigar Price Scout - Railway Deployment
+
+## Setup Instructions
+
+1. Create Railway Project:
+   railway login
+   railway init
+
+2. Set Environment Variables in Railway Dashboard:
+   - Copy variables from railway.env.template
+   - Configure email settings (optional)
+
+3. Upload Your Files:
+   - Copy your extractor files to tools/price_monitoring/retailers/
+   - Copy your updater scripts to app/
+   - Upload your actual CSV files to static/data/
+   - Upload master_cigars.csv to data/
+
+4. Deploy:
+   railway up
+
+## Manual Testing Commands
+
+# Test single retailer
+python automation_master.py manual atlantic
+
+# Test all retailers  
+python automation_master.py manual
+
+# Test mode (Atlantic only)
+python automation_master.py test
+
+## File Structure
+
+/app
+  automation_master.py           (Main orchestrator)
+  requirements.txt               (Python dependencies)
+  Dockerfile                     (Container configuration)
+  tools/
+    price_monitoring/
+      retailers/
+        fox_cigar.py
+        atlantic_cigar_extractor.py
+        nicks_cigars.py
+  app/
+    update_atlantic_prices_final.py
+    update_foxcigar_prices_final.py
+    update_nicks_prices_final.py
+  data/
+    master_cigars.csv
+  static/data/
+    atlantic.csv
+    foxcigar.csv
+    nickscigarworld.csv
+  logs/
+    automation.log
+"""
+    
+    (deploy_dir / "README.md").write_text(readme_content)
+    print(f"[OK] Created deployment README")
+    
     print("\n[NEXT STEPS]:")
     print("1. Copy your extractor files to railway_deployment/tools/price_monitoring/retailers/")
     print("2. Copy your updater scripts to railway_deployment/app/")  
@@ -101,102 +162,6 @@ def prepare_railway_deployment():
     print("5. Upload to Railway and configure environment variables")
     
     print(f"\n[COMPLETE] All files prepared in: {deploy_dir.absolute()}")
-
-if __name__ == "__main__":
-    prepare_railway_deployment()
-# Cigar Price Scout - Railway Deployment
-
-## Setup Instructions
-
-1. **Create Railway Project**
-   ```bash
-   railway login
-   railway init
-   ```
-
-2. **Set Environment Variables in Railway Dashboard:**
-   - Copy variables from `railway.env.template`
-   - Configure email settings (optional)
-   - Set MASTER_CIGARS_URL if using Google Sheets
-
-3. **Upload Your Files:**
-   - Copy your extractor files to `retailers/` directory
-   - Copy your updater scripts to `updaters/` directory  
-   - Upload your actual CSV files to `static/data/`
-
-4. **Deploy:**
-   ```bash
-   railway up
-   ```
-
-## Manual Testing Commands
-
-```bash
-# Test single retailer
-python automation_master.py manual atlantic
-
-# Test all retailers
-python automation_master.py manual
-
-# Test mode (Atlantic only)
-python automation_master.py test
-```
-
-## Monitoring
-
-- Check Railway logs for automation status
-- Email notifications (if configured) for update results
-- Weekly automated updates on Sundays at 3 AM UTC
-
-## File Structure Required
-
-```
-/app
-├── automation_master.py           # Main orchestrator
-├── requirements.txt               # Python dependencies
-├── Dockerfile                     # Container configuration
-├── retailers/                     # Extractor modules
-│   ├── __init__.py
-│   ├── fox_cigar.py
-│   ├── atlantic_cigar.py
-│   └── nicks_cigars.py
-├── updaters/                      # Update scripts
-│   ├── update_atlantic_prices_final.py
-│   ├── update_foxcigar_prices_final.py
-│   └── update_nicks_prices_final.py
-├── data/                          # Master data files
-│   └── master_cigars.csv
-├── static/data/                   # Retailer CSV files
-│   ├── atlantic.csv
-│   ├── foxcigar.csv
-│   └── nickscigarworld.csv
-└── logs/                          # Log files
-    └── automation.log
-```
-"""
-    
-    (deploy_dir / "README.md").write_text(readme_content)
-    print(f"✅ Created deployment README")
-    
-    # Create zip file for easy upload
-    zip_path = "cigar_price_scout_railway.zip"
-    with zipfile.ZipFile(zip_path, 'w') as zipf:
-        for file_path in deploy_dir.rglob('*'):
-            if file_path.is_file():
-                arcname = file_path.relative_to(deploy_dir)
-                zipf.write(file_path, arcname)
-    
-    print(f"✅ Created deployment package: {zip_path}")
-    
-    print("\n🎯 NEXT STEPS:")
-    print("1. Copy your extractor files (fox_cigar.py, etc.) to railway_deployment/retailers/")
-    print("2. Copy your updater scripts to railway_deployment/updaters/")  
-    print("3. Copy your CSV files to railway_deployment/static/data/")
-    print("4. Upload to Railway and configure environment variables")
-    print("5. Deploy and test!")
-    
-    print(f"\n📦 All files prepared in: {deploy_dir.absolute()}")
-    print(f"📁 Deployment package: {Path(zip_path).absolute()}")
 
 if __name__ == "__main__":
     prepare_railway_deployment()

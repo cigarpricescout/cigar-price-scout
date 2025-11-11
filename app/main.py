@@ -11,8 +11,14 @@ from email.mime.multipart import MIMEMultipart
 from datetime import datetime
 import os
 
-from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.cron import CronTrigger
+try:
+    from apscheduler.schedulers.background import BackgroundScheduler
+    from apscheduler.triggers.cron import CronTrigger
+    scheduler_available = True
+except ImportError:
+    BackgroundScheduler = None
+    CronTrigger = None
+    scheduler_available = False
 import subprocess
 import logging
 
