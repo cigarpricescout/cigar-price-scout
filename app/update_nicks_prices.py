@@ -1,7 +1,12 @@
 """
-Nick's Cigar World CSV Updater with Master File Integration
-Updates pricing AND auto-populates all metadata from master file
-Works with minimal CSV input - just cigar_id + URL needed
+Nick's Cigar World CSV Updater with Google Sheets Master File Integration
+Uses cigar_id from master_cigars.csv for metadata auto-population
+
+Master file columns: Brand, Line, Wrapper, Wrapper_Alias, Vitola, Length, Ring Gauge, 
+Binder, Filler, Strength, Box Quantity, Style, cigar_id, parent_brand, sub_brand, 
+product_name, wrapper_code, packaging_type, country_of_origin, factory, release_type, 
+sampler_flag, msrp_stick_usd, msrp_box_usd, first_release_year, discontinued_flag, 
+retailer_sku, upc_ean, notes, source_url
 """
 
 import csv
@@ -29,13 +34,11 @@ except ImportError as e:
 class NicksCSVUpdaterWithMaster:
     def __init__(self, csv_path: str = None, master_path: str = None):
         if csv_path is None:
-            # Default path relative to app directory - updated to match actual filename
             self.csv_path = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'nickscigarworld.csv')
         else:
             self.csv_path = csv_path
             
         if master_path is None:
-            # Default path to master file
             self.master_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'master_cigars.csv')
         else:
             self.master_path = master_path
@@ -48,330 +51,252 @@ class NicksCSVUpdaterWithMaster:
         try:
             self.master_df = pd.read_csv(self.master_path)
             
-            # Convert Box Quantity to numeric, replacing any non-numeric values with 0
+            # Convert Box Quantity to numeric
             self.master_df['Box Quantity'] = pd.to_numeric(self.master_df['Box Quantity'], errors='coerce').fillna(0)
             
-            # Filter to only box quantities (10+) for retail comparison
+            # Filter to box quantities (10+)
             box_skus = self.master_df[self.master_df['Box Quantity'] >= 10]
             
-            print(f"[OK] Loaded {len(self.master_df)} total SKUs from master file")
-            print(f"[OK] Found {len(box_skus)} box quantity SKUs (10+ cigars)")
-            
+            print(f"[INFO] Loaded master file with {len(self.master_df)} total cigars")
+            print(f"[INFO] Found {len(box_skus)} box SKUs for retail comparison")
             return True
+            
+        except FileNotFoundError:
+            print(f"[ERROR] Master file not found at: {self.master_path}")
+            return False
         except Exception as e:
-            print(f"[ERROR] Failed to load master file: {str(e)}")
+            print(f"[ERROR] Failed to load master file: {e}")
             return False
     
-    def get_master_data_by_cigar_id(self, cigar_id: str) -> Dict:
-        """Get metadata from master file for a given cigar_id"""
-        try:
-            # Find the row with matching cigar_id
-            matching_rows = self.master_df[self.master_df['cigar_id'] == cigar_id]
-            
-            if matching_rows.empty:
-                return {}
-                
-            row = matching_rows.iloc[0]  # Take first match
-            
-            return {
-                'brand': str(row['Brand']),
-                'line': str(row['Line']),
-                'wrapper': str(row['Wrapper']),
-                'vitola': str(row['Vitola']),
-                'size': f"{row['Length']}x{row['Ring Gauge']}",
-                'box_qty': int(row['Box Quantity']),
-                'binder': str(row.get('Binder', '')),
-                'filler': str(row.get('Filler', '')),
-                'strength': str(row.get('Strength', '')),
-                'style': str(row.get('Style', '')),
-                'wrapper_alias': str(row.get('Wrapper_Alias', '')),
-                'country': str(row.get('country_of_origin', '')),
-                'factory': str(row.get('factory', ''))
-            }
-        except Exception as e:
-            print(f"[ERROR] Failed to get master data for cigar_id {cigar_id}: {str(e)}")
+    def get_cigar_metadata(self, cigar_id: str) -> Dict:
+        """Get metadata for a cigar from the master file"""
+        if self.master_df is None:
             return {}
         
+        matching_rows = self.master_df[self.master_df['cigar_id'] == cigar_id]
+        
+        if len(matching_rows) == 0:
+            print(f"[WARNING] No metadata found for cigar_id: {cigar_id}")
+            return {}
+        
+        if len(matching_rows) > 1:
+            print(f"[WARNING] Multiple matches found for cigar_id: {cigar_id}, using first match")
+        
+        row = matching_rows.iloc[0]
+        
+        # Build size string from Length x Ring Gauge
+        size = ''
+        if pd.notna(row.get('Length')) and pd.notna(row.get('Ring Gauge')):
+            size = f"{row.get('Length')}x{row.get('Ring Gauge')}"
+        
+        # Get box quantity
+        box_qty = 0
+        if pd.notna(row.get('Box Quantity')):
+            try:
+                box_qty = int(row.get('Box Quantity', 0))
+            except (ValueError, TypeError):
+                pass
+        
+        return {
+            'title': row.get('product_name', ''),
+            'brand': row.get('Brand', ''), 
+            'line': row.get('Line', ''),
+            'wrapper': row.get('Wrapper', ''),
+            'vitola': row.get('Vitola', ''),
+            'size': size,
+            'box_qty': box_qty
+        }
+    
+    def auto_populate_metadata(self, row: Dict) -> Dict:
+        """Auto-populate missing metadata from master file"""
+        cigar_id = row.get('cigar_id', '')
+        if not cigar_id:
+            return row
+        
+        metadata = self.get_cigar_metadata(cigar_id)
+        
+        # Auto-populate fields that are empty or missing
+        for field in ['title', 'brand', 'line', 'wrapper', 'vitola', 'size', 'box_qty']:
+            if not row.get(field) and field in metadata and metadata[field]:
+                row[field] = metadata[field]
+        
+        return row
+    
     def create_backup(self) -> bool:
         """Create a backup of the current CSV file"""
         try:
-            if not os.path.exists(self.csv_path):
-                print(f"[INFO] CSV file doesn't exist yet: {self.csv_path}")
-                return True
-                
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            backup_dir = os.path.dirname(self.csv_path)
-            backup_filename = f"nicks_backup_{timestamp}.csv"
-            self.backup_path = os.path.join(backup_dir, backup_filename)
-            
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            self.backup_path = self.csv_path.replace('.csv', f'_backup_{timestamp}.csv')
             shutil.copy2(self.csv_path, self.backup_path)
-            print(f"[OK] Backup created: {backup_filename}")
+            print(f"[INFO] Backup created: {self.backup_path}")
             return True
-            
         except Exception as e:
-            print(f"[ERROR] Failed to create backup: {str(e)}")
+            print(f"[ERROR] Failed to create backup: {e}")
             return False
     
-    def read_csv_data(self) -> List[Dict]:
-        """Read the current CSV data (handles minimal input format)"""
+    def load_csv(self) -> List[Dict]:
+        """Load the CSV file"""
         try:
-            if not os.path.exists(self.csv_path):
-                print(f"[INFO] Creating new CSV file: {self.csv_path}")
-                return []
-                
-            with open(self.csv_path, 'r', newline='', encoding='utf-8') as file:
-                reader = csv.DictReader(file)
+            with open(self.csv_path, 'r', newline='', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
                 data = list(reader)
-                print(f"[OK] Read {len(data)} products from CSV")
-                return data
-                
+            
+            print(f"[INFO] Loaded {len(data)} products from Nick's CSV")
+            return data
+        except FileNotFoundError:
+            print(f"[ERROR] Nick's CSV not found at: {self.csv_path}")
+            return []
         except Exception as e:
-            print(f"[ERROR] Failed to read CSV: {str(e)}")
+            print(f"[ERROR] Failed to load CSV: {e}")
             return []
     
-    def write_csv_data(self, data: List[Dict]) -> bool:
-        """Write updated data back to CSV with complete structure"""
+    def save_csv(self, data: List[Dict]) -> bool:
+        """Save the updated data back to CSV"""
+        if not data:
+            print("[ERROR] No data to save")
+            return False
+        
         try:
-            if not data:
-                print("[ERROR] No data to write")
-                return False
-                
-            # Ensure all required columns exist with proper order
-            required_columns = [
-                'cigar_id', 'title', 'url', 'brand', 'line', 
-                'wrapper', 'vitola', 'size', 'box_qty', 'price', 'in_stock'
-            ]
+            fieldnames = ['cigar_id', 'title', 'url', 'brand', 'line', 'wrapper', 'vitola', 'size', 'box_qty', 'price', 'in_stock']
             
-            # Make sure each row has all columns
-            complete_data = []
-            for row in data:
-                complete_row = {}
-                for col in required_columns:
-                    complete_row[col] = row.get(col, '')
-                complete_data.append(complete_row)
-            
-            with open(self.csv_path, 'w', newline='', encoding='utf-8') as file:
-                writer = csv.DictWriter(file, fieldnames=required_columns)
+            with open(self.csv_path, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
                 writer.writeheader()
-                writer.writerows(complete_data)
-                
-            print(f"[OK] Updated CSV file with {len(complete_data)} products")
-            return True
+                writer.writerows(data)
             
+            print(f"[INFO] Updated data saved to {self.csv_path}")
+            return True
         except Exception as e:
-            print(f"[ERROR] Failed to write CSV: {str(e)}")
+            print(f"[ERROR] Failed to save CSV: {e}")
             return False
     
-    def generate_title_from_master(self, master_data: Dict) -> str:
-        """Generate a descriptive title from master file data"""
+    def update_pricing_data(self, url: str) -> Dict:
+        """Extract live pricing data from Nick's Cigar World"""
         try:
-            brand = master_data.get('brand', '')
-            line = master_data.get('line', '')
-            vitola = master_data.get('vitola', '')
-            size = master_data.get('size', '')
-            box_qty = master_data.get('box_qty', '')
+            result = extract_nicks_cigars_data(url)
             
-            # Create title: "Brand Line Vitola Size (Box of X)"
-            title_parts = []
-            if brand: title_parts.append(brand)
-            if line: title_parts.append(line)
-            if vitola: title_parts.append(vitola)
-            if size: title_parts.append(size)
-            
-            title = ' '.join(title_parts)
-            if box_qty: title += f" (Box of {box_qty})"
-            
-            return title
-        except Exception:
-            return "Unknown Product"
+            if result.get('success'):
+                return {
+                    'price': result.get('price'),
+                    'in_stock': result.get('in_stock'),
+                    'box_quantity': result.get('box_quantity'),
+                    'discount_percent': result.get('discount_percent')
+                }
+            else:
+                print(f"[WARNING] Extraction failed: {result.get('error', 'Unknown error')}")
+                return {'error': result.get('error', 'Extraction failed')}
+                
+        except Exception as e:
+            print(f"[ERROR] Price extraction failed: {e}")
+            return {'error': str(e)}
     
-    def update_product_data(self, product: Dict) -> Dict:
-        """Update a single product's data - auto-populate everything from minimal input"""
-        cigar_id = product.get('cigar_id', '').strip() if product.get('cigar_id') else ''
-        url = product.get('url', '').strip() if product.get('url') else ''
-        existing_title = product.get('title', '').strip() if product.get('title') else ''
-        
-        if not cigar_id:
-            print(f"[SKIP] No cigar_id provided")
-            return product
-            
-        if not url:
-            print(f"[SKIP] No URL provided for cigar_id: {cigar_id}")
-            return product
-        
-        print(f"[PROCESSING] {existing_title or cigar_id}")
-        print(f"             Cigar ID: {cigar_id}")
-        print(f"             URL: {url}")
-        
-        # Get metadata from master file
-        master_data = self.get_master_data_by_cigar_id(cigar_id)
-        
-        if master_data:
-            # Auto-populate ALL metadata from master file
-            for field in ['brand', 'line', 'wrapper', 'vitola', 'size', 'box_qty']:
-                if field in master_data:
-                    old_val = product.get(field, '')
-                    new_val = master_data[field]
-                    product[field] = new_val
-                    
-                    if not old_val or str(old_val) != str(new_val):
-                        print(f"             {field.title()}: Set to '{new_val}'")
-            
-            # Generate title if not provided
-            if not existing_title:
-                generated_title = self.generate_title_from_master(master_data)
-                product['title'] = generated_title
-                print(f"             Title: Generated '{generated_title}'")
-        else:
-            print(f"             [WARNING] No master data found for cigar_id: {cigar_id}")
-        
-        # Extract live pricing data from Nick's
-        extraction_result = extract_nicks_cigars_data(url)
-        
-        if not extraction_result.get('success'):
-            error_msg = extraction_result.get('error', 'Extraction failed')
-            print(f"             [ERROR] {error_msg}")
-            return product
-        
-        # Update price
-        if extraction_result.get('price') is not None:
-            old_price = product.get('price', 'N/A')
-            new_price = extraction_result['price']
-            
-            product['price'] = new_price
-            print(f"             Price: ${new_price}")
-        else:
-            print(f"             Price: No valid price found")
-        
-        # Update stock status
-        if extraction_result.get('in_stock') is not None:
-            old_stock = product.get('in_stock', 'N/A')
-            new_stock = extraction_result['in_stock']
-            
-            product['in_stock'] = str(new_stock).lower()
-            
-            stock_text = "IN STOCK" if new_stock else "OUT OF STOCK"
-            print(f"             Stock: {stock_text}")
-        
-        # Cross-check box quantity from extraction vs master file
-        if extraction_result.get('box_quantity') is not None:
-            extracted_qty = extraction_result['box_quantity']
-            master_qty = master_data.get('box_qty', '')
-            
-            if master_qty and extracted_qty and master_qty != extracted_qty:
-                print(f"             [WARNING] Box qty mismatch: Master={master_qty}, Extracted={extracted_qty}")
-                # Keep master file quantity as authoritative
-            elif not master_qty and extracted_qty:
-                product['box_qty'] = extracted_qty
-                print(f"             Box qty: Updated to {extracted_qty} (from page)")
-        
-        # Show discount info if available
-        if extraction_result.get('discount_percent'):
-            print(f"             Discount: {extraction_result['discount_percent']:.1f}% off")
-        
-        print(f"[OK] Updated: {product.get('title', cigar_id)}")
-        return product
-    
-    def update_all_products(self, max_products: int = None) -> bool:
-        """Update pricing and metadata for all products in the CSV"""
-        print("=== Nick's Cigar World CSV Updater with Master File Integration ===")
-        print(f"CSV File: {self.csv_path}")
-        print(f"Master File: {self.master_path}")
-        print(f"Supports minimal input: Just cigar_id + URL required!")
+    def run_update(self) -> bool:
+        """Run the complete update process"""
+        print("=" * 70)
+        print(f"NICK'S CIGAR WORLD PRICE UPDATE - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print("=" * 70)
         
         # Load master file
         if not self.load_master_file():
-            print("[ERROR] Cannot proceed without master file")
+            return False
+        
+        # Load CSV
+        data = self.load_csv()
+        if not data:
             return False
         
         # Create backup
         if not self.create_backup():
-            print("[ERROR] Cannot proceed without backup")
             return False
         
-        # Read current data
-        products = self.read_csv_data()
-        if not products:
-            print("[ERROR] No products to process")
-            print("[HINT] Add products to CSV with format: cigar_id,url,title,brand,line,wrapper,vitola,size,box_qty,price,in_stock")
-            print("[HINT] Minimal input works: just fill cigar_id and url, leave other fields empty")
-            return False
+        # Update each product
+        successful_updates = 0
+        failed_updates = 0
         
-        # Limit products if specified (for testing)
-        if max_products:
-            products = products[:max_products]
-            print(f"[INFO] Processing first {max_products} products only")
-        
-        print(f"\n=== Processing {len(products)} products ===")
-        
-        updated_count = 0
-        error_count = 0
-        
-        # Process each product
-        for i, product in enumerate(products, 1):
-            print(f"\n[{i}/{len(products)}]", end=" ")
+        for i, row in enumerate(data):
+            cigar_id = row.get('cigar_id', 'Unknown')
+            url = row.get('url', '')
             
-            try:
-                original_product = product.copy()
-                updated_product = self.update_product_data(product)
-                
-                # Check if anything actually changed
-                if updated_product != original_product:
-                    updated_count += 1
-                
-            except Exception as e:
-                error_count += 1
-                print(f"[ERROR] Failed to process {product.get('cigar_id', 'Unknown')}: {str(e)}")
+            print(f"\n[{i+1}/{len(data)}] Processing: {cigar_id}")
+            
+            # Auto-populate metadata from master file
+            row = self.auto_populate_metadata(row)
+            
+            # Skip if no URL
+            if not url:
+                print("  [SKIP] No URL provided")
+                failed_updates += 1
                 continue
+            
+            # Extract live pricing
+            pricing_data = self.update_pricing_data(url)
+            
+            if 'error' in pricing_data:
+                print(f"  [FAIL] {pricing_data['error']}")
+                failed_updates += 1
+                continue
+            
+            # Update the row with new pricing data
+            if pricing_data.get('price') is not None:
+                row['price'] = pricing_data['price']
+            if pricing_data.get('in_stock') is not None:
+                row['in_stock'] = pricing_data['in_stock']
+            
+            # Validate box quantity if available
+            if pricing_data.get('box_quantity'):
+                extracted_qty = pricing_data['box_quantity']
+                csv_qty = row.get('box_qty')
+                
+                if csv_qty and int(extracted_qty) != int(csv_qty):
+                    print(f"  [WARNING] Box quantity mismatch - CSV: {csv_qty}, Extracted: {extracted_qty}")
+            
+            # Show results
+            price_str = f"${pricing_data.get('price', 'N/A')}"
+            stock_str = "In Stock" if pricing_data.get('in_stock') else "Out of Stock"
+            discount_str = f" ({pricing_data['discount_percent']:.1f}% off)" if pricing_data.get('discount_percent') else ""
+            
+            print(f"  [OK] {price_str} | {stock_str}{discount_str}")
+            successful_updates += 1
         
-        # Write updated data back to CSV
-        if self.write_csv_data(products):
-            print(f"\n=== Update Complete ===")
-            print(f"Products processed: {len(products)}")
-            print(f"Products updated: {updated_count}")
-            print(f"Errors: {error_count}")
-            if self.backup_path:
-                print(f"Backup saved as: {os.path.basename(self.backup_path)}")
+        # Save updated data
+        if self.save_csv(data):
+            print("\n" + "=" * 70)
+            print("UPDATE COMPLETE")
+            print(f"Successful updates: {successful_updates}")
+            print(f"Failed updates: {failed_updates}")
+            print(f"Total processed: {len(data)}")
+            print(f"Updated file: {self.csv_path}")
+            print(f"Backup file: {self.backup_path}")
+            print("=" * 70)
             return True
         else:
-            print(f"\n[ERROR] Failed to save updated data")
             return False
 
 
 def main():
-    """Main function for running the updater"""
+    """Main function for command line usage"""
     import argparse
     
-    parser = argparse.ArgumentParser(description="Update Nick's Cigar World CSV with live pricing and master metadata")
-    parser.add_argument('--csv', help="Path to Nick's CSV file", default=None)
-    parser.add_argument('--master', help='Path to master cigars CSV file', default=None)
-    parser.add_argument('--max', type=int, help='Maximum number of products to process (for testing)', default=None)
-    parser.add_argument('--test', action='store_true', help='Test mode - process only first 3 products')
+    parser = argparse.ArgumentParser(description='Update Nick\'s Cigar World prices from CSV')
+    parser.add_argument('--csv', help='Path to Nick\'s CSV file')
+    parser.add_argument('--master', help='Path to master cigars CSV file')
+    parser.add_argument('--test', action='store_true', help='Test mode - show what would be updated without saving')
     
     args = parser.parse_args()
     
-    # Test mode
-    if args.test:
-        args.max = 3
-        print("[TEST MODE] Processing only first 3 products")
-    
-    # Create updater and run
+    # Create updater instance
     updater = NicksCSVUpdaterWithMaster(csv_path=args.csv, master_path=args.master)
     
-    try:
-        success = updater.update_all_products(max_products=args.max)
-        if success:
-            print("\n[SUCCESS] CSV update completed successfully")
-            sys.exit(0)
-        else:
-            print("\n[FAILURE] CSV update failed")
-            sys.exit(1)
-            
-    except KeyboardInterrupt:
-        print("\n[CANCELLED] Update cancelled by user")
-        sys.exit(1)
-    except Exception as e:
-        print(f"\n[FATAL ERROR] {str(e)}")
+    if args.test:
+        print("[TEST MODE] Running in test mode - no changes will be saved")
+    
+    # Run the update
+    success = updater.run_update()
+    
+    if success:
+        print("\n[SUCCESS] Nick's Cigar World price update completed successfully")
+    else:
+        print("\n[FAILED] Nick's Cigar World price update failed")
         sys.exit(1)
 
 
