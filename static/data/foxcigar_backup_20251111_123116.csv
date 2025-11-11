@@ -2,5 +2,4 @@ cigar_id,title,url,brand,line,wrapper,vitola,size,box_qty,price,in_stock
 ARTUROFUENTE|ARTUROFUENTE|HEMINGWAY|CLASSIC|CLASSIC|7x48|CAM|BOX25,Arturo Fuente Hemingway 7x48 (Box of 25),https://foxcigar.com/shop/cigars/arturo-fuente/arturo-fuente-hemingway-classic/,Arturo Fuente,Hemingway,Cameroon,Classic,7x48,25,257.99,True
 PADRON|PADRON|1964ANNIVERSARY|DIPLOMATICO|DIPLOMATICO|7x50|MAD|BOX25,Padron 1964 Anniversary 7x50 Box of 25,https://foxcigar.com/shop/cigars/padron/padron-1964-anniversary-series-diplimatico-maduro/,Padron,1964 Anniversary,Maduro,Diplomatico,7x50,25,442.5,True
 MYFATHER|MYFATHER|THEJUDGE|GRANDROBUSTO|GRANDROBUSTO|5.625x60|CAM|BOX23,Grand Robusto,https://foxcigar.com/shop/cigars/my-father/my-father-the-judge-grand-robusto/,My Father,The Judge,Ecuadorian Sumatra Oscuro,Grand Robusto,5.625x60,23,274.99,True
-COHIBA||REDDOT|ROBUSTO|ROBUSTO|5x49|CAM|BOX25,Cohiba Red Dot Robusto 5x49 (Box of 25),https://foxcigar.com/shop/cigars/cohiba/red-dot/cohiba-robusto/,Cohiba,Red Dot,Cameroon,Robusto,5x49,25,535.99,True
-ASHTON|ASHTON|VSG|ROBUSTO|ROBUSTO|5.5x50|MAD|BOX24,Ashton VSG Robusto 5.5x50 (Box of 24),https://foxcigar.com/shop/cigars/ashton/ashton-vsg-robusto/,Ashton,VSG,Ecuadorian Sun Grown,Robusto,5.5x50,24,337.99,True
+COHIBA||REDDOT|ROBUSTO|ROBUSTO|5x49|CAM|BOX25,,https://foxcigar.com/shop/cigars/cohiba/red-dot/cohiba-robusto/,,,,,,,535.99,True
