@@ -486,7 +486,7 @@
         <img src="/static/logo.png" alt="Cigar Price Scout Logo" class="scout-hat" />
         <h1 class="brandname">Cigar Price Scout</h1>
         <p class="tag">Search your cigar — we’ll scout the lowest prices on full boxes (20+ cigars)</p>
-        <div class="last-updated">Last updated: November 6th, 2025</div>
+        <div class="last-updated">Last updated: November 11th, 2025</div>
         <div style="font-size:13px;color:var(--muted);margin-top:4px;font-style:italic;">
         </div>
       </header>
@@ -750,9 +750,9 @@
 
       function populateVitolaSelect() {
         vitolaSelect.innerHTML = '<option value="">Any Vitola...</option>';
-        vitolaSelect.disabled = !currentSelection.line;
+        vitolaSelect.disabled = !currentSelection.wrapper;
         
-        if (currentSelection.brand && currentSelection.line) {
+        if (currentSelection.brand && currentSelection.line && currentSelection.wrapper) {
           const brand = optionsData.find(function(b) {
             return b.brand === currentSelection.brand;
           });
@@ -763,7 +763,7 @@
           if (line && line.wrappers) {
             const vitolas = [];
             line.wrappers.forEach(function(w) {
-              if (w.vitolas) {
+              if (w.wrapper === currentSelection.wrapper && w.vitolas) {
                 w.vitolas.forEach(function(v) {
                   if (v && vitolas.indexOf(v) === -1) {
                     vitolas.push(v);
@@ -794,6 +794,11 @@
         }).join('');
       }
 
+      function updateZipInput() {
+        // Enable ZIP input only when ALL selections are made
+        zipInput.disabled = !(currentSelection.brand && currentSelection.line && currentSelection.wrapper && currentSelection.vitola);
+      }
+
       function updateSearchButton() {
         const zipValue = zipInput.value.trim();
         const canSearch = currentSelection.brand && 
@@ -818,6 +823,7 @@
         populateVitolaSelect();
         updateFilterChips();
         updateSearchButton();
+        updateZipInput();
       });
 
       lineSelect.addEventListener('change', function(e) {
@@ -833,13 +839,18 @@
         updateFilterChips();
         updateSearchButton();
         updateQuantityDisplay(); // Add this line
+        updateZipInput();
       });
 
       wrapperSelect.addEventListener('change', function(e) {
         currentSelection.wrapper = e.target.value;
+        currentSelection.vitola = '';
+        
+        vitolaSelect.value = '';
+        populateVitolaSelect();
         updateFilterChips();
         updateQuantityDisplay();
-        updateSearchButton(); // Add this line
+        updateSearchButton();
       });
 
       vitolaSelect.addEventListener('change', function(e) {
@@ -847,6 +858,7 @@
         updateFilterChips();
         updateQuantityDisplay();
         updateSearchButton(); // Add this line
+        updateZipInput();
       });
 
       zipInput.addEventListener('input', function() {
@@ -910,6 +922,10 @@
     qtyInput.value = '';
   }
 }
+
+      // Initialize form state
+      updateSearchButton();
+      updateZipInput(); // Add this line
 
       // Schema.org functions for dynamic product markup
       function generateComparisonSchema(results, searchData) {
@@ -1138,6 +1154,7 @@
       window.addEventListener('load', function() {
         loadOptions();
         showAgeModal();
+        updateZipInput(); // Add this line
       });
     </script>
     <script type="text/javascript"> 
