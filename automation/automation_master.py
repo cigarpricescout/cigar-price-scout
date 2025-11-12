@@ -46,11 +46,11 @@ class CigarPriceAutomationEnhanced:
             'hilands': {
                 'csv_file': 'hilands.csv',
                 'updater_script': 'update_hilandscigars_prices_final.py'
-            }
+            },
             'gothamcigars': {
                 'csv_file': 'gothamcigars.csv',
                 'updater_script': 'update_gotham_prices_final.py'
-            }
+            },
         }
         
         self.results = {}
