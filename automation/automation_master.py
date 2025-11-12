@@ -51,6 +51,10 @@ class CigarPriceAutomationEnhanced:
                 'csv_file': 'gothamcigars.csv',
                 'updater_script': 'update_gotham_prices_final.py'
             },
+            'bnbtobacco': {
+                'csv_file': 'bnbtobacco.csv',
+                'updater_script': 'update_bnbtobacco_prices_final.py'
+            },
         }
         
         self.results = {}

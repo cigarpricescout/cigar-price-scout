@@ -295,7 +295,7 @@ RETAILERS = [
     {"key": "atlantic", "name": "Atlantic Cigar", "csv": "../static/data/atlantic.csv", "authorized": False},
     {"key": "bestcigar", "name": "Best Cigar Prices", "csv": "../static/data/bestcigar.csv", "authorized": False},
     {"key": "bighumidor", "name": "Big Humidor", "csv": "../static/data/bighumidor.csv", "authorized": False},
-    {"key": "bnbtobacco", "name": "BnB Tobacco", "csv": "../static/data/bnbtobacco.csv", "authorized": True},
+    {"key": "bnbtobacco", "name": "BnB Tobacco", "csv": "../static/data/bnbtobacco.csv", "authorized": False},
     {"key": "bonitasmokeshop", "name": "Bonita Smoke Shop", "csv": "../static/data/bonitasmokeshop.csv", "authorized": False},
     {"key": "buitragocigars", "name": "Buitrago Cigars", "csv": "../static/data/buitragocigars.csv", "authorized": False},
     {"key": "casademontecristo", "name": "Casa de Montecristo", "csv": "../static/data/casademontecristo.csv", "authorized": False},
