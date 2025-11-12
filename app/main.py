@@ -302,7 +302,7 @@ RETAILERS = [
     {"key": "cccrafter", "name": "CC Crafter", "csv": "../static/data/cccrafter.csv", "authorized": False},
     {"key": "cdmcigars", "name": "CDM Cigars", "csv": "../static/data/cdmcigars.csv", "authorized": False},
     {"key": "cheaplittlecigars", "name": "Cheap Little Cigars", "csv": "../static/data/cheaplittlecigars.csv", "authorized": False},
-    {"key": "ci", "name": "Cigars International", "csv": "../static/data/ci.csv", "authorized": False},
+    {"key": "ci", "name": "Cigars International", "csv": "../static/data/ci.csv", "authorized": True},
     {"key": "cigar", "name": "Cigar.com", "csv": "../static/data/cigar.csv", "authorized": False},
     {"key": "cigarboxpa", "name": "Cigar Box PA", "csv": "../static/data/cigarboxpa.csv", "authorized": False},
     {"key": "cigarcellarofmiami", "name": "Cigar Cellar of Miami", "csv": "../static/data/cigarcellarofmiami.csv", "authorized": False},

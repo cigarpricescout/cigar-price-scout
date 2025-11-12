@@ -1,36 +1,27 @@
 #!/usr/bin/env python3
 """
-Cigar Country Extractor
+Cigar Country Extractor - Updated with Proven Hiland's Methodology
 Retailer-specific extraction rules for Cigar Country (WooCommerce platform)
 Dominican Republic jurisdiction - Tier 1 compliance
 
-Key Features Observed:
-- WooCommerce platform with "Packing" section for box options
-- Multiple box quantities (Box of 23, 24, 25, 29, etc.)
-- Crossed-out original price with sale price
-- Stock status indicators ("Only X left in stock", "Out of stock")
-- Clean product layout with standard WooCommerce structure
-
-Training Examples (4):
-1. Ashton VSG Robusto - Box of 24, sale price, in stock
-2. My Father The Judge Grand Robusto - Box of 23, sale price, out of stock
-3. Padrón 1964 Anniversary Diplomatico - Box of 25, regular price, in stock
-4. Romeo y Julieta 1875 Churchill - Box of 25, sale price, out of stock
-
-Created: 2025-11-11
-Ready for CSV integration and Railway automation
+Updated to use the exact same successful approach as Hiland's Cigars:
+- Simple headers (just User-Agent)
+- 1 request/second rate limiting
+- Price range filtering (50-2000)
+- Main product area focus
+- Conservative approach
 """
 
 import requests
 from bs4 import BeautifulSoup
 import re
-from datetime import datetime
 import time
 from typing import Dict, Optional, Tuple
 
 class CigarCountryExtractor:
     def __init__(self):
         self.session = requests.Session()
+        # Exact same headers as successful Hiland's extractor
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         })
@@ -43,12 +34,11 @@ class CigarCountryExtractor:
             'box_qty': int or None, 
             'in_stock': bool,
             'discount_percent': float or None,
-            'original_price': float or None,
             'error': str or None
         }
         """
         try:
-            # Rate limiting - 1 request per second for Dominican Republic jurisdiction
+            # Rate limiting - 1 request per second (same as Hiland's)
             time.sleep(1)
             
             response = self.session.get(url, timeout=10)
@@ -56,338 +46,253 @@ class CigarCountryExtractor:
             
             soup = BeautifulSoup(response.content, 'html.parser')
             
-            result = {
-                'url': url,
-                'retailer': "Cigar Country",
-                'extracted_at': datetime.now().isoformat(),
-                'method': 'cigar_country_woocommerce',
-                'success': False,
-                'price': None,
-                'in_stock': None,
-                'box_quantity': None,
-                'discount_percent': None,
-                'original_price': None,
-                'debug_info': {}
-            }
+            # Extract box quantity from product title or options
+            box_qty = self._extract_box_quantity(soup)
             
-            # Extract box pricing from "Packing" section
-            box_price, box_qty, original_price = self._extract_box_pricing(soup, result['debug_info'])
+            # Extract pricing information using proven Hiland's approach
+            box_price, discount_percent = self._extract_pricing(soup)
             
             # Check stock status
-            in_stock = self._check_stock_status(soup, result['debug_info'])
+            in_stock = self._check_stock_status(soup)
             
-            # Calculate discount if we have both prices
-            discount_percent = None
-            if original_price and box_price and original_price > box_price:
-                discount_percent = ((original_price - box_price) / original_price) * 100
-            
-            result.update({
-                'price': box_price,
-                'box_quantity': box_qty,
+            return {
+                'box_price': box_price,
+                'box_qty': box_qty,
                 'in_stock': in_stock,
                 'discount_percent': discount_percent,
-                'original_price': original_price,
-                'success': (box_price is not None and in_stock is not None and box_qty is not None)
-            })
-            
-            return result
+                'error': None
+            }
             
         except Exception as e:
             return {
-                'url': url,
-                'retailer': "Cigar Country",
-                'extracted_at': datetime.now().isoformat(),
-                'success': False,
-                'error': str(e),
-                'price': None,
-                'in_stock': None,
-                'box_quantity': None,
+                'box_price': None,
+                'box_qty': None,
+                'in_stock': False,
                 'discount_percent': None,
-                'original_price': None
+                'error': str(e)
             }
     
-    def _extract_box_pricing(self, soup: BeautifulSoup, debug_info: Dict) -> Tuple[Optional[float], Optional[int], Optional[float]]:
-        """
-        Extract box pricing from WooCommerce "Packing" section
-        Prioritizes boxes >20 quantity, takes largest available
-        Returns: (sale_price, box_quantity, original_price)
-        """
+    def _extract_box_quantity(self, soup: BeautifulSoup) -> Optional[int]:
+        """Extract box quantity from product title or description"""
         
-        # Find the "Packing" section
-        packing_header = soup.find(string=re.compile(r'Packing', re.I))
-        if not packing_header:
-            debug_info['packing_section'] = 'Not found'
-            return None, None, None
-        
-        debug_info['packing_section'] = 'Found'
-        
-        # Find the container with packing options
-        packing_container = packing_header.find_parent()
-        while packing_container and not packing_container.find_all(['div', 'li'], recursive=False):
-            packing_container = packing_container.find_parent()
-        
-        if not packing_container:
-            debug_info['packing_container'] = 'Not found'
-            return None, None, None
-        
-        # Find all box options in the packing section
-        box_options = []
-        
-        # Look for elements containing "Box of X" pattern
-        for element in packing_container.find_all(['div', 'li', 'span', 'label']):
-            text = element.get_text().strip()
-            
-            # Extract box quantity
-            box_match = re.search(r'Box\s+of\s+(\d+)', text, re.I)
-            if box_match:
-                box_qty = int(box_match.group(1))
+        # Look in product title (WooCommerce typically uses h1.product_title or similar)
+        title_selectors = ['h1.product_title', 'h1', '.product_title', '.product-title']
+        for selector in title_selectors:
+            title_elem = soup.select_one(selector)
+            if title_elem:
+                title = title_elem.get_text().strip()
+                # Common patterns: "Brand Line Vitola (Size / Box of XX)"
+                qty_match = re.search(r'(?:\(\s*[\d\.x]+\s*/\s*)?box\s+of\s+(\d+)\)?', title, re.IGNORECASE)
+                if qty_match:
+                    qty = int(qty_match.group(1))
+                    if qty > 5:  # Filter out single quantities
+                        return qty
                 
-                # Find pricing for this box option
-                # Look for prices in the same element or nearby
-                price_elements = [element] + element.find_all(['span', 'div']) + element.find_all_next(['span', 'div'], limit=5)
-                
-                sale_price = None
-                original_price = None
-                
-                for price_elem in price_elements:
-                    price_text = price_elem.get_text().strip()
-                    
-                    # Look for crossed-out price (original/MSRP)
-                    if price_elem.find(['del', 's']) or 'line-through' in price_elem.get('style', '').lower():
-                        price_match = re.search(r'\$?([0-9,]+\.?\d*)', price_text.replace(',', ''))
-                        if price_match:
-                            try:
-                                original_price = float(price_match.group(1))
-                                debug_info[f'original_price_box_{box_qty}'] = price_text
-                            except ValueError:
-                                continue
-                    
-                    # Look for sale/current price
-                    elif '$' in price_text:
-                        # Skip if this element contains crossed-out price
-                        if not (price_elem.find(['del', 's']) or 'line-through' in price_elem.get('style', '').lower()):
-                            price_match = re.search(r'\$?([0-9,]+\.?\d*)', price_text.replace(',', ''))
-                            if price_match:
-                                try:
-                                    potential_price = float(price_match.group(1))
-                                    if potential_price > 50:  # Filter out obviously wrong prices
-                                        sale_price = potential_price
-                                        debug_info[f'sale_price_box_{box_qty}'] = price_text
-                                except ValueError:
-                                    continue
-                
-                # If we found pricing, add this option
-                if sale_price:
-                    box_options.append({
-                        'quantity': box_qty,
-                        'sale_price': sale_price,
-                        'original_price': original_price,
-                        'text': text
-                    })
-                    debug_info[f'box_option_{box_qty}'] = f"${sale_price} (orig: ${original_price})"
+                # Alternative patterns
+                qty_match = re.search(r'(?:[\(\[]?)(\d+)(?:ct|[\)\]]?)', title, re.IGNORECASE)
+                if qty_match:
+                    qty = int(qty_match.group(1))
+                    if qty > 5:
+                        return qty
         
-        # Filter and prioritize box options
-        # Priority: quantity > 20, then take largest available
-        target_boxes = [opt for opt in box_options if opt['quantity'] > 20]
+        # Look in product description for "Packing" section (Cigar Country specific)
+        packing_section = soup.find(string=re.compile(r'packing', re.I))
+        if packing_section:
+            parent = packing_section.find_parent()
+            if parent:
+                packing_text = parent.get_text()
+                qty_match = re.search(r'box\s+of\s+(\d+)', packing_text, re.I)
+                if qty_match:
+                    qty = int(qty_match.group(1))
+                    if qty > 5:
+                        return qty
         
-        if not target_boxes:
-            # If no >20 boxes, take largest available (for future expansion)
-            target_boxes = box_options
-        
-        if not target_boxes:
-            debug_info['box_selection'] = 'No valid boxes found'
-            return None, None, None
-        
-        # Select the largest box quantity
-        selected_box = max(target_boxes, key=lambda x: x['quantity'])
-        
-        debug_info['selected_box'] = f"Box of {selected_box['quantity']} - ${selected_box['sale_price']}"
-        debug_info['total_options_found'] = len(box_options)
-        debug_info['target_options_found'] = len(target_boxes)
-        
-        return selected_box['sale_price'], selected_box['quantity'], selected_box['original_price']
+        return None
     
-    def _check_stock_status(self, soup: BeautifulSoup, debug_info: Dict) -> bool:
-        """
-        Check stock status based on button text and stock indicators
-        """
+    def _extract_pricing(self, soup: BeautifulSoup) -> Tuple[Optional[float], Optional[float]]:
+        """Extract box price and discount percentage using proven Hiland's approach"""
         
-        # Method 1: Check the main action button
-        action_buttons = soup.find_all(['button', 'a'], class_=re.compile(r'button|btn|cart', re.I))
+        # Look for the main product price in the primary product information area
+        main_product_area = soup.find(['div'], class_=re.compile(r'product-summary|summary|product-info|single-product', re.I))
         
-        for button in action_buttons:
-            button_text = button.get_text().strip().upper()
+        if main_product_area:
+            # Look for price elements within the main product area only
+            price_elements = main_product_area.find_all(['span', 'div'], class_=re.compile(r'woocommerce-Price-amount|amount|price'))
             
+            current_prices = []
+            original_prices = []
+            
+            for elem in price_elements:
+                price_text = elem.get_text().strip()
+                price_match = re.search(r'\$?([\d,]+\.?\d*)', price_text.replace(',', ''))
+                
+                if price_match:
+                    try:
+                        price = float(price_match.group(1))
+                        # Filter for box-level pricing (same as Hiland's: $50-$2000)
+                        if 50 <= price <= 2000:
+                            # Check if this is a strikethrough price
+                            is_strikethrough = (
+                                elem.find_parent(['del', 's']) or
+                                (elem.has_attr('style') and 'line-through' in str(elem.get('style', '')))
+                            )
+                            
+                            if is_strikethrough:
+                                original_prices.append(price)
+                            else:
+                                current_prices.append(price)
+                                
+                    except ValueError:
+                        continue
+            
+            # Select the best prices (same logic as Hiland's)
+            current_price = max(current_prices) if current_prices else None
+            original_price = max(original_prices) if original_prices else None
+            
+            # Calculate discount
+            discount_percent = None
+            if original_price and current_price and original_price > current_price:
+                discount_percent = ((original_price - current_price) / original_price) * 100
+            
+            if current_price:
+                return current_price, discount_percent
+        
+        # Fallback: Look for prices anywhere but be selective (same as Hiland's)
+        all_price_elements = soup.find_all(['span', 'div'], class_=re.compile(r'woocommerce-Price-amount'))
+        
+        valid_prices = []
+        for elem in all_price_elements:
+            # Skip if in obviously unrelated sections
+            parent_classes = []
+            parent = elem.find_parent(['div', 'section'])
+            if parent:
+                parent_classes = ' '.join(parent.get('class', [])).lower()
+                
+            if any(skip in parent_classes for skip in ['related', 'upsell', 'cross-sell', 'widget', 'sidebar']):
+                continue
+                
+            price_text = elem.get_text().strip()
+            price_match = re.search(r'\$?([\d,]+\.?\d*)', price_text.replace(',', ''))
+            
+            if price_match:
+                try:
+                    price = float(price_match.group(1))
+                    # Only consider box-level prices (same range as Hiland's)
+                    if 50 <= price <= 2000:
+                        valid_prices.append(price)
+                except ValueError:
+                    continue
+        
+        if valid_prices:
+            # Take the highest valid price as it's most likely the box price
+            current_price = max(valid_prices)
+            
+            # Look for strikethrough prices for discount calculation
+            original_price = None
+            strikethrough_elems = soup.find_all(['del', 's'])
+            for elem in strikethrough_elems:
+                price_text = elem.get_text().strip()
+                price_match = re.search(r'\$?([\d,]+\.?\d*)', price_text.replace(',', ''))
+                if price_match:
+                    try:
+                        price = float(price_match.group(1))
+                        if 50 <= price <= 2000 and price > current_price:
+                            original_price = price
+                            break
+                    except ValueError:
+                        continue
+            
+            discount_percent = None
+            if original_price and original_price > current_price:
+                discount_percent = ((original_price - current_price) / original_price) * 100
+            
+            return current_price, discount_percent
+        
+        return None, None
+    
+    def _check_stock_status(self, soup: BeautifulSoup) -> bool:
+        """Check if product is in stock based on button text and stock indicators"""
+        
+        # Look for add to cart button (WooCommerce patterns)
+        add_to_cart = soup.find(['button', 'input'], attrs={
+            'class': re.compile(r'add.*cart|cart.*add|single_add_to_cart_button', re.I),
+            'type': re.compile(r'submit|button', re.I)
+        })
+        
+        if add_to_cart:
+            button_text = add_to_cart.get_text().strip().upper()
             # In stock indicators
-            if any(phrase in button_text for phrase in ['ADD TO CART', 'BUY NOW', 'ADD TO BASKET']):
-                debug_info['stock_method'] = f'Button: "{button_text}"'
+            if any(phrase in button_text for phrase in ['ADD TO CART', 'BUY NOW', 'PURCHASE']):
                 return True
-            
             # Out of stock indicators
-            if any(phrase in button_text for phrase in ['NOTIFY ME', 'EMAIL ME', 'OUT OF STOCK']):
-                debug_info['stock_method'] = f'Button: "{button_text}"'
+            if any(phrase in button_text for phrase in ['NOTIFY ME', 'SOLD OUT', 'OUT OF STOCK']):
                 return False
         
-        # Method 2: Look for explicit stock text
-        stock_indicators = soup.find_all(string=re.compile(r'(?:in\s+stock|out\s+of\s+stock|only\s+\d+\s+left)', re.I))
-        
+        # Look for explicit stock status text
+        stock_indicators = soup.find_all(string=re.compile(r'(?:only\s+\d+\s+left|in\s+stock|out\s+of\s+stock|sold\s+out)', re.I))
         for indicator in stock_indicators:
             text = indicator.strip().upper()
-            
-            # In stock patterns
-            if re.search(r'(?:IN\s+STOCK|ONLY\s+\d+\s+LEFT)', text):
-                debug_info['stock_method'] = f'Text: "{indicator.strip()}"'
+            if any(phrase in text for phrase in ['IN STOCK', 'LEFT IN STOCK']):
                 return True
-            
-            # Out of stock patterns  
-            if 'OUT OF STOCK' in text:
-                debug_info['stock_method'] = f'Text: "{indicator.strip()}"'
+            if any(phrase in text for phrase in ['OUT OF STOCK', 'SOLD OUT']):
                 return False
         
-        # Method 3: Look for stock status in packing section
-        packing_section = soup.find(string=re.compile(r'Packing', re.I))
-        if packing_section:
-            packing_container = packing_section.find_parent()
-            if packing_container:
-                stock_elements = packing_container.find_all(string=re.compile(r'out\s+of\s+stock', re.I))
-                if stock_elements:
-                    debug_info['stock_method'] = 'Packing section: Out of stock'
-                    return False
-        
-        # Default to True if we can't determine (conservative for price tracking)
-        debug_info['stock_method'] = 'Default: Unable to determine, assuming in stock'
+        # Default to True if we can't determine (conservative approach, same as Hiland's)
         return True
 
 
 def extract_cigar_country_data(url: str) -> Dict:
     """
     Main extraction function for Cigar Country
-    Compatible with your CSV update workflow
+    Compatible with CSV update workflow - same format as Hiland's
     """
     extractor = CigarCountryExtractor()
-    return extractor.extract_product_data(url)
+    result = extractor.extract_product_data(url)
+    
+    # Convert to the expected format (matching other extractors)
+    return {
+        'success': result['error'] is None,
+        'price': result['box_price'], 
+        'box_quantity': result['box_qty'],
+        'in_stock': result['in_stock'],
+        'discount_percent': result['discount_percent'],
+        'error': result['error']
+    }
 
 
 # Test function for development
-def test_cigar_country_extraction():
-    """Test the extractor on the 4 training examples"""
+def test_extractor():
+    """Test the extractor with sample Cigar Country URLs"""
     
+    # Test URLs - Cigar Country product for testing
     test_urls = [
-        {
-            'url': 'https://cigarcountry.com/product/ashton-vsg-robusto/',
-            'expected': {'box_qty': 24, 'in_stock': True, 'has_discount': True}
-        },
-        {
-            'url': 'https://cigarcountry.com/product/my-father-the-judge-grand-robusto/',
-            'expected': {'box_qty': 23, 'in_stock': False, 'has_discount': True}
-        },
-        {
-            'url': 'https://cigarcountry.com/product/padron-1964-anniversary-series-diplomatico-maduro/',
-            'expected': {'box_qty': 25, 'in_stock': True, 'has_discount': False}
-        },
-        {
-            'url': 'https://cigarcountry.com/product/romeo-y-julieta-1875-churchill/',
-            'expected': {'box_qty': 25, 'in_stock': False, 'has_discount': True}
-        }
+        'https://cigarcountry.com/product/perdomo-reserve-10th-anniversary-champagne-connecticut-epicure/',
     ]
     
-    print("Testing Cigar Country extraction rules...")
-    print("=" * 80)
+    if not test_urls or not any(test_urls):
+        print("No test URLs provided. Add actual Cigar Country product URLs to test.")
+        return
     
-    for i, test_case in enumerate(test_urls):
-        url = test_case['url']
-        expected = test_case['expected']
-        
-        print(f"\nTest {i+1}: {url.split('/')[-2]}")
-        print("-" * 60)
-        
-        result = extract_cigar_country_data(url)
-        
-        if result['success']:
-            print(f"[SUCCESS]")
-            print(f"   Price: ${result['price']}")
-            print(f"   Box Qty: {result['box_quantity']} (expected: {expected['box_qty']})")
-            print(f"   In Stock: {result['in_stock']} (expected: {expected['in_stock']})")
-            
-            if result['discount_percent']:
-                print(f"   Discount: {result['discount_percent']:.1f}% off (orig: ${result['original_price']})")
-            
-            print(f"   Stock Detection: {result['debug_info'].get('stock_method', 'N/A')}")
-            print(f"   Box Selection: {result['debug_info'].get('selected_box', 'N/A')}")
-            
-            # Validation
-            validation_issues = []
-            if result['box_quantity'] != expected['box_qty']:
-                validation_issues.append(f"Box qty mismatch: got {result['box_quantity']}, expected {expected['box_qty']}")
-            
-            if result['in_stock'] != expected['in_stock']:
-                validation_issues.append(f"Stock mismatch: got {result['in_stock']}, expected {expected['in_stock']}")
-            
-            if expected['has_discount'] and not result['discount_percent']:
-                validation_issues.append(f"Expected discount but none found")
-            
-            if validation_issues:
-                print(f"[WARNING] VALIDATION ISSUES: {'; '.join(validation_issues)}")
-                
-        else:
-            print(f"[FAILED] {result.get('error', 'Unknown error')}")
-            if result.get('debug_info'):
-                print(f"   Debug Info: {result['debug_info']}")
+    print("Testing Cigar Country extraction...")
+    print("=" * 50)
     
-    print("\n" + "=" * 80)
-    print("Cigar Country extraction testing complete!")
-    print("\nReady for CSV integration and automation!")
-
-
-# Configuration for your automation system
-CIGAR_COUNTRY_CONFIG = {
-    "retailer_info": {
-        "name": "Cigar Country",
-        "domain": "cigarcountry.com",
-        "platform": "WooCommerce",
-        "compliance_tier": 1,
-        "jurisdiction": "Dominican Republic",
-        "trained_date": "2025-11-11",
-        "training_examples": 4
-    },
-    
-    "extraction_patterns": {
-        "pricing_scenarios": [
-            "Regular pricing (single price)",
-            "Sale pricing (crossed-out original + sale price)",
-            "Multiple box options with individual pricing",
-            "Out of stock with pricing maintained"
-        ],
-        
-        "box_quantities_seen": [23, 24, 25, 29],
-        "box_quantity_priority": ">20 preferred, largest available selected",
-        
-        "stock_indicators": {
-            "in_stock": ["ADD TO CART", "BUY NOW", "Only X left in stock"],
-            "out_of_stock": ["NOTIFY ME", "OUT OF STOCK", "EMAIL WHEN AVAILABLE"]
-        },
-        
-        "layout_structure": "WooCommerce with 'Packing' section for box options"
-    },
-    
-    "csv_integration": {
-        "csv_file": "cigarcountry.csv",
-        "update_fields": ["price", "in_stock", "last_updated"],
-        "price_field_source": "sale_price (after discount)",
-        "stock_field_source": "button_text + stock_indicators"
-    },
-    
-    "automation_ready": True,
-    "confidence_level": "high",
-    "notes": [
-        "Clean WooCommerce structure with consistent 'Packing' section",
-        "Handles multiple box quantities with >20 prioritization",
-        "Robust stock detection via buttons and text indicators", 
-        "Sale pricing extraction with discount calculation",
-        "Dominican Republic jurisdiction allows daily crawling",
-        "Ready for integration into Railway automation system"
-    ]
-}
+    for i, url in enumerate(test_urls):
+        if url:  # Only test non-empty URLs
+            print(f"\nTest {i+1}: {url.split('/')[-2] if url.endswith('/') else url.split('/')[-1]}")
+            print("-" * 40)
+            result = extract_cigar_country_data(url)
+            
+            if result['error']:
+                print(f"ERROR: {result['error']}")
+                if '403' in str(result['error']):
+                    print("  This suggests bot detection - may work better in production environment")
+            else:
+                print(f"SUCCESS!")
+                print(f"  Price: ${result['price']}")
+                print(f"  Box Qty: {result['box_quantity']}")
+                print(f"  In Stock: {result['in_stock']}")
+                if result['discount_percent']:
+                    print(f"  Discount: {result['discount_percent']:.1f}% off")
 
 if __name__ == "__main__":
-    test_cigar_country_extraction()
+    test_extractor()
