@@ -55,6 +55,10 @@ class CigarPriceAutomationEnhanced:
                 'csv_file': 'bnbtobacco.csv',
                 'updater_script': 'update_bnbtobacco_prices_final.py'
             },
+            'neptune': {
+                'csv_file': 'neptune.csv',
+                'updater_script': 'update_neptune_prices_final.py'
+            },
         }
         
         self.results = {}
