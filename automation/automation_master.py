@@ -42,6 +42,10 @@ class CigarPriceAutomationEnhanced:
             'nickscigarworld': {
                 'csv_file': 'nickscigarworld.csv',
                 'updater_script': 'update_nicks_prices.py'
+            },
+            'hilands': {
+                'csv_file': 'hilands.csv',
+                'updater_script': 'update_hilandscigars_prices_final.py'
             }
         }
         
