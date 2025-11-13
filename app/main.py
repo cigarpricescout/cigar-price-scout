@@ -92,8 +92,15 @@ except Exception:
             return 0
         elif retailer_key == 'planetcigars' and base_dollars >= 200:
             return 0
-        elif retailer_key == 'tampasweethearts' and base_dollars >= 200:
-            return 0
+        elif retailer_key == 'tampasweethearts':
+            if base_dollars >= 200.01:
+                return 0  # Free shipping
+            elif base_dollars >= 100.01:
+                return 12.95  # Standard rate for most cigar boxes
+            elif base_dollars >= 50.01:
+                return 11.95  # Lower tier
+            else:
+                return 15.00  # Under $50 (estimate)
         elif retailer_key == 'thecigarshop' and base_dollars >= 100:
             return 0
         elif retailer_key == 'thecigarstore' and base_dollars >= 75:
