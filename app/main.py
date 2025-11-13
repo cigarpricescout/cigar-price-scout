@@ -102,6 +102,8 @@ except Exception:
             return 0
         elif retailer_key == 'watchcity' and base_dollars >= 99.99:
             return 0
+        elif retailer_key == 'hilands' and base_dollars >= 99.99:
+            return 0
         
         # Flat rate shipping
         elif retailer_key == 'cigarpairingparlor':
