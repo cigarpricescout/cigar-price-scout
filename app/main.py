@@ -93,19 +93,16 @@ except Exception:
         elif retailer_key == 'planetcigars' and base_dollars >= 200:
             return 0
         elif retailer_key == 'tampasweethearts':
-            print(f"DEBUG: Tampa shipping calc - base_dollars = {base_dollars}, type = {type(base_dollars)}")
             if base_dollars >= 200.01:
-                print("DEBUG: Using free shipping (>=200.01)")
-                return 0
+                return 0  # Free shipping
             elif base_dollars >= 100.01:
-                print("DEBUG: Using $12.95 shipping (100.01-200.00)")
-                return 12.95
+                return 1295  # $12.95 in cents
             elif base_dollars >= 50.01:
-                print("DEBUG: Using $11.95 shipping (50.01-100.00)")
-                return 11.95
+                return 1195  # $11.95 in cents  
             else:
-                print("DEBUG: Using $15.00 shipping (<50.01)")
-                return 15.00
+                return 1500  # $15.00 in cents
+        elif retailer_key == 'thecigarshop' and base_dollars >= 100:
+            return 0
         elif retailer_key == 'thecigarshop' and base_dollars >= 100:
             return 0
         elif retailer_key == 'thecigarstore' and base_dollars >= 75:
