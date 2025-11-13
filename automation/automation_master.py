@@ -63,6 +63,14 @@ class CigarPriceAutomationEnhanced:
                 'csv_file': 'tampasweethearts.csv',
                 'updater_script': 'update_tampasweethearts_prices_final.py'
             },
+            'tobaccolocker': {
+                'csv_file': 'tobaccolocker.csv',
+                'updater_script': 'update_tobaccolocker_prices_final.py'
+            },
+            'watchcity': {
+                'csv_file': 'watchcity.csv',
+                'updater_script': 'update_watchcity_prices_final.py'
+            },
         }
         
         self.results = {}
