@@ -113,6 +113,8 @@ except Exception:
             return 0
         elif retailer_key == 'hilands' and base_dollars >= 99.99:
             return 0
+        elif retailer_key == 'absolutecigars':    # ADD THIS LINE
+            return 800  # $8.00 in cents                    # AND THIS LINE
         
         # Flat rate shipping
         elif retailer_key == 'cigarpairingparlor':
