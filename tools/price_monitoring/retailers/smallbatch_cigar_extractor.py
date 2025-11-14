@@ -100,7 +100,7 @@ class SmallBatchCigarExtractor:
                     for price_str in price_matches:
                         try:
                             price = float(price_str)
-                            if 200 <= price <= 2000:  # Box price range for Small Batch
+                            if 150 <= price <= 2000:  # Box price range - lowered to catch Box of 12
                                 box_price = price
                                 break
                         except ValueError:
@@ -127,8 +127,8 @@ class SmallBatchCigarExtractor:
             for price_str in all_prices:
                 try:
                     price = float(price_str)
-                    # Filter for box-level pricing (exclude pack prices like $64)
-                    if 200 <= price <= 2000:
+                    # Filter for box-level pricing (exclude pack prices like $64, include Box of 12 ~$194)
+                    if 150 <= price <= 2000:
                         valid_box_prices.append(price)
                 except ValueError:
                     continue
