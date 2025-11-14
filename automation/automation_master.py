@@ -75,6 +75,10 @@ class CigarPriceAutomationEnhanced:
                 'csv_file': 'cigarsdirect.csv',
                 'updater_script': 'update_cigarsdirect_prices_final.py'
             },
+            'absolute_cigars': {
+                'csv_file': 'absolutecigars.csv',
+                'updater_script': 'update_absolute_cigars_prices_final.py'
+            },
         }
         
         self.results = {}
