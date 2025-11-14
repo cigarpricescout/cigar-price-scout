@@ -71,6 +71,10 @@ class CigarPriceAutomationEnhanced:
                 'csv_file': 'watchcity.csv',
                 'updater_script': 'update_watchcity_prices_final.py'
             },
+            'cigarsdirect': {
+                'csv_file': 'cigarsdirect.csv',
+                'updater_script': 'update_cigarsdirect_prices_final.py'
+            },
         }
         
         self.results = {}
