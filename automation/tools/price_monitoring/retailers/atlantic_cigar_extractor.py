@@ -224,3 +224,8 @@ def test_extractor():
 
 if __name__ == "__main__":
     test_extractor()
+
+def extract_atlantic_cigar_data(url: str) -> Dict:
+    """Wrapper function for automation compatibility"""
+    extractor = AtlanticCigarExtractor()
+    return extractor.extract_product_data(url)

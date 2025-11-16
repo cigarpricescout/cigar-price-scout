@@ -83,6 +83,10 @@ class CigarPriceAutomationEnhanced:
                 'csv_file': 'smallbatch_cigar.csv',
                 'updater_script': 'update_smallbatch_cigar_prices_final.py'
             },
+            'planet_cigars': {
+                'csv_file': 'planet_cigars.csv',
+                'updater_script': 'update_planet_cigars_prices_final.py'
+            },
         }
         
         self.results = {}
