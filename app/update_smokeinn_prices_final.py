@@ -210,7 +210,9 @@ def update_smokeinn_prices():
                             'MAXIMUS': 'Maximus',
                             'HERRERAESTELI': 'Herrera Esteli',
                             'HERRERAESTELINORTENO': 'Herrera Esteli Norteno',
-                            'NORTENO': 'Norteno'
+                            'NORTENO': 'Norteno',
+                            'THEJUDGE': 'The Judge',
+                            'LEBIJOU1922': 'Le Bijou 1922'
                         }
                         return line_mapping.get(line_code, line_code.title())
                     
@@ -245,7 +247,8 @@ def update_smokeinn_prices():
                             'CLASSIC': 'Classic',
                             'CHURCHILL': 'Churchill',
                             'ROBUSTO': 'Robusto',
-                            'TORO': 'Toro'
+                            'TORO': 'Toro',
+                            'GRANDROBUSTO': 'Grand Robusto'
                         }
                         
                         vitola_name = vitola_mapping.get(vitola_raw, vitola_raw.title())
