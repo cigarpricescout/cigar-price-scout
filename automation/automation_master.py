@@ -297,11 +297,12 @@ if __name__ == "__main__":
             from apscheduler.triggers.cron import CronTrigger
             
             scheduler = BlockingScheduler()
+            # New daily trigger:
             scheduler.add_job(
-                func=automation.run_full_update,
-                trigger=CronTrigger(day_of_week='sun', hour=3, minute=0),
-                id='weekly_update',
-                replace_existing=True
+                automation.run_full_update,
+                trigger=CronTrigger(hour=3, minute=0),  # <- Remove day_of_week='sun'
+                timezone=pytz.UTC,
+                id='price_update_job'
             )
             
             logger.info("📅 Automation scheduled - Weekly updates Sundays 3 AM UTC")
