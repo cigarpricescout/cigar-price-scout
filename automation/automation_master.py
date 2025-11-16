@@ -87,6 +87,10 @@ class CigarPriceAutomationEnhanced:
                 'csv_file': 'planet_cigars.csv',
                 'updater_script': 'update_planet_cigars_prices_final.py'
             },
+            'holts': {
+                'csv_file': 'holts.csv',
+                'updater_script': 'update_holts_prices_final.py'
+            }
         }
         
         self.results = {}
