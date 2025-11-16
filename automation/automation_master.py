@@ -101,11 +101,15 @@ class CigarPriceAutomationEnhanced:
         self.error_urls = []
         
         # Setup git authentication
-        self.setup_git_auth()
+        self.git_available = self.setup_git_auth()
     
     def setup_git_auth(self):
         """Configure git with GitHub token for authentication"""
         try:
+            # Check if git is available
+            subprocess.run(['git', '--version'], 
+                          check=True, capture_output=True, cwd='/app')
+            
             # Get GitHub token from environment
             github_token = os.getenv('GITHUB_TOKEN')
             if not github_token:
@@ -128,20 +132,27 @@ class CigarPriceAutomationEnhanced:
             with open('/app/.git-credentials', 'w') as f:
                 f.write(f"https://x-access-token:{github_token}@github.com\n")
             
-            logger.info("✓ Git authentication configured")
+            logger.info("Git authentication configured")
             return True
             
+        except FileNotFoundError:
+            logger.warning("Git not available in this environment - sync disabled")
+            return False
         except Exception as e:
             logger.error(f"Failed to setup git authentication: {e}")
             return False
     
     def sync_to_git(self) -> bool:
         """Sync updated CSV files back to GitHub"""
+        if not self.git_available:
+            logger.info("Git sync skipped - not available in this environment")
+            return True  # Don't fail automation if git isn't available
+            
         try:
             # Check if we have git authentication
             if not os.path.exists('/app/.git-credentials'):
                 logger.warning("Git credentials not configured - skipping sync")
-                return False
+                return True
             
             # Pull latest changes first
             logger.info("Pulling latest changes from GitHub...")
@@ -161,7 +172,7 @@ class CigarPriceAutomationEnhanced:
                 return True
             
             # Commit the changes
-            commit_msg = f"🤖 Automated price update - {datetime.now().strftime('%Y-%m-%d %H:%M UTC')}"
+            commit_msg = f"Automated price update - {datetime.now().strftime('%Y-%m-%d %H:%M UTC')}"
             subprocess.run(['git', 'commit', '-m', commit_msg], 
                           check=True, cwd='/app')
             
@@ -171,7 +182,7 @@ class CigarPriceAutomationEnhanced:
                                        capture_output=True, text=True, cwd='/app')
             
             if push_result.returncode == 0:
-                logger.info("✅ Updated CSV files synced back to GitHub")
+                logger.info("Updated CSV files synced back to GitHub")
                 return True
             else:
                 logger.error(f"Git push failed: {push_result.stderr}")
@@ -197,7 +208,7 @@ class CigarPriceAutomationEnhanced:
             }
         
         start_time = datetime.now()
-        logger.info(f"🔄 Starting {retailer} price update...")
+        logger.info(f"Starting {retailer} price update...")
         
         try:
             # Run the retailer-specific update script
@@ -223,7 +234,7 @@ class CigarPriceAutomationEnhanced:
                         except:
                             pass
                 
-                logger.info(f"✅ {retailer} update completed - {products_updated} products updated")
+                logger.info(f"{retailer} update completed - {products_updated} products updated")
                 return {
                     'retailer': retailer,
                     'success': True,
@@ -233,7 +244,7 @@ class CigarPriceAutomationEnhanced:
                 }
             else:
                 error_msg = result.stderr or result.stdout or 'Unknown error'
-                logger.error(f"❌ {retailer} update failed: {error_msg}")
+                logger.error(f"{retailer} update failed: {error_msg}")
                 return {
                     'retailer': retailer,
                     'success': False,
@@ -244,7 +255,7 @@ class CigarPriceAutomationEnhanced:
                 
         except Exception as e:
             duration = (datetime.now() - start_time).total_seconds()
-            logger.error(f"💥 {retailer} update crashed: {e}")
+            logger.error(f"{retailer} update crashed: {e}")
             return {
                 'retailer': retailer,
                 'success': False,
@@ -255,7 +266,7 @@ class CigarPriceAutomationEnhanced:
     
     def run_full_update(self):
         """Run complete automation cycle with git sync"""
-        logger.info("🚀 STARTING AUTOMATED PRICE UPDATE CYCLE")
+        logger.info("STARTING AUTOMATED PRICE UPDATE CYCLE")
         start_time = datetime.now()
         
         # Reset tracking
@@ -275,15 +286,15 @@ class CigarPriceAutomationEnhanced:
         total_products = sum(r['products_updated'] for r in self.results.values())
         
         # Generate report
-        logger.info("📊 UPDATE SUMMARY")
+        logger.info("UPDATE SUMMARY")
         logger.info(f"Duration: {total_duration/60:.1f} minutes")
         logger.info(f"Successful: {successful_retailers}/{len(self.retailers)} retailers")
         logger.info(f"Products Updated: {total_products}")
         logger.info(f"Git Sync: {'SUCCESS' if git_sync_success else 'FAILED'}")
         
         if git_sync_success:
-            logger.info("🎉 Automation complete! Updated prices are now live on your website.")
-            logger.info("💡 Run 'git pull' on your local computer to get the latest data.")
+            logger.info("Automation complete! Updated prices are now live on your website.")
+            logger.info("Run 'git pull' on your local computer to get the latest data.")
         
         return git_sync_success
 
@@ -305,17 +316,18 @@ if __name__ == "__main__":
             from apscheduler.triggers.cron import CronTrigger
             
             scheduler = BlockingScheduler()
-            # New daily trigger:
+            # Daily trigger at 3 AM UTC
             scheduler.add_job(
                 automation.run_full_update,
-                trigger=CronTrigger(hour=3, minute=0),  # <- Remove day_of_week='sun'
-                timezone=pytz.UTC,
+                trigger=CronTrigger(hour=3, minute=0),
+                timezone='UTC',  # Use string instead of pytz
                 id='price_update_job'
             )
             
-            logger.info("📅 Automation scheduled - Weekly updates Sundays 3 AM UTC")
-            logger.info("🔧 Manual trigger: python automation_master_enhanced.py manual")
+            logger.info("Automation scheduled - Daily updates at 3 AM UTC")
+            logger.info("Manual trigger: python automation_master.py manual")
             scheduler.start()
             
         except ImportError:
             logger.error("APScheduler not available - run manually")
+            automation.run_full_update()
