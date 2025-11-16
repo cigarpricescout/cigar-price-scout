@@ -90,11 +90,11 @@ class CigarPriceAutomationEnhanced:
             'holts': {
                 'csv_file': 'holts.csv',
                 'updater_script': 'update_holts_prices_final.py'
-            }
+            },
             'smokeinn': {
                 'csv_file': 'smokeinn.csv',
                 'updater_script': 'update_smokeinn_prices_final.py'
-            }
+            },
         }
         
         self.results = {}
