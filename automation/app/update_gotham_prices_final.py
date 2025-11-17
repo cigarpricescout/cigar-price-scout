@@ -1,12 +1,8 @@
 """
-Gotham Cigars CSV Updater with Google Sheets Master File Integration
-Uses cigar_id from master_cigars.csv for metadata auto-population
-
-Master file columns: Brand, Line, Wrapper, Wrapper_Alias, Vitola, Length, Ring Gauge, 
-Binder, Filler, Strength, Box Quantity, Style, cigar_id, parent_brand, sub_brand, 
-product_name, wrapper_code, packaging_type, country_of_origin, factory, release_type, 
-sampler_flag, msrp_stick_usd, msrp_box_usd, first_release_year, discontinued_flag, 
-retailer_sku, upc_ean, notes, source_url
+Gotham Cigars Enhanced CSV Updater with Master-Driven Metadata Sync
+ALWAYS syncs ALL metadata from master_cigars.csv (master is authority source)
+Enhanced version: metadata changes in master file auto-propagate to retailer CSV
+Following the proven master-sync pattern for true data consistency
 """
 
 import csv
@@ -14,12 +10,10 @@ import os
 import sys
 import shutil
 import pandas as pd
-import numpy as np
 from datetime import datetime
 from typing import List, Dict
 
 # Add the tools directory to path for importing the extractor
-# Go up one level from app/ to the project root, then into tools/
 tools_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'tools', 'price_monitoring', 'retailers')
 sys.path.insert(0, tools_path)
 
@@ -29,13 +23,10 @@ try:
 except ImportError:
     print("[ERROR] Could not import gotham_cigars_extractor. Make sure the file is in tools/price_monitoring/retailers/gotham_cigars_extractor.py")
     sys.exit(1)
-except AttributeError:
-    print("[ERROR] Function extract_gotham_cigars_data not found in gotham_cigars_extractor module")
-    sys.exit(1)
 
 
-class GothamCSVUpdaterWithMaster:
-    def __init__(self, csv_path: str = None, master_path: str = None):
+class GothamCigarsCSVUpdaterWithMaster:
+    def __init__(self, csv_path: str = None, master_path: str = None, dry_run: bool = False):
         if csv_path is None:
             self.csv_path = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'gothamcigars.csv')
         else:
@@ -48,6 +39,7 @@ class GothamCSVUpdaterWithMaster:
             
         self.backup_path = None
         self.master_df = None
+        self.dry_run = dry_run
         
     def load_master_file(self) -> bool:
         """Load the master cigars file"""
@@ -100,7 +92,7 @@ class GothamCSVUpdaterWithMaster:
             except (ValueError, TypeError):
                 pass
         
-        metadata = {
+        return {
             'title': row.get('product_name', ''),
             'brand': row.get('Brand', ''), 
             'line': row.get('Line', ''),
@@ -109,33 +101,32 @@ class GothamCSVUpdaterWithMaster:
             'size': size,
             'box_qty': box_qty
         }
-        
-        print(f"[DEBUG] Metadata for {cigar_id}: title='{metadata['title']}'")
-        return metadata
     
     def auto_populate_metadata(self, row: Dict) -> Dict:
-        """Auto-populate missing metadata from master file"""
+        """ALWAYS sync metadata from master file (master is authority source)"""
         cigar_id = row.get('cigar_id', '')
         if not cigar_id:
             return row
         
         metadata = self.get_cigar_metadata(cigar_id)
         
-        # Auto-populate fields that are empty or missing
+        # ALWAYS override with master data - master file is authority source
+        metadata_changes = []
         for field in ['title', 'brand', 'line', 'wrapper', 'vitola', 'size', 'box_qty']:
-            current_value = row.get(field, '')
-            
-            # Handle NaN, None, empty string, or "nan" string
-            if (not current_value or 
-                current_value == '' or 
-                str(current_value).lower() == 'nan' or
-                current_value is None or
-                (isinstance(current_value, float) and pd.isna(current_value))):
+            if field in metadata and metadata[field]:
+                old_value = row.get(field, '')
+                new_value = metadata[field]
                 
-                if field in metadata and metadata[field]:
-                    row[field] = metadata[field]
-                else:
-                    row[field] = ''  # Ensure it's an empty string, not NaN
+                # Track changes for logging
+                if old_value != new_value:
+                    metadata_changes.append(f"{field}: '{old_value}' -> '{new_value}'")
+                
+                # Always update from master
+                row[field] = new_value
+        
+        # Log metadata sync changes
+        if metadata_changes:
+            print(f"  [MASTER SYNC] Updated metadata: {', '.join(metadata_changes)}")
         
         return row
     
@@ -152,27 +143,12 @@ class GothamCSVUpdaterWithMaster:
             return False
     
     def load_csv(self) -> List[Dict]:
-        """Load the CSV file with validation"""
+        """Load the CSV file"""
         try:
             with open(self.csv_path, 'r', newline='', encoding='utf-8') as f:
-                content = f.read()
-                print(f"[DEBUG] CSV content preview: {content[:200]}...")
-                
-                # Reset file pointer and read with DictReader
-                f.seek(0)
                 reader = csv.DictReader(f)
-                
-                # Check if headers are valid
-                expected_fields = ['cigar_id', 'title', 'url', 'brand', 'line', 'wrapper', 'vitola', 'size', 'box_qty', 'price', 'in_stock']
-                if reader.fieldnames:
-                    print(f"[DEBUG] CSV headers found: {reader.fieldnames}")
-                    # Clean any problematic headers
-                    if len(reader.fieldnames) > len(expected_fields):
-                        print("[WARNING] CSV has malformed headers, attempting to fix...")
-                        return self._fix_malformed_csv()
-                
                 data = list(reader)
-                
+            
             print(f"[INFO] Loaded {len(data)} products from Gotham Cigars CSV")
             return data
         except FileNotFoundError:
@@ -180,58 +156,17 @@ class GothamCSVUpdaterWithMaster:
             return []
         except Exception as e:
             print(f"[ERROR] Failed to load CSV: {e}")
-            print("[INFO] Attempting to fix malformed CSV...")
-            return self._fix_malformed_csv()
-    
-    def _fix_malformed_csv(self) -> List[Dict]:
-        """Attempt to fix a malformed CSV file"""
-        try:
-            # Read raw lines
-            with open(self.csv_path, 'r', encoding='utf-8') as f:
-                lines = f.readlines()
-            
-            print(f"[DEBUG] Found {len(lines)} lines in CSV")
-            
-            # Expected header
-            correct_header = 'cigar_id,title,url,brand,line,wrapper,vitola,size,box_qty,price,in_stock\n'
-            
-            # Look for data lines that look like cigar IDs
-            data_lines = []
-            for line in lines:
-                if '|' in line and 'BOX' in line.upper():  # Likely a cigar_id line
-                    parts = line.strip().split(',')
-                    if len(parts) >= 2 and parts[1].strip():  # Has URL
-                        # Create a proper data row
-                        cigar_id = parts[0] if parts[0] else 'UNKNOWN'
-                        url = parts[1] if len(parts) > 1 and parts[1].strip() else ''
-                        
-                        if url:  # Only include rows with URLs
-                            data_lines.append({
-                                'cigar_id': cigar_id,
-                                'title': '',
-                                'url': url,
-                                'brand': '',
-                                'line': '',
-                                'wrapper': '',
-                                'vitola': '',
-                                'size': '',
-                                'box_qty': '',
-                                'price': '',
-                                'in_stock': ''
-                            })
-            
-            print(f"[INFO] Recovered {len(data_lines)} valid product rows")
-            return data_lines
-            
-        except Exception as e:
-            print(f"[ERROR] Could not fix CSV: {e}")
             return []
     
     def save_csv(self, data: List[Dict]) -> bool:
-        """Save the updated data back to CSV"""
+        """Save the updated data back to CSV (respects dry_run mode)"""
         if not data:
             print("[ERROR] No data to save")
             return False
+        
+        if self.dry_run:
+            print(f"[DRY RUN] Would save {len(data)} updated products to {self.csv_path}")
+            return True
         
         try:
             fieldnames = ['cigar_id', 'title', 'url', 'brand', 'line', 'wrapper', 'vitola', 'size', 'box_qty', 'price', 'in_stock']
@@ -269,8 +204,10 @@ class GothamCSVUpdaterWithMaster:
     
     def run_update(self) -> bool:
         """Run the complete update process"""
+        mode_str = "[DRY RUN] " if self.dry_run else ""
         print("=" * 70)
-        print(f"GOTHAM CIGARS PRICE UPDATE - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"{mode_str}GOTHAM CIGARS ENHANCED PRICE UPDATE - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print("MASTER-DRIVEN METADATA SYNC: All metadata always synced from master file")
         print("=" * 70)
         
         # Load master file
@@ -282,13 +219,14 @@ class GothamCSVUpdaterWithMaster:
         if not data:
             return False
         
-        # Create backup
-        if not self.create_backup():
+        # Create backup (skip in dry run)
+        if not self.dry_run and not self.create_backup():
             return False
         
         # Update each product
         successful_updates = 0
         failed_updates = 0
+        metadata_sync_count = 0
         
         for i, row in enumerate(data):
             cigar_id = row.get('cigar_id', 'Unknown')
@@ -296,8 +234,21 @@ class GothamCSVUpdaterWithMaster:
             
             print(f"\n[{i+1}/{len(data)}] Processing: {cigar_id}")
             
-            # Auto-populate metadata from master file
+            # ALWAYS sync metadata from master file
+            original_row = row.copy()
             row = self.auto_populate_metadata(row)
+            
+            # Check if metadata was updated
+            metadata_updated = any(original_row.get(field) != row.get(field) 
+                                 for field in ['title', 'brand', 'line', 'wrapper', 'vitola', 'size', 'box_qty'])
+            if metadata_updated:
+                metadata_sync_count += 1
+            
+            # Skip pricing extraction in dry run mode
+            if self.dry_run:
+                print("  [DRY RUN] Skipping price extraction")
+                successful_updates += 1
+                continue
             
             # Skip if no URL
             if not url:
@@ -319,14 +270,6 @@ class GothamCSVUpdaterWithMaster:
             if pricing_data.get('in_stock') is not None:
                 row['in_stock'] = pricing_data['in_stock']
             
-            # Validate box quantity if available
-            if pricing_data.get('box_quantity'):
-                extracted_qty = pricing_data['box_quantity']
-                csv_qty = row.get('box_qty')
-                
-                if csv_qty and int(extracted_qty) != int(csv_qty):
-                    print(f"  [WARNING] Box quantity mismatch - CSV: {csv_qty}, Extracted: {extracted_qty}")
-            
             # Show results
             price_str = f"${pricing_data.get('price', 'N/A')}"
             stock_str = "In Stock" if pricing_data.get('in_stock') else "Out of Stock"
@@ -338,12 +281,14 @@ class GothamCSVUpdaterWithMaster:
         # Save updated data
         if self.save_csv(data):
             print("\n" + "=" * 70)
-            print("UPDATE COMPLETE")
+            print(f"{mode_str}UPDATE COMPLETE")
             print(f"Successful updates: {successful_updates}")
             print(f"Failed updates: {failed_updates}")
+            print(f"Metadata synced: {metadata_sync_count} products")
             print(f"Total processed: {len(data)}")
             print(f"Updated file: {self.csv_path}")
-            print(f"Backup file: {self.backup_path}")
+            if self.backup_path:
+                print(f"Backup file: {self.backup_path}")
             print("=" * 70)
             return True
         else:
@@ -354,26 +299,30 @@ def main():
     """Main function for command line usage"""
     import argparse
     
-    parser = argparse.ArgumentParser(description='Update Gotham Cigars prices from CSV')
+    parser = argparse.ArgumentParser(description='Enhanced Gotham Cigars price updater with master-driven metadata sync')
     parser.add_argument('--csv', help='Path to Gotham Cigars CSV file')
     parser.add_argument('--master', help='Path to master cigars CSV file')
-    parser.add_argument('--test', action='store_true', help='Test mode - show what would be updated without saving')
+    parser.add_argument('--dry-run', action='store_true', help='Show what metadata would be updated without making changes')
+    parser.add_argument('--test', action='store_true', help='Deprecated: Use --dry-run instead')
     
     args = parser.parse_args()
     
-    # Create updater instance
-    updater = GothamCSVUpdaterWithMaster(csv_path=args.csv, master_path=args.master)
+    # Handle deprecated --test flag
+    dry_run = args.dry_run or args.test
     
-    if args.test:
-        print("[TEST MODE] Running in test mode - no changes will be saved")
+    # Create updater instance
+    updater = GothamCigarsCSVUpdaterWithMaster(csv_path=args.csv, master_path=args.master, dry_run=dry_run)
+    
+    if dry_run:
+        print("[DRY RUN MODE] Showing metadata changes without updating files")
     
     # Run the update
     success = updater.run_update()
     
     if success:
-        print("\n[SUCCESS] Gotham Cigars price update completed successfully")
+        print("\n[SUCCESS] Gotham Cigars enhanced update completed successfully")
     else:
-        print("\n[FAILED] Gotham Cigars price update failed")
+        print("\n[FAILED] Gotham Cigars enhanced update failed")
         sys.exit(1)
 
 

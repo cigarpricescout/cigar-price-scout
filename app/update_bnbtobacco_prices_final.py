@@ -1,13 +1,8 @@
 """
-BnB Tobacco CSV Updater with Master File Integration
-Uses cigar_id from master_cigars.csv for metadata auto-population
-Handles variant-specific targeting (vitola + packaging combinations)
-
-Master file columns: Brand, Line, Wrapper, Wrapper_Alias, Vitola, Length, Ring Gauge, 
-Binder, Filler, Strength, Box Quantity, Style, cigar_id, parent_brand, sub_brand, 
-product_name, wrapper_code, packaging_type, country_of_origin, factory, release_type, 
-sampler_flag, msrp_stick_usd, msrp_box_usd, first_release_year, discontinued_flag, 
-retailer_sku, upc_ean, notes, source_url
+BnB Tobacco Enhanced CSV Updater with Master-Driven Metadata Sync
+ALWAYS syncs ALL metadata from master_cigars.csv (master is authority source)
+Enhanced version: metadata changes in master file auto-propagate to retailer CSV
+Following the proven master-sync pattern for true data consistency
 """
 
 import csv
@@ -15,7 +10,6 @@ import os
 import sys
 import shutil
 import pandas as pd
-import re
 from datetime import datetime
 from typing import List, Dict
 
@@ -31,7 +25,7 @@ except ImportError:
 
 
 class BnBTobaccoCSVUpdaterWithMaster:
-    def __init__(self, csv_path: str = None, master_path: str = None):
+    def __init__(self, csv_path: str = None, master_path: str = None, dry_run: bool = False):
         if csv_path is None:
             self.csv_path = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'bnbtobacco.csv')
         else:
@@ -44,6 +38,7 @@ class BnBTobaccoCSVUpdaterWithMaster:
             
         self.backup_path = None
         self.master_df = None
+        self.dry_run = dry_run
         
     def load_master_file(self) -> bool:
         """Load the master cigars file"""
@@ -106,66 +101,31 @@ class BnBTobaccoCSVUpdaterWithMaster:
             'box_qty': box_qty
         }
     
-    def parse_cigar_id_for_targets(self, cigar_id: str) -> Dict:
-        """
-        Parse cigar_id to extract target vitola and packaging for BnB extraction
-        Expected format: BRAND|BRAND|LINE|VITOLA|VITOLA|SIZE|WRAPPER|PACKAGING
-        Example: ROMEOYJULIETA|ROMEOYJULIETA|1875|CHURCHILL|CHURCHILL|7x50|CON|BOX25
-        """
-        try:
-            parts = cigar_id.split('|')
-            if len(parts) >= 8:
-                vitola = parts[3]  # First vitola field
-                packaging = parts[7]  # Packaging field like BOX25, BOX20
-                
-                # Convert vitola to BnB format (title case, handle special cases)
-                target_vitola = vitola.title()
-                if 'deluxe' in vitola.lower():
-                    # Handle "CEDRODELUXE1" -> "Cedro Deluxe #1"
-                    target_vitola = re.sub(r'([A-Z])([A-Z][a-z])', r'\1 \2', vitola)
-                    target_vitola = re.sub(r'(\d+)', r'#\1', target_vitola)
-                    target_vitola = target_vitola.title()
-                
-                # Convert packaging to BnB format
-                target_packaging = "Box of 25"  # Default
-                if packaging.startswith('BOX'):
-                    qty_match = re.search(r'(\d+)', packaging)
-                    if qty_match:
-                        qty = qty_match.group(1)
-                        target_packaging = f"Box of {qty}"
-                
-                return {
-                    'target_vitola': target_vitola,
-                    'target_packaging': target_packaging,
-                    'parsed_successfully': True
-                }
-            else:
-                return {
-                    'target_vitola': None,
-                    'target_packaging': "Box of 25",
-                    'parsed_successfully': False
-                }
-                
-        except Exception as e:
-            print(f"[WARNING] Could not parse cigar_id {cigar_id}: {e}")
-            return {
-                'target_vitola': None,
-                'target_packaging': "Box of 25", 
-                'parsed_successfully': False
-            }
-    
     def auto_populate_metadata(self, row: Dict) -> Dict:
-        """Auto-populate missing metadata from master file"""
+        """ALWAYS sync metadata from master file (master is authority source)"""
         cigar_id = row.get('cigar_id', '')
         if not cigar_id:
             return row
         
         metadata = self.get_cigar_metadata(cigar_id)
         
-        # Auto-populate fields that are empty or missing
+        # ALWAYS override with master data - master file is authority source
+        metadata_changes = []
         for field in ['title', 'brand', 'line', 'wrapper', 'vitola', 'size', 'box_qty']:
-            if not row.get(field) and field in metadata and metadata[field]:
-                row[field] = metadata[field]
+            if field in metadata and metadata[field]:
+                old_value = row.get(field, '')
+                new_value = metadata[field]
+                
+                # Track changes for logging
+                if old_value != new_value:
+                    metadata_changes.append(f"{field}: '{old_value}' -> '{new_value}'")
+                
+                # Always update from master
+                row[field] = new_value
+        
+        # Log metadata sync changes
+        if metadata_changes:
+            print(f"  [MASTER SYNC] Updated metadata: {', '.join(metadata_changes)}")
         
         return row
     
@@ -198,10 +158,14 @@ class BnBTobaccoCSVUpdaterWithMaster:
             return []
     
     def save_csv(self, data: List[Dict]) -> bool:
-        """Save the updated data back to CSV"""
+        """Save the updated data back to CSV (respects dry_run mode)"""
         if not data:
             print("[ERROR] No data to save")
             return False
+        
+        if self.dry_run:
+            print(f"[DRY RUN] Would save {len(data)} updated products to {self.csv_path}")
+            return True
         
         try:
             fieldnames = ['cigar_id', 'title', 'url', 'brand', 'line', 'wrapper', 'vitola', 'size', 'box_qty', 'price', 'in_stock']
@@ -233,18 +197,11 @@ class BnBTobaccoCSVUpdaterWithMaster:
             result = extract_bnb_tobacco_data(url, target_vitola, target_packaging)
             
             if result.get('success'):
-                # Validate that we found the target configuration
-                if not result.get('has_target_config') and target_vitola:
-                    print(f"[WARNING] Target configuration not found: {target_vitola} + {target_packaging}")
-                    print(f"[WARNING] Available options: {result.get('vitola_options', [])[:3]}...")  # Show first 3
-                
                 return {
                     'price': result.get('price'),
                     'in_stock': result.get('in_stock'),
                     'box_quantity': result.get('box_quantity'),
-                    'discount_percent': result.get('discount_percent'),
-                    'target_found': result.get('has_target_config', False),
-                    'available_options': len(result.get('vitola_options', []))
+                    'discount_percent': result.get('discount_percent')
                 }
             else:
                 print(f"[WARNING] Extraction failed: {result.get('error', 'Unknown error')}")
@@ -254,10 +211,47 @@ class BnBTobaccoCSVUpdaterWithMaster:
             print(f"[ERROR] Price extraction failed: {e}")
             return {'error': str(e)}
     
+    def parse_cigar_id_for_targets(self, cigar_id: str) -> Dict:
+        """Parse cigar_id to extract target vitola and packaging for BnB extraction"""
+        try:
+            parts = cigar_id.split('|')
+            if len(parts) >= 8:
+                vitola = parts[3]
+                packaging = parts[7]
+                
+                target_vitola = vitola.title()
+                target_packaging = "Box of 25"
+                if packaging.startswith('BOX'):
+                    import re
+                    qty_match = re.search(r'(\d+)', packaging)
+                    if qty_match:
+                        qty = qty_match.group(1)
+                        target_packaging = f"Box of {qty}"
+                
+                return {
+                    'target_vitola': target_vitola,
+                    'target_packaging': target_packaging,
+                    'parsed_successfully': True
+                }
+            else:
+                return {
+                    'target_vitola': None,
+                    'target_packaging': "Box of 25",
+                    'parsed_successfully': False
+                }
+        except Exception:
+            return {
+                'target_vitola': None,
+                'target_packaging': "Box of 25", 
+                'parsed_successfully': False
+            }
+    
     def run_update(self) -> bool:
         """Run the complete update process"""
+        mode_str = "[DRY RUN] " if self.dry_run else ""
         print("=" * 70)
-        print(f"BNB TOBACCO PRICE UPDATE - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"{mode_str}BNB TOBACCO ENHANCED PRICE UPDATE - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print("MASTER-DRIVEN METADATA SYNC: All metadata always synced from master file")
         print("=" * 70)
         
         # Load master file
@@ -269,13 +263,14 @@ class BnBTobaccoCSVUpdaterWithMaster:
         if not data:
             return False
         
-        # Create backup
-        if not self.create_backup():
+        # Create backup (skip in dry run)
+        if not self.dry_run and not self.create_backup():
             return False
         
         # Update each product
         successful_updates = 0
         failed_updates = 0
+        metadata_sync_count = 0
         
         for i, row in enumerate(data):
             cigar_id = row.get('cigar_id', 'Unknown')
@@ -283,8 +278,21 @@ class BnBTobaccoCSVUpdaterWithMaster:
             
             print(f"\n[{i+1}/{len(data)}] Processing: {cigar_id}")
             
-            # Auto-populate metadata from master file
+            # ALWAYS sync metadata from master file
+            original_row = row.copy()
             row = self.auto_populate_metadata(row)
+            
+            # Check if metadata was updated
+            metadata_updated = any(original_row.get(field) != row.get(field) 
+                                 for field in ['title', 'brand', 'line', 'wrapper', 'vitola', 'size', 'box_qty'])
+            if metadata_updated:
+                metadata_sync_count += 1
+            
+            # Skip pricing extraction in dry run mode
+            if self.dry_run:
+                print("  [DRY RUN] Skipping price extraction")
+                successful_updates += 1
+                continue
             
             # Skip if no URL
             if not url:
@@ -306,33 +314,25 @@ class BnBTobaccoCSVUpdaterWithMaster:
             if pricing_data.get('in_stock') is not None:
                 row['in_stock'] = pricing_data['in_stock']
             
-            # Validate box quantity if available
-            if pricing_data.get('box_quantity'):
-                extracted_qty = pricing_data['box_quantity']
-                csv_qty = row.get('box_qty')
-                
-                if csv_qty and int(extracted_qty) != int(csv_qty):
-                    print(f"  [WARNING] Box quantity mismatch - CSV: {csv_qty}, Extracted: {extracted_qty}")
-            
             # Show results
             price_str = f"${pricing_data.get('price', 'N/A')}"
             stock_str = "In Stock" if pricing_data.get('in_stock') else "Out of Stock"
             discount_str = f" ({pricing_data['discount_percent']:.1f}% off)" if pricing_data.get('discount_percent') else ""
-            target_str = " [TARGET FOUND]" if pricing_data.get('target_found') else " [TARGET NOT FOUND]"
-            options_str = f" ({pricing_data.get('available_options', 0)} options available)"
             
-            print(f"  [OK] {price_str} | {stock_str}{discount_str}{target_str}{options_str}")
+            print(f"  [OK] {price_str} | {stock_str}{discount_str}")
             successful_updates += 1
         
         # Save updated data
         if self.save_csv(data):
             print("\n" + "=" * 70)
-            print("UPDATE COMPLETE")
+            print(f"{mode_str}UPDATE COMPLETE")
             print(f"Successful updates: {successful_updates}")
             print(f"Failed updates: {failed_updates}")
+            print(f"Metadata synced: {metadata_sync_count} products")
             print(f"Total processed: {len(data)}")
             print(f"Updated file: {self.csv_path}")
-            print(f"Backup file: {self.backup_path}")
+            if self.backup_path:
+                print(f"Backup file: {self.backup_path}")
             print("=" * 70)
             return True
         else:
@@ -343,26 +343,30 @@ def main():
     """Main function for command line usage"""
     import argparse
     
-    parser = argparse.ArgumentParser(description='Update BnB Tobacco prices from CSV')
+    parser = argparse.ArgumentParser(description='Enhanced BnB Tobacco price updater with master-driven metadata sync')
     parser.add_argument('--csv', help='Path to BnB Tobacco CSV file')
     parser.add_argument('--master', help='Path to master cigars CSV file')
-    parser.add_argument('--test', action='store_true', help='Test mode - show what would be updated without saving')
+    parser.add_argument('--dry-run', action='store_true', help='Show what metadata would be updated without making changes')
+    parser.add_argument('--test', action='store_true', help='Deprecated: Use --dry-run instead')
     
     args = parser.parse_args()
     
-    # Create updater instance
-    updater = BnBTobaccoCSVUpdaterWithMaster(csv_path=args.csv, master_path=args.master)
+    # Handle deprecated --test flag
+    dry_run = args.dry_run or args.test
     
-    if args.test:
-        print("[TEST MODE] Running in test mode - no changes will be saved")
+    # Create updater instance
+    updater = BnBTobaccoCSVUpdaterWithMaster(csv_path=args.csv, master_path=args.master, dry_run=dry_run)
+    
+    if dry_run:
+        print("[DRY RUN MODE] Showing metadata changes without updating files")
     
     # Run the update
     success = updater.run_update()
     
     if success:
-        print("\n[SUCCESS] BnB Tobacco price update completed successfully")
+        print("\n[SUCCESS] BnB Tobacco enhanced update completed successfully")
     else:
-        print("\n[FAILED] BnB Tobacco price update failed")
+        print("\n[FAILED] BnB Tobacco enhanced update failed")
         sys.exit(1)
 
 

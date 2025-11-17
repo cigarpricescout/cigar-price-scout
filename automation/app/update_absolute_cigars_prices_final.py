@@ -1,7 +1,8 @@
 """
-Absolute Cigars CSV Updater with Google Sheets Master File Integration
-Uses cigar_id from master_cigars.csv for metadata auto-population
-Following the proven Hiland's Cigars updater pattern
+Absolute Cigars Enhanced CSV Updater with Master-Driven Metadata Sync
+ALWAYS syncs ALL metadata from master_cigars.csv (master is authority source)
+Enhanced version: metadata changes in master file auto-propagate to retailer CSV
+Following the proven master-sync pattern for true data consistency
 """
 
 import csv
@@ -26,7 +27,7 @@ except ImportError as e:
 
 
 class AbsoluteCigarsCSVUpdaterWithMaster:
-    def __init__(self, csv_path: str = None, master_path: str = None):
+    def __init__(self, csv_path: str = None, master_path: str = None, dry_run: bool = False):
         if csv_path is None:
             self.csv_path = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'absolutecigars.csv')
         else:
@@ -39,6 +40,7 @@ class AbsoluteCigarsCSVUpdaterWithMaster:
             
         self.backup_path = None
         self.master_df = None
+        self.dry_run = dry_run
         
     def load_master_file(self) -> bool:
         """Load the master cigars file"""
@@ -99,13 +101,33 @@ class AbsoluteCigarsCSVUpdaterWithMaster:
             'vitola': row.get('Vitola', ''),
             'size': size,
             'box_qty': box_qty
-        }
-    
-    def auto_populate_metadata(self, row: Dict) -> Dict:
-        """Auto-populate missing metadata from master file"""
+        }    def auto_populate_metadata(self, row: Dict) -> Dict:
+        """ALWAYS sync metadata from master file (master is authority source)"""
         cigar_id = row.get('cigar_id', '')
         if not cigar_id:
             return row
+        
+        metadata = self.get_cigar_metadata(cigar_id)
+        
+        # ALWAYS override with master data - master file is authority source
+        metadata_changes = []
+        for field in ['title', 'brand', 'line', 'wrapper', 'vitola', 'size', 'box_qty']:
+            if field in metadata and metadata[field]:
+                old_value = row.get(field, '')
+                new_value = metadata[field]
+                
+                # Track changes for logging
+                if old_value != new_value:
+                    metadata_changes.append(f"{field}: '{old_value}' -> '{new_value}'")
+                
+                # Always update from master
+                row[field] = new_value
+        
+        # Log metadata sync changes
+        if metadata_changes:
+            print(f"  [MASTER SYNC] Updated metadata: {', '.join(metadata_changes)}")
+        
+        return row
         
         metadata = self.get_cigar_metadata(cigar_id)
         
@@ -144,11 +166,15 @@ class AbsoluteCigarsCSVUpdaterWithMaster:
             print(f"[ERROR] Failed to load CSV: {e}")
             return []
     
-    def save_csv(self, data: List[Dict]) -> bool:
-        """Save the updated data back to CSV"""
+        def save_csv(self, data: List[Dict]) -> bool:
+        """Save the updated data back to CSV (respects dry_run mode)"""
         if not data:
             print("[ERROR] No data to save")
             return False
+        
+        if self.dry_run:
+            print(f"[DRY RUN] Would save {len(data)} updated products to {self.csv_path}")
+            return True
         
         try:
             fieldnames = ['cigar_id', 'title', 'url', 'brand', 'line', 'wrapper', 'vitola', 'size', 'box_qty', 'price', 'in_stock']
@@ -184,9 +210,12 @@ class AbsoluteCigarsCSVUpdaterWithMaster:
             print(f"[ERROR] Price extraction failed: {e}")
             return {'error': str(e)}
     
-    def run_update(self) -> bool:
+        def run_update(self) -> bool:
         """Run the complete update process"""
+        mode_str = "[DRY RUN] " if self.dry_run else ""
         print("=" * 70)
+        print(f"{mode_str}ABSOLUTE CIGARS ENHANCED PRICE UPDATE - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print("MASTER-DRIVEN METADATA SYNC: All metadata always synced from master file")
         print(f"ABSOLUTE CIGARS PRICE UPDATE - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         print("=" * 70)
         
@@ -206,6 +235,7 @@ class AbsoluteCigarsCSVUpdaterWithMaster:
         # Update each product
         successful_updates = 0
         failed_updates = 0
+        metadata_sync_count = 0
         
         for i, row in enumerate(data):
             cigar_id = row.get('cigar_id', 'Unknown')
@@ -274,12 +304,16 @@ def main():
     parser = argparse.ArgumentParser(description='Update Absolute Cigars prices from CSV')
     parser.add_argument('--csv', help='Path to Absolute Cigars CSV file')
     parser.add_argument('--master', help='Path to master cigars CSV file')
-    parser.add_argument('--test', action='store_true', help='Test mode - show what would be updated without saving')
+    parser.add_argument('--dry-run', action='store_true', help='Show what metadata would be updated without making changes')
+    parser.add_argument('--test', action='store_true', help='Deprecated: Use --dry-run instead')
     
     args = parser.parse_args()
     
+    # Handle deprecated --test flag
+    dry_run = getattr(args, "dry_run", False) or getattr(args, "test", False)
+    
     # Create updater instance
-    updater = AbsoluteCigarsCSVUpdaterWithMaster(csv_path=args.csv, master_path=args.master)
+    updater = AbsoluteCigarsCSVUpdaterWithMaster(csv_path=args.csv, master_path=args.master, dry_run=dry_run)
     
     if args.test:
         print("[TEST MODE] Running in test mode - no changes will be saved")

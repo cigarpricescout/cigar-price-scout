@@ -70,87 +70,82 @@ def extract_tobacco_locker_data(url: str) -> Dict:
 
 
 def _extract_tobacco_locker_price(soup: BeautifulSoup) -> Optional[float]:
-    """Extract price from Tobacco Locker product page - handle full price range"""
+    """Extract price from Tobacco Locker product page - focus on actual product pricing"""
     
-    # Strategy 1: Look for specific known prices first
+    # Strategy 1: Look for price in structured elements first
+    price_selectors = [
+        '[class*="price"]',
+        '[data-price]', 
+        '.product-price',
+        '.price-box',
+        '.current-price'
+    ]
+    
+    for selector in price_selectors:
+        price_elements = soup.select(selector)
+        for elem in price_elements:
+            text = elem.get_text().strip()
+            # Look for price pattern
+            price_match = re.search(r'\$(\d{1,4}\.?\d{0,2})', text)
+            if price_match:
+                try:
+                    price_val = float(price_match.group(1))
+                    # Reasonable box price range
+                    if 50 <= price_val <= 800:
+                        return price_val
+                except ValueError:
+                    continue
+    
+    # Strategy 2: Look for prominent price displays in common locations
     page_text = soup.get_text()
     
-    # Direct matches for known prices - check for OpusX specifically
-    if 'opus' in page_text.lower() and ('1400' in page_text or '1,400' in page_text):
-        return 1400.0
-    
-    # Other direct matches for known prices
-    known_prices = {
-        '1400': 1400.0,    # OpusX Robusto
-        '241.89': 241.89,  # Perdomo Reserve
-        '274.95': 274.95,  # My Father Judge sale price
-        '455': 455.0,      # Padron 1964 price  
-        '338': 338.0,      # Ashton VSG price
-        '135.35': 135.35,  # Hoyo de Monterrey price
-        '189.50': 189.50   # Romeo y Julieta price
-    }
-    
-    for price_text, price_val in known_prices.items():
-        if price_text in page_text:
-            return price_val
-    
-    # Strategy 2: Find all prices in expanded range
-    all_prices = re.findall(r'\$(\d+\.?\d*)', page_text)
-    substantial_prices = []
+    # Find all dollar amounts in reasonable range
+    all_prices = re.findall(r'\$(\d{1,4}\.?\d{0,2})', page_text)
+    valid_prices = []
     
     for price_text in all_prices:
         try:
             price_val = float(price_text)
-            # Expanded range to handle premium cigars like OpusX
-            if 50 <= price_val <= 2000:
-                substantial_prices.append(price_val)
+            # Focus on typical cigar box price range
+            if 50 <= price_val <= 800:
+                valid_prices.append(price_val)
         except ValueError:
             continue
     
-    if substantial_prices:
-        unique_prices = sorted(list(set(substantial_prices)))
+    if valid_prices:
+        # Remove duplicates and sort
+        unique_prices = sorted(list(set(valid_prices)))
         
-        # Filter out obvious non-box prices (very small amounts)
-        box_prices = [p for p in unique_prices if p >= 100]
-        
-        if box_prices:
-            if len(box_prices) == 1:
-                # Single box price - use it
-                return box_prices[0]
-            elif len(box_prices) == 2:
-                # Two prices - check for MSRP vs sale scenario
-                higher_price = max(box_prices)
-                lower_price = min(box_prices)
-                
-                # Only treat as sale price if there's significant discount (>15%)
-                discount_percent = (higher_price - lower_price) / higher_price
-                if discount_percent > 0.15:
-                    return lower_price  # Sale price
-                else:
-                    # Use the higher price as main price
-                    return higher_price
-            else:
-                # Multiple prices - for premium cigars like OpusX, use the highest price
-                # Check if this is likely a premium cigar
-                if 'opus' in page_text.lower() or any(p > 1000 for p in box_prices):
-                    return max(box_prices)  # Use highest price for premium cigars
-                else:
-                    # Regular cigars - use highest reasonable price
-                    return max(box_prices)
+        # If we have multiple prices, prefer the one in the middle range
+        # (often the actual product price, avoiding very high MSRP or very low single prices)
+        if len(unique_prices) == 1:
+            return unique_prices[0]
+        elif len(unique_prices) == 2:
+            # Two prices - likely MSRP and sale price, take the lower one
+            return min(unique_prices)
         else:
-            # No box-range prices found, use highest overall
-            return max(unique_prices)
+            # Multiple prices - filter out outliers and take a reasonable middle price
+            # Remove the highest and lowest, take from remaining
+            if len(unique_prices) >= 3:
+                middle_prices = unique_prices[1:-1]  # Remove highest and lowest
+                # Prefer prices in the 100-400 range for typical boxes
+                preferred_prices = [p for p in middle_prices if 100 <= p <= 400]
+                if preferred_prices:
+                    return min(preferred_prices)  # Take lowest of the preferred range
+                else:
+                    return min(middle_prices)  # Take lowest of middle range
+            else:
+                return min(unique_prices)  # Take lowest of what we have
     
-    # Strategy 3: Look for prominent price display elements as fallback
-    price_elements = soup.find_all(['span', 'div', 'p'], class_=re.compile(r'price', re.I))
-    
-    for elem in price_elements:
-        text = elem.get_text().strip()
-        price_match = re.search(r'\$(\d+\.?\d*)', text)
+    # Strategy 3: Look for specific product price areas (fallback)
+    product_sections = soup.find_all(['div'], class_=re.compile(r'product|price', re.I))
+    for section in product_sections:
+        section_text = section.get_text()
+        price_match = re.search(r'\$(\d{1,4}\.?\d{0,2})', section_text)
         if price_match:
             try:
                 price_val = float(price_match.group(1))
-                if 100 <= price_val <= 2000:
+                if 50 <= price_val <= 800:
                     return price_val
             except ValueError:
                 continue

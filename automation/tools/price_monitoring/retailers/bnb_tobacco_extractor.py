@@ -1,7 +1,9 @@
 """
-BnB Tobacco Extractor
+BnB Tobacco Extractor - FIXED VERSION
 Handles dynamic product selection with vitola and packaging options
 Platform appears to be Shopify-based with variant selection
+
+FIXED: Stock status detection for "Out Of Stock - Notify Me!" pattern
 """
 
 import requests
@@ -229,35 +231,48 @@ def _extract_pricing(soup: BeautifulSoup, target_vitola: str = None, target_pack
 
 
 def _extract_stock_status(soup: BeautifulSoup) -> bool:
-    """Extract stock status - improved for BnB Tobacco"""
+    """Extract stock status - PRECISE version for BnB Tobacco"""
     
-    # Look for stock indicators in text
+    # Strategy 1: Look for the specific "Add to Cart" button area
+    add_to_cart_button = soup.find(['button', 'input'], string=re.compile(r'add\s*to\s*cart', re.I))
+    
+    if add_to_cart_button:
+        # Check the immediate area around the Add to Cart button
+        button_container = add_to_cart_button.find_parent(['div', 'form', 'section'])
+        if button_container:
+            container_text = button_container.get_text()
+            
+            # If we find "Out Of Stock" or "Notify Me" near the Add to Cart button, it's out of stock
+            if re.search(r'out\s*of\s*stock.*notify\s*me|notify\s*me.*out\s*of\s*stock', container_text, re.I):
+                return False
+            
+            # If button contains price and no out-of-stock indicators nearby, it's in stock
+            if re.search(r'\$\d+', container_text):
+                return True
+    
+    # Strategy 2: Look for explicit stock status indicators
+    stock_indicators = soup.find_all(['span', 'div', 'p'], class_=re.compile(r'stock|inventory|availability', re.I))
+    
+    for indicator in stock_indicators:
+        text = indicator.get_text().strip()
+        if re.search(r'out\s*of\s*stock|sold\s*out', text, re.I):
+            return False
+        if re.search(r'in\s*stock|available|\d+\s*in\s*stock', text, re.I):
+            return True
+    
+    # Strategy 3: Look at page text for clear indicators
     page_text = soup.get_text()
     
-    # Positive stock indicators (check these first)
-    if re.search(r'in\s*stock|available|only\s*\d+\s*available|hurry.*only.*\d+.*available', page_text, re.IGNORECASE):
-        return True
-    
-    # Look for "Add to Cart" buttons with prices (strong in-stock indicator)
-    add_to_cart = soup.find_all(['button', 'input'], string=re.compile(r'add\s*to\s*cart.*\$\d+', re.I))
-    if add_to_cart:
-        return True
-    
-    # Regular "Add to Cart" button
-    add_to_cart_simple = soup.find(['button', 'input'], string=re.compile(r'add\s*to\s*cart', re.I))
-    if add_to_cart_simple:
-        return True
-    
-    # Out of stock indicators
-    if re.search(r'out\s*of\s*stock|sold\s*out|unavailable', page_text, re.IGNORECASE):
+    # Check for the specific BnB out-of-stock pattern with button context
+    if re.search(r'out\s*of\s*stock\s*-\s*notify\s*me', page_text, re.I):
         return False
     
-    # "Notify Me" button indicates out of stock
-    notify_me = soup.find(['button', 'input'], string=re.compile(r'notify\s*me', re.I))
-    if notify_me:
-        return False
+    # Strategy 4: Default determination based on Add to Cart presence
+    # If we have an Add to Cart button and no clear out-of-stock indicators, assume in stock
+    if add_to_cart_button and not re.search(r'out\s*of\s*stock|sold\s*out|unavailable', page_text, re.I):
+        return True
     
-    # Default to True if unclear (BnB seems to show available items)
+    # Conservative default for unclear cases
     return True
 
 
@@ -296,24 +311,15 @@ def _extract_box_quantity(packaging_options: list, target_packaging: str, vitola
 
 # Test function
 if __name__ == "__main__":
-    test_url = "https://www.bnbtobacco.com/products/romeo-y-julieta-1875"
+    test_url = "https://www.bnbtobacco.com/products/my-father-le-bijou-1922?variant=33403225219"
     
-    # Test multiple vitolas from same URL
-    tests = [
-        ("Churchill", "Box of 25"),
-        ("Magnum", "Box of 20"), 
-        ("Bully", "Box of 25"),
-        ("Cedro Deluxe #1", "Box of 25")
-    ]
+    print(f"=== Testing BnB Stock Status Detection ===")
+    print(f"URL: {test_url}")
     
-    for vitola, packaging in tests:
-        print(f"\n=== Testing {vitola} {packaging} ===")
-        result = extract_bnb_tobacco_data(test_url, target_vitola=vitola, target_packaging=packaging)
-        
-        print(f"Price: ${result.get('price')}")
-        print(f"Box Qty: {result.get('box_quantity')}")
-        print(f"Target Config Found: {result.get('has_target_config')}")
-        
-        if result.get('price') and result.get('box_quantity'):
-            per_stick = result['price'] / result['box_quantity']
-            print(f"Price per stick: ${per_stick:.2f}")
+    result = extract_bnb_tobacco_data(test_url, target_vitola="Toro", target_packaging="Box of 23")
+    
+    print(f"Price: ${result.get('price')}")
+    print(f"Box Qty: {result.get('box_quantity')}")
+    print(f"In Stock: {result.get('in_stock')} (Should be False for 'Out Of Stock - Notify Me!')")
+    print(f"Success: {result.get('success')}")
+    print(f"Error: {result.get('error')}")

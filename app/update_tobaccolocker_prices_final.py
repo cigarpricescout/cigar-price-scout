@@ -1,7 +1,8 @@
 """
-Tobacco Locker CSV Updater with Master File Integration
-Handles clean server-side pricing extraction with package options
-Uses cigar_id from master_cigars.csv for metadata auto-population
+Tobacco Locker Enhanced CSV Updater with Master-Driven Metadata Sync
+ALWAYS syncs ALL metadata from master_cigars.csv (master is authority source)
+Enhanced version: metadata changes in master file auto-propagate to retailer CSV
+Following the proven master-sync pattern for true data consistency
 """
 
 import csv
@@ -24,7 +25,7 @@ except ImportError:
 
 
 class TobaccoLockerCSVUpdaterWithMaster:
-    def __init__(self, csv_path: str = None, master_path: str = None):
+    def __init__(self, csv_path: str = None, master_path: str = None, dry_run: bool = False):
         if csv_path is None:
             self.csv_path = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'tobaccolocker.csv')
         else:
@@ -37,6 +38,7 @@ class TobaccoLockerCSVUpdaterWithMaster:
             
         self.backup_path = None
         self.master_df = None
+        self.dry_run = dry_run
         
     def load_master_file(self) -> bool:
         """Load the master cigars file"""
@@ -100,17 +102,30 @@ class TobaccoLockerCSVUpdaterWithMaster:
         }
     
     def auto_populate_metadata(self, row: Dict) -> Dict:
-        """Auto-populate missing metadata from master file"""
+        """ALWAYS sync metadata from master file (master is authority source)"""
         cigar_id = row.get('cigar_id', '')
         if not cigar_id:
             return row
         
         metadata = self.get_cigar_metadata(cigar_id)
         
-        # Auto-populate fields that are empty or missing
+        # ALWAYS override with master data - master file is authority source
+        metadata_changes = []
         for field in ['title', 'brand', 'line', 'wrapper', 'vitola', 'size', 'box_qty']:
-            if not row.get(field) and field in metadata and metadata[field]:
-                row[field] = metadata[field]
+            if field in metadata and metadata[field]:
+                old_value = row.get(field, '')
+                new_value = metadata[field]
+                
+                # Track changes for logging
+                if old_value != new_value:
+                    metadata_changes.append(f"{field}: '{old_value}' -> '{new_value}'")
+                
+                # Always update from master
+                row[field] = new_value
+        
+        # Log metadata sync changes
+        if metadata_changes:
+            print(f"  [MASTER SYNC] Updated metadata: {', '.join(metadata_changes)}")
         
         return row
     
@@ -143,10 +158,14 @@ class TobaccoLockerCSVUpdaterWithMaster:
             return []
     
     def save_csv(self, data: List[Dict]) -> bool:
-        """Save the updated data back to CSV"""
+        """Save the updated data back to CSV (respects dry_run mode)"""
         if not data:
             print("[ERROR] No data to save")
             return False
+        
+        if self.dry_run:
+            print(f"[DRY RUN] Would save {len(data)} updated products to {self.csv_path}")
+            return True
         
         try:
             fieldnames = ['cigar_id', 'title', 'url', 'brand', 'line', 'wrapper', 'vitola', 'size', 'box_qty', 'price', 'in_stock']
@@ -201,8 +220,10 @@ class TobaccoLockerCSVUpdaterWithMaster:
     
     def run_update(self) -> bool:
         """Run the complete update process"""
+        mode_str = "[DRY RUN] " if self.dry_run else ""
         print("=" * 70)
-        print(f"TOBACCO LOCKER PRICE UPDATE - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"{mode_str}TOBACCO LOCKER ENHANCED PRICE UPDATE - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print("MASTER-DRIVEN METADATA SYNC: All metadata always synced from master file")
         print("=" * 70)
         
         # Load master file
@@ -214,13 +235,14 @@ class TobaccoLockerCSVUpdaterWithMaster:
         if not data:
             return False
         
-        # Create backup
-        if not self.create_backup():
+        # Create backup (skip in dry run)
+        if not self.dry_run and not self.create_backup():
             return False
         
         # Update each product
         successful_updates = 0
         failed_updates = 0
+        metadata_sync_count = 0
         
         for i, row in enumerate(data):
             cigar_id = row.get('cigar_id', 'Unknown')
@@ -228,8 +250,21 @@ class TobaccoLockerCSVUpdaterWithMaster:
             
             print(f"\n[{i+1}/{len(data)}] Processing: {cigar_id}")
             
-            # Auto-populate metadata from master file
+            # ALWAYS sync metadata from master file
+            original_row = row.copy()
             row = self.auto_populate_metadata(row)
+            
+            # Check if metadata was updated
+            metadata_updated = any(original_row.get(field) != row.get(field) 
+                                 for field in ['title', 'brand', 'line', 'wrapper', 'vitola', 'size', 'box_qty'])
+            if metadata_updated:
+                metadata_sync_count += 1
+            
+            # Skip pricing extraction in dry run mode
+            if self.dry_run:
+                print("  [DRY RUN] Skipping price extraction")
+                successful_updates += 1
+                continue
             
             # Skip if no URL
             if not url:
@@ -261,12 +296,14 @@ class TobaccoLockerCSVUpdaterWithMaster:
         # Save updated data
         if self.save_csv(data):
             print("\n" + "=" * 70)
-            print("UPDATE COMPLETE")
+            print(f"{mode_str}UPDATE COMPLETE")
             print(f"Successful updates: {successful_updates}")
             print(f"Failed updates: {failed_updates}")
+            print(f"Metadata synced: {metadata_sync_count} products")
             print(f"Total processed: {len(data)}")
             print(f"Updated file: {self.csv_path}")
-            print(f"Backup file: {self.backup_path}")
+            if self.backup_path:
+                print(f"Backup file: {self.backup_path}")
             print("=" * 70)
             return True
         else:
@@ -277,22 +314,30 @@ def main():
     """Main function for command line usage"""
     import argparse
     
-    parser = argparse.ArgumentParser(description='Update Tobacco Locker prices from CSV')
+    parser = argparse.ArgumentParser(description='Enhanced Tobacco Locker price updater with master-driven metadata sync')
     parser.add_argument('--csv', help='Path to Tobacco Locker CSV file')
     parser.add_argument('--master', help='Path to master cigars CSV file')
+    parser.add_argument('--dry-run', action='store_true', help='Show what metadata would be updated without making changes')
+    parser.add_argument('--test', action='store_true', help='Deprecated: Use --dry-run instead')
     
     args = parser.parse_args()
     
+    # Handle deprecated --test flag
+    dry_run = args.dry_run or args.test
+    
     # Create updater instance
-    updater = TobaccoLockerCSVUpdaterWithMaster(csv_path=args.csv, master_path=args.master)
+    updater = TobaccoLockerCSVUpdaterWithMaster(csv_path=args.csv, master_path=args.master, dry_run=dry_run)
+    
+    if dry_run:
+        print("[DRY RUN MODE] Showing metadata changes without updating files")
     
     # Run the update
     success = updater.run_update()
     
     if success:
-        print("\n[SUCCESS] Tobacco Locker price update completed successfully")
+        print("\n[SUCCESS] Tobacco Locker enhanced update completed successfully")
     else:
-        print("\n[FAILED] Tobacco Locker price update failed")
+        print("\n[FAILED] Tobacco Locker enhanced update failed")
         sys.exit(1)
 
 

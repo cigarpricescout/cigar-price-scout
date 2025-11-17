@@ -1,7 +1,8 @@
 """
-Watch City Cigars CSV Updater with Master File Integration
-Conservative rate limiting: 0.2-0.5 requests/sec for respectful scraping
-Uses cigar_id from master_cigars.csv for metadata auto-population
+Watch City Cigars Enhanced CSV Updater with Master-Driven Metadata Sync
+ALWAYS syncs ALL metadata from master_cigars.csv (master is authority source)
+Enhanced version: metadata changes in master file auto-propagate to retailer CSV
+Following the proven master-sync pattern for true data consistency
 """
 
 import csv
@@ -23,8 +24,8 @@ except ImportError:
     sys.exit(1)
 
 
-class WatchCityCSVUpdaterWithMaster:
-    def __init__(self, csv_path: str = None, master_path: str = None, rate_limit: float = 3.5):
+class WatchCityCigarsCSVUpdaterWithMaster:
+    def __init__(self, csv_path: str = None, master_path: str = None, dry_run: bool = False):
         if csv_path is None:
             self.csv_path = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'watchcity.csv')
         else:
@@ -35,9 +36,9 @@ class WatchCityCSVUpdaterWithMaster:
         else:
             self.master_path = master_path
             
-        self.rate_limit = rate_limit  # Conservative rate limiting (3.5 sec = 0.29 requests/sec)
         self.backup_path = None
         self.master_df = None
+        self.dry_run = dry_run
         
     def load_master_file(self) -> bool:
         """Load the master cigars file"""
@@ -101,17 +102,30 @@ class WatchCityCSVUpdaterWithMaster:
         }
     
     def auto_populate_metadata(self, row: Dict) -> Dict:
-        """Auto-populate missing metadata from master file"""
+        """ALWAYS sync metadata from master file (master is authority source)"""
         cigar_id = row.get('cigar_id', '')
         if not cigar_id:
             return row
         
         metadata = self.get_cigar_metadata(cigar_id)
         
-        # Auto-populate fields that are empty or missing
+        # ALWAYS override with master data - master file is authority source
+        metadata_changes = []
         for field in ['title', 'brand', 'line', 'wrapper', 'vitola', 'size', 'box_qty']:
-            if not row.get(field) and field in metadata and metadata[field]:
-                row[field] = metadata[field]
+            if field in metadata and metadata[field]:
+                old_value = row.get(field, '')
+                new_value = metadata[field]
+                
+                # Track changes for logging
+                if old_value != new_value:
+                    metadata_changes.append(f"{field}: '{old_value}' -> '{new_value}'")
+                
+                # Always update from master
+                row[field] = new_value
+        
+        # Log metadata sync changes
+        if metadata_changes:
+            print(f"  [MASTER SYNC] Updated metadata: {', '.join(metadata_changes)}")
         
         return row
     
@@ -134,43 +148,32 @@ class WatchCityCSVUpdaterWithMaster:
                 reader = csv.DictReader(f)
                 data = list(reader)
             
-            print(f"[INFO] Loaded {len(data)} products from Watch City CSV")
+            print(f"[INFO] Loaded {len(data)} products from Watch City Cigars CSV")
             return data
         except FileNotFoundError:
-            print(f"[ERROR] Watch City CSV not found at: {self.csv_path}")
+            print(f"[ERROR] Watch City Cigars CSV not found at: {self.csv_path}")
             return []
         except Exception as e:
             print(f"[ERROR] Failed to load CSV: {e}")
             return []
     
     def save_csv(self, data: List[Dict]) -> bool:
-        """Save the updated data back to CSV"""
+        """Save the updated data back to CSV (respects dry_run mode)"""
         if not data:
             print("[ERROR] No data to save")
             return False
         
+        if self.dry_run:
+            print(f"[DRY RUN] Would save {len(data)} updated products to {self.csv_path}")
+            return True
+        
         try:
             fieldnames = ['cigar_id', 'title', 'url', 'brand', 'line', 'wrapper', 'vitola', 'size', 'box_qty', 'price', 'in_stock']
-            
-            # Clean the data to ensure no None keys and all required fields exist
-            cleaned_data = []
-            for row in data:
-                # Remove any None keys
-                clean_row = {k: v for k, v in row.items() if k is not None}
-                
-                # Ensure all required fieldnames exist
-                for field in fieldnames:
-                    if field not in clean_row:
-                        clean_row[field] = ''
-                
-                # Keep only the fieldnames we want
-                final_row = {field: clean_row.get(field, '') for field in fieldnames}
-                cleaned_data.append(final_row)
             
             with open(self.csv_path, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
                 writer.writeheader()
-                writer.writerows(cleaned_data)
+                writer.writerows(data)
             
             print(f"[INFO] Updated data saved to {self.csv_path}")
             return True
@@ -179,35 +182,31 @@ class WatchCityCSVUpdaterWithMaster:
             return False
     
     def update_pricing_data(self, url: str) -> Dict:
-        """Extract live pricing data from Watch City with conservative rate limiting"""
+        """Extract live pricing data from Watch City Cigars"""
         try:
-            # Validate URL
-            if not url or not url.startswith(('http://', 'https://')):
-                return {'error': f'Invalid URL: "{url}" - URLs must start with http:// or https://'}
-            
-            # Use conservative rate limiting
-            result = extract_watch_city_data(url, rate_limit_seconds=self.rate_limit)
+            result = extract_watch_city_data(url)
             
             if result.get('success'):
                 return {
                     'price': result.get('price'),
-                    'original_price': result.get('original_price'),
-                    'discount_percent': result.get('discount_percent'),
                     'in_stock': result.get('in_stock'),
-                    'box_quantity': result.get('box_quantity')
+                    'box_quantity': result.get('box_quantity'),
+                    'discount_percent': result.get('discount_percent')
                 }
             else:
-                return {'error': result.get('error', 'Unknown error')}
+                print(f"[WARNING] Extraction failed: {result.get('error', 'Unknown error')}")
+                return {'error': result.get('error', 'Extraction failed')}
                 
         except Exception as e:
             print(f"[ERROR] Price extraction failed: {e}")
             return {'error': str(e)}
     
     def run_update(self) -> bool:
-        """Run the complete update process with conservative rate limiting"""
+        """Run the complete update process"""
+        mode_str = "[DRY RUN] " if self.dry_run else ""
         print("=" * 70)
-        print(f"WATCH CITY PRICE UPDATE - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        print(f"Rate Limiting: {self.rate_limit} seconds between requests ({1/self.rate_limit:.2f} req/sec)")
+        print(f"{mode_str}WATCH CITY CIGARS ENHANCED PRICE UPDATE - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print("MASTER-DRIVEN METADATA SYNC: All metadata always synced from master file")
         print("=" * 70)
         
         # Load master file
@@ -219,24 +218,36 @@ class WatchCityCSVUpdaterWithMaster:
         if not data:
             return False
         
-        # Create backup
-        if not self.create_backup():
+        # Create backup (skip in dry run)
+        if not self.dry_run and not self.create_backup():
             return False
         
         # Update each product
         successful_updates = 0
         failed_updates = 0
-        start_time = datetime.now()
+        metadata_sync_count = 0
         
         for i, row in enumerate(data):
             cigar_id = row.get('cigar_id', 'Unknown')
             url = row.get('url', '')
             
             print(f"\n[{i+1}/{len(data)}] Processing: {cigar_id}")
-            print(f"  Rate limiting: Waiting {self.rate_limit}s before request...")
             
-            # Auto-populate metadata from master file
+            # ALWAYS sync metadata from master file
+            original_row = row.copy()
             row = self.auto_populate_metadata(row)
+            
+            # Check if metadata was updated
+            metadata_updated = any(original_row.get(field) != row.get(field) 
+                                 for field in ['title', 'brand', 'line', 'wrapper', 'vitola', 'size', 'box_qty'])
+            if metadata_updated:
+                metadata_sync_count += 1
+            
+            # Skip pricing extraction in dry run mode
+            if self.dry_run:
+                print("  [DRY RUN] Skipping price extraction")
+                successful_updates += 1
+                continue
             
             # Skip if no URL
             if not url:
@@ -244,7 +255,7 @@ class WatchCityCSVUpdaterWithMaster:
                 failed_updates += 1
                 continue
             
-            # Extract live pricing with conservative rate limiting
+            # Extract live pricing
             pricing_data = self.update_pricing_data(url)
             
             if 'error' in pricing_data:
@@ -260,35 +271,23 @@ class WatchCityCSVUpdaterWithMaster:
             
             # Show results
             price_str = f"${pricing_data.get('price', 'N/A')}"
-            if pricing_data.get('original_price'):
-                msrp_str = f" (MSRP ${pricing_data['original_price']})"
-            else:
-                msrp_str = ""
-            
-            if pricing_data.get('discount_percent'):
-                discount_str = f" | {pricing_data['discount_percent']:.1f}% off"
-            else:
-                discount_str = ""
-            
             stock_str = "In Stock" if pricing_data.get('in_stock') else "Out of Stock"
+            discount_str = f" ({pricing_data['discount_percent']:.1f}% off)" if pricing_data.get('discount_percent') else ""
             
-            print(f"  [OK] {price_str}{msrp_str}{discount_str} | {stock_str}")
+            print(f"  [OK] {price_str} | {stock_str}{discount_str}")
             successful_updates += 1
         
         # Save updated data
         if self.save_csv(data):
-            end_time = datetime.now()
-            duration = end_time - start_time
-            
             print("\n" + "=" * 70)
-            print("UPDATE COMPLETE")
+            print(f"{mode_str}UPDATE COMPLETE")
             print(f"Successful updates: {successful_updates}")
             print(f"Failed updates: {failed_updates}")
+            print(f"Metadata synced: {metadata_sync_count} products")
             print(f"Total processed: {len(data)}")
-            print(f"Total time: {duration}")
-            print(f"Average time per product: {duration.total_seconds() / len(data):.1f}s")
             print(f"Updated file: {self.csv_path}")
-            print(f"Backup file: {self.backup_path}")
+            if self.backup_path:
+                print(f"Backup file: {self.backup_path}")
             print("=" * 70)
             return True
         else:
@@ -299,30 +298,30 @@ def main():
     """Main function for command line usage"""
     import argparse
     
-    parser = argparse.ArgumentParser(description='Update Watch City prices from CSV with conservative rate limiting')
-    parser.add_argument('--csv', help='Path to Watch City CSV file')
+    parser = argparse.ArgumentParser(description='Enhanced Watch City Cigars price updater with master-driven metadata sync')
+    parser.add_argument('--csv', help='Path to Watch City Cigars CSV file')
     parser.add_argument('--master', help='Path to master cigars CSV file')
-    parser.add_argument('--rate-limit', type=float, default=3.5, help='Seconds between requests (default: 3.5)')
+    parser.add_argument('--dry-run', action='store_true', help='Show what metadata would be updated without making changes')
+    parser.add_argument('--test', action='store_true', help='Deprecated: Use --dry-run instead')
     
     args = parser.parse_args()
     
-    # Create updater instance with conservative rate limiting
-    updater = WatchCityCSVUpdaterWithMaster(
-        csv_path=args.csv, 
-        master_path=args.master,
-        rate_limit=args.rate_limit
-    )
+    # Handle deprecated --test flag
+    dry_run = args.dry_run or args.test
     
-    print(f"[INFO] Using rate limit: {args.rate_limit} seconds between requests")
-    print(f"[INFO] This equals approximately {1/args.rate_limit:.2f} requests per second")
+    # Create updater instance
+    updater = WatchCityCigarsCSVUpdaterWithMaster(csv_path=args.csv, master_path=args.master, dry_run=dry_run)
+    
+    if dry_run:
+        print("[DRY RUN MODE] Showing metadata changes without updating files")
     
     # Run the update
     success = updater.run_update()
     
     if success:
-        print("\n[SUCCESS] Watch City price update completed successfully")
+        print("\n[SUCCESS] Watch City Cigars enhanced update completed successfully")
     else:
-        print("\n[FAILED] Watch City price update failed")
+        print("\n[FAILED] Watch City Cigars enhanced update failed")
         sys.exit(1)
 
 

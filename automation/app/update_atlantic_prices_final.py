@@ -1,6 +1,8 @@
 """
-Atlantic Cigar CSV Updater with Google Sheets Master File Integration
-Uses cigar_id from master_cigars.csv for metadata auto-population
+Atlantic Cigars Enhanced CSV Updater with Master-Driven Metadata Sync
+ALWAYS syncs ALL metadata from master_cigars.csv (master is authority source)
+Enhanced version: metadata changes in master file auto-propagate to retailer CSV
+Following the proven master-sync pattern for true data consistency
 """
 
 import csv
@@ -17,409 +19,308 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'tools', 'price_monitori
 try:
     from retailers.atlantic_cigar import extract_atlantic_cigar_data
 except ImportError:
-    print("[ERROR] Could not import extract_atlantic_cigar_data. Make sure the extractor is in tools/price_monitoring/retailers/")
+    print("[ERROR] Could not import extract_atlantic_cigar_data. Make sure the extractor is in tools/price_monitoring/retailers/atlantic_cigar.py")
     sys.exit(1)
 
 
-class AtlanticCSVUpdaterWithMaster:
-    def __init__(self, csv_path: str = None, master_path: str = None):
+class AtlanticCigarsCSVUpdaterWithMaster:
+    def __init__(self, csv_path: str = None, master_path: str = None, dry_run: bool = False):
         if csv_path is None:
-            # Default path relative to app directory
             self.csv_path = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'atlantic.csv')
         else:
             self.csv_path = csv_path
             
         if master_path is None:
-            # Default path to master file
             self.master_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'master_cigars.csv')
         else:
             self.master_path = master_path
             
         self.backup_path = None
         self.master_df = None
+        self.dry_run = dry_run
         
     def load_master_file(self) -> bool:
         """Load the master cigars file"""
         try:
             self.master_df = pd.read_csv(self.master_path)
             
-            # Convert Box Quantity to numeric, replacing any non-numeric values with 0
+            # Convert Box Quantity to numeric
             self.master_df['Box Quantity'] = pd.to_numeric(self.master_df['Box Quantity'], errors='coerce').fillna(0)
             
-            # Filter to only box quantities (10+) for retail comparison
+            # Filter to box quantities (10+)
             box_skus = self.master_df[self.master_df['Box Quantity'] >= 10]
             
-            print(f"[OK] Loaded {len(self.master_df)} total SKUs from master file")
-            print(f"[OK] Found {len(box_skus)} box quantity SKUs (10+ cigars)")
-            
+            print(f"[INFO] Loaded master file with {len(self.master_df)} total cigars")
+            print(f"[INFO] Found {len(box_skus)} box SKUs for retail comparison")
             return True
+            
+        except FileNotFoundError:
+            print(f"[ERROR] Master file not found at: {self.master_path}")
+            return False
         except Exception as e:
-            print(f"[ERROR] Failed to load master file: {str(e)}")
+            print(f"[ERROR] Failed to load master file: {e}")
             return False
     
-    def get_master_data_by_cigar_id(self, cigar_id: str) -> Dict:
-        """Get metadata from master file for a given cigar_id"""
-        try:
-            # Find the row with matching cigar_id
-            matching_rows = self.master_df[self.master_df['cigar_id'] == cigar_id]
-            
-            if matching_rows.empty:
-                return {}
-                
-            row = matching_rows.iloc[0]  # Take first match
-            
-            return {
-                'brand': str(row['Brand']),
-                'line': str(row['Line']),
-                'wrapper': str(row['Wrapper']),
-                'vitola': str(row['Vitola']),
-                'size': f"{row['Length']}x{row['Ring Gauge']}",
-                'box_qty': int(row['Box Quantity']),
-                'binder': str(row.get('Binder', '')),
-                'filler': str(row.get('Filler', '')),
-                'strength': str(row.get('Strength', '')),
-                'style': str(row.get('Style', '')),
-                'wrapper_alias': str(row.get('Wrapper_Alias', '')),
-                'country': str(row.get('country_of_origin', '')),
-                'factory': str(row.get('factory', ''))
-            }
-        except Exception as e:
-            print(f"[ERROR] Failed to get master data for cigar_id {cigar_id}: {str(e)}")
+    def get_cigar_metadata(self, cigar_id: str) -> Dict:
+        """Get metadata for a cigar from the master file"""
+        if self.master_df is None:
             return {}
-    
-    def find_matching_cigar_id(self, title: str, brand: str = "", line: str = "", vitola: str = "") -> str:
-        """Find a matching cigar_id from the master file based on product details"""
-        try:
-            # Filter box quantities only
-            box_skus = self.master_df[self.master_df['Box Quantity'] >= 10].copy()
-            
-            # Simple matching - look for brand and vitola in title
-            matches = []
-            
-            for idx, row in box_skus.iterrows():
-                score = 0
-                
-                # Check if brand matches
-                if brand.lower() in row['Brand'].lower() or row['Brand'].lower() in brand.lower():
-                    score += 3
-                elif brand.lower() in title.lower():
-                    score += 2
-                
-                # Check if line matches
-                if line and (line.lower() in row['Line'].lower() or row['Line'].lower() in line.lower()):
-                    score += 2
-                
-                # Check if vitola matches
-                if vitola and (vitola.lower() in row['Vitola'].lower() or row['Vitola'].lower() in vitola.lower()):
-                    score += 2
-                
-                # Check title contains vitola
-                if row['Vitola'].lower() in title.lower():
-                    score += 1
-                
-                if score >= 3:  # Minimum threshold for a match
-                    matches.append({
-                        'cigar_id': row['cigar_id'],
-                        'score': score,
-                        'match_text': f"{row['Brand']} {row['Line']} {row['Vitola']} ({row['Length']}x{row['Ring Gauge']})"
-                    })
-            
-            if matches:
-                # Sort by score and return best match
-                matches.sort(key=lambda x: x['score'], reverse=True)
-                best_match = matches[0]
-                print(f"             [AUTO-MATCH] Found: {best_match['match_text']} (Score: {best_match['score']})")
-                return best_match['cigar_id']
-            
-            return ""
-            
-        except Exception as e:
-            print(f"[ERROR] Failed to find matching cigar_id: {str(e)}")
-            return ""
         
+        matching_rows = self.master_df[self.master_df['cigar_id'] == cigar_id]
+        
+        if len(matching_rows) == 0:
+            print(f"[WARNING] No metadata found for cigar_id: {cigar_id}")
+            return {}
+        
+        if len(matching_rows) > 1:
+            print(f"[WARNING] Multiple matches found for cigar_id: {cigar_id}, using first match")
+        
+        row = matching_rows.iloc[0]
+        
+        # Build size string from Length x Ring Gauge
+        size = ''
+        if pd.notna(row.get('Length')) and pd.notna(row.get('Ring Gauge')):
+            size = f"{row.get('Length')}x{row.get('Ring Gauge')}"
+        
+        # Get box quantity
+        box_qty = 0
+        if pd.notna(row.get('Box Quantity')):
+            try:
+                box_qty = int(row.get('Box Quantity', 0))
+            except (ValueError, TypeError):
+                pass
+        
+        return {
+            'title': row.get('product_name', ''),
+            'brand': row.get('Brand', ''), 
+            'line': row.get('Line', ''),
+            'wrapper': row.get('Wrapper', ''),
+            'vitola': row.get('Vitola', ''),
+            'size': size,
+            'box_qty': box_qty
+        }
+    
+    def auto_populate_metadata(self, row: Dict) -> Dict:
+        """ALWAYS sync metadata from master file (master is authority source)"""
+        cigar_id = row.get('cigar_id', '')
+        if not cigar_id:
+            return row
+        
+        metadata = self.get_cigar_metadata(cigar_id)
+        
+        # ALWAYS override with master data - master file is authority source
+        metadata_changes = []
+        for field in ['title', 'brand', 'line', 'wrapper', 'vitola', 'size', 'box_qty']:
+            if field in metadata and metadata[field]:
+                old_value = row.get(field, '')
+                new_value = metadata[field]
+                
+                # Track changes for logging
+                if old_value != new_value:
+                    metadata_changes.append(f"{field}: '{old_value}' -> '{new_value}'")
+                
+                # Always update from master
+                row[field] = new_value
+        
+        # Log metadata sync changes
+        if metadata_changes:
+            print(f"  [MASTER SYNC] Updated metadata: {', '.join(metadata_changes)}")
+        
+        return row
+    
     def create_backup(self) -> bool:
         """Create a backup of the current CSV file"""
         try:
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            backup_dir = os.path.dirname(self.csv_path)
-            backup_filename = f"atlantic_backup_{timestamp}.csv"
-            self.backup_path = os.path.join(backup_dir, backup_filename)
-            
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            self.backup_path = self.csv_path.replace('.csv', f'_backup_{timestamp}.csv')
             shutil.copy2(self.csv_path, self.backup_path)
-            print(f"[OK] Backup created: {backup_filename}")
+            print(f"[INFO] Backup created: {self.backup_path}")
             return True
-            
         except Exception as e:
-            print(f"[ERROR] Failed to create backup: {str(e)}")
+            print(f"[ERROR] Failed to create backup: {e}")
             return False
     
-    def read_csv_data(self) -> List[Dict]:
-        """Read the current CSV data"""
+    def load_csv(self) -> List[Dict]:
+        """Load the CSV file"""
         try:
-            with open(self.csv_path, 'r', newline='', encoding='utf-8') as file:
-                reader = csv.DictReader(file)
+            with open(self.csv_path, 'r', newline='', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
                 data = list(reader)
-                print(f"[OK] Read {len(data)} products from CSV")
-                return data
-                
+            
+            print(f"[INFO] Loaded {len(data)} products from Atlantic Cigars CSV")
+            return data
+        except FileNotFoundError:
+            print(f"[ERROR] Atlantic Cigars CSV not found at: {self.csv_path}")
+            return []
         except Exception as e:
-            print(f"[ERROR] Failed to read CSV: {str(e)}")
+            print(f"[ERROR] Failed to load CSV: {e}")
             return []
     
-    def write_csv_data(self, data: List[Dict]) -> bool:
-        """Write updated data back to CSV"""
+    def save_csv(self, data: List[Dict]) -> bool:
+        """Save the updated data back to CSV (respects dry_run mode)"""
+        if not data:
+            print("[ERROR] No data to save")
+            return False
+        
+        if self.dry_run:
+            print(f"[DRY RUN] Would save {len(data)} updated products to {self.csv_path}")
+            return True
+        
         try:
-            if not data:
-                print("[ERROR] No data to write")
-                return False
-                
-            # Ensure all required columns exist
-            required_columns = ['cigar_id', 'title', 'url', 'brand', 'line', 'wrapper', 'vitola', 'size', 'box_qty', 'price', 'in_stock']
+            fieldnames = ['cigar_id', 'title', 'url', 'brand', 'line', 'wrapper', 'vitola', 'size', 'box_qty', 'price', 'in_stock']
             
-            fieldnames = required_columns.copy()
-            # Add any additional columns that might exist
-            for row in data:
-                for key in row.keys():
-                    if key not in fieldnames:
-                        fieldnames.append(key)
-            
-            with open(self.csv_path, 'w', newline='', encoding='utf-8') as file:
-                writer = csv.DictWriter(file, fieldnames=fieldnames)
+            with open(self.csv_path, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
                 writer.writeheader()
                 writer.writerows(data)
-                
-            print(f"[OK] Updated CSV file with {len(data)} products")
-            return True
             
+            print(f"[INFO] Updated data saved to {self.csv_path}")
+            return True
         except Exception as e:
-            print(f"[ERROR] Failed to write CSV: {str(e)}")
+            print(f"[ERROR] Failed to save CSV: {e}")
             return False
     
-    def update_product_data(self, product: Dict) -> Dict:
-        """Update a single product's pricing data AND metadata from master file"""
-        url = product.get('url', '').strip()
-        title = product.get('title', 'Unknown Product')
-        cigar_id = product.get('cigar_id', '').strip()
-        
-        if not url:
-            print(f"[SKIP] No URL for: {title}")
-            return product
-        
-        print(f"[PROCESSING] {title}")
-        print(f"             URL: {url}")
-        
-        # Auto-find cigar_id if missing
-        if not cigar_id:
-            print(f"             Cigar ID: Missing - attempting auto-match...")
-            brand = product.get('brand', '')
-            line = product.get('line', '')
-            vitola = product.get('vitola', '')
+    def update_pricing_data(self, url: str) -> Dict:
+        """Extract live pricing data from Atlantic Cigars"""
+        try:
+            result = extract_atlantic_cigar_data(url)
             
-            cigar_id = self.find_matching_cigar_id(title, brand, line, vitola)
-            if cigar_id:
-                product['cigar_id'] = cigar_id
-                print(f"             Cigar ID: Set to {cigar_id}")
-            else:
-                print(f"             [WARNING] Could not auto-match cigar_id")
-        else:
-            print(f"             Cigar ID: {cigar_id}")
-        
-        # Update metadata from master file if cigar_id exists
-        if cigar_id:
-            master_data = self.get_master_data_by_cigar_id(cigar_id)
-            
-            if master_data:
-                # Update all metadata from master file
-                old_metadata = {
-                    'brand': product.get('brand', ''),
-                    'line': product.get('line', ''),
-                    'wrapper': product.get('wrapper', ''),
-                    'vitola': product.get('vitola', ''),
-                    'size': product.get('size', ''),
-                    'box_qty': product.get('box_qty', '')
+            if result.get('success'):
+                return {
+                    'price': result.get('price'),
+                    'in_stock': result.get('in_stock'),
+                    'box_quantity': result.get('box_quantity'),
+                    'discount_percent': result.get('discount_percent')
                 }
-                
-                # Update with master data (only core fields for CSV)
-                core_fields = ['brand', 'line', 'wrapper', 'vitola', 'size', 'box_qty']
-                for field in core_fields:
-                    if field in master_data:
-                        product[field] = master_data[field]
-                
-                # Show what was updated from master file
-                changes = []
-                for key in core_fields:
-                    old_val = old_metadata.get(key, '')
-                    new_val = master_data.get(key, '')
-                    if str(old_val) != str(new_val):
-                        changes.append(f"{key}: {old_val} -> {new_val}")
-                
-                if changes:
-                    print(f"             Metadata updated from master: {', '.join(changes)}")
-                else:
-                    print(f"             Metadata: Already matches master file")
-                    
             else:
-                print(f"             [WARNING] No master data found for cigar_id: {cigar_id}")
-        
-        # Extract live pricing data
-        extraction_result = extract_atlantic_cigar_data(url)
-        
-        if not extraction_result.get('success'):
-            error_msg = extraction_result.get('error', 'Extraction failed')
-            print(f"[ERROR] {error_msg}")
-            return product
-        
-        # Update price if we got a valid result
-        if extraction_result.get('price') is not None:
-            old_price = product.get('price', 'N/A')
-            new_price = extraction_result['price']
-            
-            product['price'] = new_price
-            
-            # Show price change
-            if str(old_price) != str(new_price):
-                print(f"             Price: ${old_price} -> ${new_price}")
-            else:
-                print(f"             Price: ${new_price} (unchanged)")
-        else:
-            print(f"             Price: No valid price found")
-        
-        # Update stock status
-        if extraction_result.get('in_stock') is not None:
-            old_stock = product.get('in_stock', 'N/A')
-            new_stock = extraction_result['in_stock']
-            
-            product['in_stock'] = str(new_stock).lower()
-            
-            # Show stock change
-            if str(old_stock) != str(new_stock).lower():
-                stock_text = "IN STOCK" if new_stock else "OUT OF STOCK"
-                print(f"             Stock: {old_stock} -> {stock_text}")
-        
-        # Cross-check box quantity from extraction vs master file
-        if extraction_result.get('box_quantity') is not None:
-            extracted_qty = extraction_result['box_quantity']
-            master_qty = product.get('box_qty', '')
-            
-            try:
-                master_qty_int = int(master_qty) if master_qty else None
-                if master_qty_int and master_qty_int != extracted_qty:
-                    print(f"             [WARNING] Box qty mismatch: Master={master_qty_int}, Extracted={extracted_qty}")
-                    # Keep master file quantity as authoritative
-                elif not master_qty_int:
-                    product['box_qty'] = extracted_qty
-                    print(f"             Box qty: Updated to {extracted_qty} (from page)")
-            except ValueError:
-                product['box_qty'] = extracted_qty
-        
-        # Show discount info if available
-        if extraction_result.get('discount_percent'):
-            print(f"             Discount: {extraction_result['discount_percent']:.1f}% off")
-        
-        print(f"[OK] Updated: {title}")
-        return product
+                print(f"[WARNING] Extraction failed: {result.get('error', 'Unknown error')}")
+                return {'error': result.get('error', 'Extraction failed')}
+                
+        except Exception as e:
+            print(f"[ERROR] Price extraction failed: {e}")
+            return {'error': str(e)}
     
-    def update_all_products(self, max_products: int = None) -> bool:
-        """Update pricing and metadata for all products in the CSV"""
-        print("=== Atlantic Cigar CSV Updater with Master File Integration ===")
-        print(f"CSV File: {self.csv_path}")
-        print(f"Master File: {self.master_path}")
+    def run_update(self) -> bool:
+        """Run the complete update process"""
+        mode_str = "[DRY RUN] " if self.dry_run else ""
+        print("=" * 70)
+        print(f"{mode_str}ATLANTIC CIGARS ENHANCED PRICE UPDATE - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print("MASTER-DRIVEN METADATA SYNC: All metadata always synced from master file")
+        print("=" * 70)
         
         # Load master file
         if not self.load_master_file():
-            print("[ERROR] Cannot proceed without master file")
             return False
         
-        # Check if CSV exists
-        if not os.path.exists(self.csv_path):
-            print(f"[ERROR] CSV file not found: {self.csv_path}")
+        # Load CSV
+        data = self.load_csv()
+        if not data:
             return False
         
-        # Create backup
-        if not self.create_backup():
-            print("[ERROR] Cannot proceed without backup")
+        # Create backup (skip in dry run)
+        if not self.dry_run and not self.create_backup():
             return False
         
-        # Read current data
-        products = self.read_csv_data()
-        if not products:
-            print("[ERROR] No products to process")
-            return False
+        # Update each product
+        successful_updates = 0
+        failed_updates = 0
+        metadata_sync_count = 0
         
-        # Limit products if specified (for testing)
-        if max_products:
-            products = products[:max_products]
-            print(f"[INFO] Processing first {max_products} products only")
-        
-        print(f"\n=== Processing {len(products)} products ===")
-        
-        updated_count = 0
-        error_count = 0
-        
-        # Process each product
-        for i, product in enumerate(products, 1):
-            print(f"\n[{i}/{len(products)}]", end=" ")
+        for i, row in enumerate(data):
+            cigar_id = row.get('cigar_id', 'Unknown')
+            url = row.get('url', '')
             
-            try:
-                original_product = product.copy()
-                updated_product = self.update_product_data(product)
-                
-                # Check if anything actually changed
-                if updated_product != original_product:
-                    updated_count += 1
-                
-            except Exception as e:
-                error_count += 1
-                print(f"[ERROR] Failed to process {product.get('title', 'Unknown')}: {str(e)}")
+            print(f"\n[{i+1}/{len(data)}] Processing: {cigar_id}")
+            
+            # ALWAYS sync metadata from master file
+            original_row = row.copy()
+            row = self.auto_populate_metadata(row)
+            
+            # Check if metadata was updated
+            metadata_updated = any(original_row.get(field) != row.get(field) 
+                                 for field in ['title', 'brand', 'line', 'wrapper', 'vitola', 'size', 'box_qty'])
+            if metadata_updated:
+                metadata_sync_count += 1
+            
+            # Skip pricing extraction in dry run mode
+            if self.dry_run:
+                print("  [DRY RUN] Skipping price extraction")
+                successful_updates += 1
                 continue
+            
+            # Skip if no URL
+            if not url:
+                print("  [SKIP] No URL provided")
+                failed_updates += 1
+                continue
+            
+            # Extract live pricing
+            pricing_data = self.update_pricing_data(url)
+            
+            if 'error' in pricing_data:
+                print(f"  [FAIL] {pricing_data['error']}")
+                failed_updates += 1
+                continue
+            
+            # Update the row with new pricing data
+            if pricing_data.get('price') is not None:
+                row['price'] = pricing_data['price']
+            if pricing_data.get('in_stock') is not None:
+                row['in_stock'] = pricing_data['in_stock']
+            
+            # Show results
+            price_str = f"${pricing_data.get('price', 'N/A')}"
+            stock_str = "In Stock" if pricing_data.get('in_stock') else "Out of Stock"
+            discount_str = f" ({pricing_data['discount_percent']:.1f}% off)" if pricing_data.get('discount_percent') else ""
+            
+            print(f"  [OK] {price_str} | {stock_str}{discount_str}")
+            successful_updates += 1
         
-        # Write updated data back to CSV
-        if self.write_csv_data(products):
-            print(f"\n=== Update Complete ===")
-            print(f"Products processed: {len(products)}")
-            print(f"Products updated: {updated_count}")
-            print(f"Errors: {error_count}")
-            print(f"Backup saved as: {os.path.basename(self.backup_path)}")
+        # Save updated data
+        if self.save_csv(data):
+            print("\n" + "=" * 70)
+            print(f"{mode_str}UPDATE COMPLETE")
+            print(f"Successful updates: {successful_updates}")
+            print(f"Failed updates: {failed_updates}")
+            print(f"Metadata synced: {metadata_sync_count} products")
+            print(f"Total processed: {len(data)}")
+            print(f"Updated file: {self.csv_path}")
+            if self.backup_path:
+                print(f"Backup file: {self.backup_path}")
+            print("=" * 70)
             return True
         else:
-            print(f"\n[ERROR] Failed to save updated data")
             return False
 
 
 def main():
-    """Main function for running the updater"""
+    """Main function for command line usage"""
     import argparse
     
-    parser = argparse.ArgumentParser(description='Update Atlantic Cigar CSV with live pricing and master metadata')
-    parser.add_argument('--csv', help='Path to Atlantic CSV file', default=None)
-    parser.add_argument('--master', help='Path to master cigars CSV file', default=None)
-    parser.add_argument('--max', type=int, help='Maximum number of products to process (for testing)', default=None)
-    parser.add_argument('--test', action='store_true', help='Test mode - process only first 3 products')
+    parser = argparse.ArgumentParser(description='Enhanced Atlantic Cigars price updater with master-driven metadata sync')
+    parser.add_argument('--csv', help='Path to Atlantic Cigars CSV file')
+    parser.add_argument('--master', help='Path to master cigars CSV file')
+    parser.add_argument('--dry-run', action='store_true', help='Show what metadata would be updated without making changes')
+    parser.add_argument('--test', action='store_true', help='Deprecated: Use --dry-run instead')
     
     args = parser.parse_args()
     
-    # Test mode
-    if args.test:
-        args.max = 3
-        print("[TEST MODE] Processing only first 3 products")
+    # Handle deprecated --test flag
+    dry_run = args.dry_run or args.test
     
-    # Create updater and run
-    updater = AtlanticCSVUpdaterWithMaster(csv_path=args.csv, master_path=args.master)
+    # Create updater instance
+    updater = AtlanticCigarsCSVUpdaterWithMaster(csv_path=args.csv, master_path=args.master, dry_run=dry_run)
     
-    try:
-        success = updater.update_all_products(max_products=args.max)
-        if success:
-            print("\n[SUCCESS] CSV update completed successfully")
-            sys.exit(0)
-        else:
-            print("\n[FAILURE] CSV update failed")
-            sys.exit(1)
-            
-    except KeyboardInterrupt:
-        print("\n[CANCELLED] Update cancelled by user")
-        sys.exit(1)
-    except Exception as e:
-        print(f"\n[FATAL ERROR] {str(e)}")
+    if dry_run:
+        print("[DRY RUN MODE] Showing metadata changes without updating files")
+    
+    # Run the update
+    success = updater.run_update()
+    
+    if success:
+        print("\n[SUCCESS] Atlantic Cigars enhanced update completed successfully")
+    else:
+        print("\n[FAILED] Atlantic Cigars enhanced update failed")
         sys.exit(1)
 
 
