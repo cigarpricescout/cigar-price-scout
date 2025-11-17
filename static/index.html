@@ -987,9 +987,23 @@
       // Wrapper display enhancement functions
       function formatWrapperDisplay(wrapper, wrapperAlias) {
         if (!wrapper) return '';
-        if (!wrapperAlias || wrapperAlias.trim() === '') return wrapper;
+        // Handle case where wrapper_alias field doesn't exist in data
+        if (!wrapperAlias || wrapperAlias.trim() === '' || typeof wrapperAlias === 'undefined') return wrapper;
         if (wrapperAlias.toLowerCase() === wrapper.toLowerCase()) return wrapper;
         return wrapperAlias + ' (' + wrapper + ')';
+      }
+
+      function extractActualWrapper(displayWrapper) {
+        // Extract actual wrapper name from combined display format
+        // "Natural (Cameroon)" -> "Cameroon"
+        // "Cameroon" -> "Cameroon"
+        if (!displayWrapper) return '';
+        
+        const match = displayWrapper.match(/\(([^)]+)\)$/);
+        if (match) {
+          return match[1]; // Return content inside parentheses
+        }
+        return displayWrapper; // Return as-is if no parentheses
       }
 
       function matchesWrapperSearch(cigar, searchTerm) {
@@ -1008,7 +1022,11 @@
           zip: zipInput.value || ''
         });
         
-        if (currentSelection.wrapper) params.append('wrapper', currentSelection.wrapper);
+        // Extract actual wrapper name from display format before sending to API
+        if (currentSelection.wrapper) {
+          const actualWrapper = extractActualWrapper(currentSelection.wrapper);
+          params.append('wrapper', actualWrapper);
+        }
         if (currentSelection.vitola) params.append('vitola', currentSelection.vitola);
         if (document.getElementById('authorizedOnly').checked) {
           params.append('authorized_only', 'true');
