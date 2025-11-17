@@ -103,7 +103,7 @@ except Exception:
                 return 1500  # $15.00 in cents
         elif retailer_key == 'thecigarshop' and base_dollars >= 100:
             return 0
-        elif retailer_key == 'thecigarshop' and base_dollars >= 100:
+        elif retailer_key == 'twoguys' and base_dollars >= 199:
             return 0
         elif retailer_key == 'thecigarstore' and base_dollars >= 75:
             return 0
