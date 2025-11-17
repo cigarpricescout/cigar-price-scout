@@ -97,6 +97,10 @@ class CigarPriceAutomationEnhanced:
                 'csv_file': 'smokeinn.csv',
                 'updater_script': 'update_smokeinn_prices_final.py'
             },
+            'twoguys': {
+                'csv_file': 'twoguys.csv',
+                'updater_script': 'update_two_guys_prices_final.py'
+            },
         }
         
         self.results = {}
