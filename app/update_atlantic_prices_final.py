@@ -17,9 +17,9 @@ from typing import List, Dict
 sys.path.append(os.path.join(os.path.dirname(__file__), 'tools', 'price_monitoring'))
 
 try:
-    from retailers.atlantic_cigar import extract_atlantic_cigar_data
+    from retailers.atlantic_cigar_extractor import extract_atlantic_cigar_data
 except ImportError:
-    print("[ERROR] Could not import extract_atlantic_cigar_data. Make sure the extractor is in tools/price_monitoring/retailers/atlantic_cigar.py")
+    print("[ERROR] Could not import extract_atlantic_cigar_data. Make sure the extractor is in tools/price_monitoring/retailers/atlantic_cigar_extractor.py")
     sys.exit(1)
 
 

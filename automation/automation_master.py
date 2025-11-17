@@ -160,8 +160,14 @@ class CigarPriceAutomationEnhanced:
                           check=True, cwd='/app', capture_output=True)
             
             # Add the updated CSV files
-            subprocess.run(['git', 'add', 'static/data/*.csv'], 
-                          check=True, cwd='/app')
+            csv_files = list(Path('/app/static/data').glob('*.csv'))
+            if csv_files:
+                for csv_file in csv_files:
+                    subprocess.run(['git', 'add', str(csv_file)], 
+                                  check=True, cwd='/app')
+                logger.info(f"Added {len(csv_files)} CSV files to git")
+            else:
+                logger.warning("No CSV files found to add to git")
             
             # Check if there are any changes to commit
             result = subprocess.run(['git', 'diff', '--cached', '--exit-code'], 

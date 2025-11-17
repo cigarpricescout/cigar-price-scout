@@ -265,8 +265,18 @@ class FoxCigarCSVUpdater:
                 failed_updates += 1
                 continue
             
-            # Update the row with new pricing data
-            row['price'] = pricing_data['price']
+            # Update the row with new pricing data - preserve historical prices
+            # Only update price if we got a valid price (not None/0/empty)
+            price_updated = False
+            if pricing_data.get('price') and pricing_data['price'] > 0:
+                row['price'] = pricing_data['price']
+                price_updated = True
+            else:
+                # Preserve historical price when no valid current price
+                current_price = row.get('price', 'N/A')
+                print(f"  [PRICE] Preserved historical price ${current_price} (no valid current price)")
+            
+            # Always update stock status regardless of price
             row['in_stock'] = pricing_data['in_stock']
             
             # Validate box quantity if available
@@ -277,8 +287,12 @@ class FoxCigarCSVUpdater:
                 if csv_qty and int(extracted_qty) != int(csv_qty):
                     print(f"  [WARNING] Box quantity mismatch - CSV: {csv_qty}, Extracted: {extracted_qty}")
             
-            # Show results
-            price_str = f"${pricing_data['price']}" if pricing_data['price'] else "No price"
+            # Show results with clear indication of price source
+            if price_updated:
+                price_str = f"${pricing_data['price']}"
+            else:
+                price_str = f"${row.get('price', 'N/A')} (historical)"
+            
             stock_str = "In Stock" if pricing_data['in_stock'] else "Out of Stock"
             discount_str = f" ({pricing_data['discount_percent']:.1f}% off)" if pricing_data.get('discount_percent') else ""
             
