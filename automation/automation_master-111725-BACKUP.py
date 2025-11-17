@@ -9,8 +9,6 @@ import sys
 import logging
 import subprocess
 import pandas as pd
-import sqlite3
-import csv
 from datetime import datetime
 from pathlib import Path
 
@@ -203,171 +201,6 @@ class CigarPriceAutomationEnhanced:
             logger.error(f"Unexpected error in git sync: {e}")
             return False
     
-    def setup_historical_db(self, db_path):
-        """Create historical database tables if they don't exist"""
-        try:
-            conn = sqlite3.connect(db_path)
-            conn.execute('''
-                CREATE TABLE IF NOT EXISTS price_history (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    timestamp TEXT,
-                    cigar_id TEXT,
-                    retailer TEXT,
-                    price REAL,
-                    in_stock BOOLEAN,
-                    box_qty INTEGER,
-                    title TEXT,
-                    brand TEXT,
-                    line TEXT,
-                    wrapper TEXT,
-                    vitola TEXT,
-                    size TEXT,
-                    UNIQUE(timestamp, cigar_id, retailer)
-                )
-            ''')
-            
-            # Create index for better query performance
-            conn.execute('''
-                CREATE INDEX IF NOT EXISTS idx_price_history_lookup 
-                ON price_history(cigar_id, retailer, timestamp)
-            ''')
-            
-            conn.commit()
-            conn.close()
-            logger.info("Historical database tables ready")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error setting up historical database: {e}")
-            return False
-    
-    def capture_historical_snapshot(self):
-        """Capture current state after all retailer updates complete"""
-        try:
-            db_path = self.base_path / 'data' / 'historical_prices.db'
-            
-            # Ensure directory exists
-            db_path.parent.mkdir(exist_ok=True)
-            
-            # Setup database if first run
-            if not self.setup_historical_db(db_path):
-                logger.error("Failed to setup historical database")
-                return False
-            
-            timestamp = datetime.now().isoformat()
-            records = []
-            
-            logger.info("Capturing historical price snapshot...")
-            
-            # Read current state from all retailer CSVs
-            for retailer_key, config in self.retailers.items():
-                csv_path = self.static_path / config['csv_file']
-                
-                if csv_path.exists():
-                    try:
-                        with open(csv_path, 'r', encoding='utf-8') as f:
-                            reader = csv.DictReader(f)
-                            retailer_records = 0
-                            
-                            for row in reader:
-                                # Parse price safely
-                                price = None
-                                if row.get('price'):
-                                    try:
-                                        price = float(str(row['price']).replace('$', '').replace(',', ''))
-                                    except (ValueError, AttributeError):
-                                        price = None
-                                
-                                # Parse stock status
-                                in_stock = str(row.get('in_stock', 'False')).lower() in ['true', '1', 'yes']
-                                
-                                # Parse box quantity
-                                box_qty = 0
-                                if row.get('box_qty'):
-                                    try:
-                                        box_qty = int(row['box_qty'])
-                                    except (ValueError, TypeError):
-                                        box_qty = 0
-                                
-                                record = {
-                                    'timestamp': timestamp,
-                                    'cigar_id': row.get('cigar_id', ''),
-                                    'retailer': retailer_key,
-                                    'price': price,
-                                    'in_stock': in_stock,
-                                    'box_qty': box_qty,
-                                    'title': row.get('title', ''),
-                                    'brand': row.get('brand', ''),
-                                    'line': row.get('line', ''),
-                                    'wrapper': row.get('wrapper', ''),
-                                    'vitola': row.get('vitola', ''),
-                                    'size': row.get('size', '')
-                                }
-                                
-                                records.append(record)
-                                retailer_records += 1
-                            
-                            logger.info(f"  {retailer_key}: {retailer_records} products")
-                            
-                    except Exception as e:
-                        logger.error(f"Error reading {retailer_key} CSV: {e}")
-                else:
-                    logger.warning(f"CSV file not found for {retailer_key}: {csv_path}")
-            
-            # Insert into database
-            if records:
-                success = self.insert_historical_records(db_path, records)
-                if success:
-                    logger.info(f"Historical snapshot captured: {len(records)} records")
-                    return True
-                else:
-                    logger.error("Failed to insert historical records")
-                    return False
-            else:
-                logger.warning("No records to capture for historical snapshot")
-                return False
-                
-        except Exception as e:
-            logger.error(f"Error capturing historical snapshot: {e}")
-            return False
-    
-    def insert_historical_records(self, db_path, records):
-        """Insert historical records into database"""
-        try:
-            conn = sqlite3.connect(db_path)
-            inserted = 0
-            
-            for record in records:
-                try:
-                    conn.execute('''
-                        INSERT OR REPLACE INTO price_history 
-                        (timestamp, cigar_id, retailer, price, in_stock, box_qty, 
-                         title, brand, line, wrapper, vitola, size)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (
-                        record['timestamp'], record['cigar_id'], record['retailer'],
-                        record['price'], record['in_stock'], record['box_qty'],
-                        record['title'], record['brand'], record['line'], 
-                        record['wrapper'], record['vitola'], record['size']
-                    ))
-                    inserted += 1
-                    
-                except sqlite3.IntegrityError:
-                    # Record already exists, skip
-                    pass
-                except Exception as e:
-                    logger.error(f"Error inserting record for {record.get('retailer', 'unknown')}: {e}")
-            
-            conn.commit()
-            conn.close()
-            
-            logger.info(f"Successfully inserted {inserted} historical records")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Database error: {e}")
-            return False
-    
     def update_retailer(self, retailer: str) -> dict:
         """Update prices for a specific retailer"""
         config = self.retailers.get(retailer)
@@ -453,9 +286,6 @@ class CigarPriceAutomationEnhanced:
         # Sync updated CSVs back to GitHub
         git_sync_success = self.sync_to_git()
         
-        # Capture historical price snapshot after all updates complete
-        historical_success = self.capture_historical_snapshot()
-        
         # Calculate summary
         total_duration = (datetime.now() - start_time).total_seconds()
         successful_retailers = sum(1 for r in self.results.values() if r['success'])
@@ -467,7 +297,6 @@ class CigarPriceAutomationEnhanced:
         logger.info(f"Successful: {successful_retailers}/{len(self.retailers)} retailers")
         logger.info(f"Products Updated: {total_products}")
         logger.info(f"Git Sync: {'SUCCESS' if git_sync_success else 'FAILED'}")
-        logger.info(f"Historical Snapshot: {'SUCCESS' if historical_success else 'FAILED'}")
         
         if git_sync_success:
             logger.info("Automation complete! Updated prices are now live on your website.")
