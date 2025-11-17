@@ -731,13 +731,15 @@
           });
           
           if (line && line.wrappers) {
-            const wrappers = [];
+            const wrapperSet = new Set();
             line.wrappers.forEach(function(w) {
-              if (w.wrapper && wrappers.indexOf(w.wrapper) === -1) {
-                wrappers.push(w.wrapper);
+              if (w.wrapper) {
+                const displayWrapper = formatWrapperDisplay(w.wrapper, w.wrapper_alias);
+                wrapperSet.add(displayWrapper);
               }
             });
-            wrappers.sort();
+            
+            const wrappers = Array.from(wrapperSet).sort();
             wrappers.forEach(function(wrapper) {
               const option = document.createElement('option');
               option.value = wrapper;
@@ -763,7 +765,9 @@
           if (line && line.wrappers) {
             const vitolas = [];
             line.wrappers.forEach(function(w) {
-              if (w.wrapper === currentSelection.wrapper && w.vitolas) {
+              // Match against both wrapper and wrapper_alias since dropdown now shows combined format
+              const displayWrapper = formatWrapperDisplay(w.wrapper, w.wrapper_alias);
+              if (displayWrapper === currentSelection.wrapper && w.vitolas) {
                 w.vitolas.forEach(function(v) {
                   if (v && vitolas.indexOf(v) === -1) {
                     vitolas.push(v);
@@ -897,8 +901,12 @@
         let boxQtys = new Set();
 
         line.wrappers.forEach(function(wrapper) {
-          // Filter by wrapper if selected
-          if (!currentSelection.wrapper || !currentSelection.wrapper.trim() || wrapper.wrapper === currentSelection.wrapper) {
+          // Filter by wrapper if selected - now handle combined display format
+          const displayWrapper = formatWrapperDisplay(wrapper.wrapper, wrapper.wrapper_alias);
+          const wrapperMatch = !currentSelection.wrapper || !currentSelection.wrapper.trim() || 
+                              displayWrapper === currentSelection.wrapper;
+          
+          if (wrapperMatch) {
             // Filter by vitola if selected - handle both arrays and sets
             const vitolaMatch = !currentSelection.vitola || !currentSelection.vitola.trim() || 
                               (Array.isArray(wrapper.vitolas) ? wrapper.vitolas.includes(currentSelection.vitola) : 
@@ -974,6 +982,21 @@
         script.setAttribute('data-dynamic', 'true');
         script.textContent = JSON.stringify(schemaObject);
         document.head.appendChild(script);
+      }
+
+      // Wrapper display enhancement functions
+      function formatWrapperDisplay(wrapper, wrapperAlias) {
+        if (!wrapper) return '';
+        if (!wrapperAlias || wrapperAlias.trim() === '') return wrapper;
+        if (wrapperAlias.toLowerCase() === wrapper.toLowerCase()) return wrapper;
+        return wrapperAlias + ' (' + wrapper + ')';
+      }
+
+      function matchesWrapperSearch(cigar, searchTerm) {
+        const searchLower = searchTerm.toLowerCase();
+        const wrapper = (cigar.wrapper || '').toLowerCase();
+        const wrapperAlias = (cigar.wrapper_alias || '').toLowerCase();
+        return wrapper.includes(searchLower) || wrapperAlias.includes(searchLower);
       }
 
       searchBtn.addEventListener('click', async function() {

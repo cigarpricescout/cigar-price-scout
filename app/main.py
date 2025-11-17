@@ -429,10 +429,94 @@ def load_all_products():
         all_products.extend(products)
     return all_products
 
+def load_master_wrapper_aliases():
+    """Load wrapper aliases from master_cigars.csv for lookup"""
+    # Try multiple possible paths for the master file
+    possible_paths = [
+        Path("data/master_cigars.csv"),
+        Path("../data/master_cigars.csv"),
+        Path("./master_cigars.csv"),
+        Path("static/data/master_cigars.csv")
+    ]
+    
+    master_file = None
+    for path in possible_paths:
+        if path.exists():
+            master_file = path
+            break
+    
+    if not master_file:
+        print(f"Warning: Master file not found in any of these locations: {[str(p) for p in possible_paths]}")
+        return {}
+    
+    print(f"Loading wrapper aliases from: {master_file}")
+    wrapper_aliases = {}
+    
+    try:
+        with open(master_file, 'r', newline='', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            rows_processed = 0
+            aliases_found = 0
+            
+            for row in reader:
+                rows_processed += 1
+                wrapper = row.get('Wrapper', '').strip()
+                wrapper_alias = row.get('Wrapper_Alias', '').strip()
+                brand = row.get('Brand', '').strip()
+                line = row.get('Line', '').strip()
+                
+                if wrapper and wrapper_alias and wrapper_alias != wrapper:
+                    aliases_found += 1
+                    # Create a composite key for more precise matching
+                    key = f"{brand}|{line}|{wrapper}"
+                    wrapper_aliases[key] = wrapper_alias
+                    
+                    # Also create a simple wrapper-only key as fallback
+                    if wrapper not in wrapper_aliases:
+                        wrapper_aliases[wrapper] = wrapper_alias
+                    
+                    # Debug first few entries
+                    if aliases_found <= 5:
+                        print(f"  Added alias: {wrapper} -> {wrapper_alias} (Brand: {brand}, Line: {line})")
+            
+            print(f"Processed {rows_processed} rows, found {aliases_found} wrapper aliases")
+            
+    except Exception as e:
+        print(f"Error loading master wrapper aliases: {e}")
+        import traceback
+        traceback.print_exc()
+    
+    return wrapper_aliases
+
+def get_wrapper_alias(wrapper, brand=None, line=None, wrapper_aliases=None):
+    """Get wrapper alias for a given wrapper, with context-aware lookup"""
+    if not wrapper_aliases:
+        return None
+    
+    # Try context-aware lookup first
+    if brand and line:
+        key = f"{brand}|{line}|{wrapper}"
+        if key in wrapper_aliases:
+            alias = wrapper_aliases[key]
+            # Uncomment for debugging: print(f"  Found alias via context key '{key}': {wrapper} -> {alias}")
+            return alias
+    
+    # Fall back to simple wrapper lookup
+    alias = wrapper_aliases.get(wrapper, None)
+    if alias:
+        # Uncomment for debugging: print(f"  Found alias via simple lookup: {wrapper} -> {alias}")
+        pass
+    return alias
+
 def build_options_tree():
-    """Build the brand -> line -> wrapper -> vitola/size tree for dropdowns"""
+    """Build the brand -> line -> wrapper -> vitola/size tree for dropdowns with wrapper alias support"""
     products = load_all_products()
+    wrapper_aliases = load_master_wrapper_aliases()  # Load wrapper aliases
+    
+    print(f"Building options tree with {len(products)} products and {len(wrapper_aliases)} wrapper aliases")
+    
     tree = {}
+    aliases_used = 0
     
     for product in products:
         if not product.brand:
@@ -446,13 +530,19 @@ def build_options_tree():
         if product.line not in tree[product.brand]:
             tree[product.brand][product.line] = {}
         
+        # Get wrapper alias for this wrapper
+        wrapper_alias = get_wrapper_alias(product.wrapper, product.brand, product.line, wrapper_aliases)
+        if wrapper_alias:
+            aliases_used += 1
+        
         # Initialize wrapper if not exists (allow empty wrapper)
         wrapper_key = product.wrapper or "No Wrapper Specified"
         if wrapper_key not in tree[product.brand][product.line]:
             tree[product.brand][product.line][wrapper_key] = {
                 'vitolas': set(),
                 'sizes': set(),
-                'box_qtys': set()  # Add this line
+                'box_qtys': set(),
+                'wrapper_alias': wrapper_alias  # Store wrapper alias
             }
         
         # Add vitola, size, and box_qty
@@ -461,8 +551,11 @@ def build_options_tree():
         tree[product.brand][product.line][wrapper_key]['sizes'].add(product.size)
         tree[product.brand][product.line][wrapper_key]['box_qtys'].add(product.box_qty)  # Add this line
     
+    print(f"Aliases used during tree building: {aliases_used}")
+    
     # Convert to the format expected by frontend
     brands = []
+    wrappers_with_aliases = 0
     for brand_name in sorted(tree.keys()):
         lines = []
         for line_name in sorted(tree[brand_name].keys()):
@@ -472,8 +565,13 @@ def build_options_tree():
                 vitolas = sorted(list(wrapper_data['vitolas']))
                 sizes = sorted(list(wrapper_data['sizes']))
                 
+                wrapper_alias_value = wrapper_data.get('wrapper_alias')
+                if wrapper_alias_value:
+                    wrappers_with_aliases += 1
+                
                 wrappers.append({
                     "wrapper": wrapper_name if wrapper_name != "No Wrapper Specified" else "",
+                    "wrapper_alias": wrapper_alias_value,  # Include wrapper alias
                     "vitolas": vitolas,
                     "sizes": sizes,
                     "box_qtys": sorted(list(wrapper_data['box_qtys']))  # Add this line
@@ -489,6 +587,8 @@ def build_options_tree():
             "brand": brand_name,
             "lines": lines
         })
+    
+    print(f"Final summary: {len(brands)} brands, {wrappers_with_aliases} wrappers have aliases")
     
     return brands
 
