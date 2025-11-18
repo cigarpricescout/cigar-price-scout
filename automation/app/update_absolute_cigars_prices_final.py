@@ -14,12 +14,11 @@ from datetime import datetime
 from typing import List, Dict
 
 # Add the retailers directory to path
-retailers_dir = os.path.join(os.path.dirname(__file__), '..', 'tools', 'price_monitoring', 'retailers')
-sys.path.append(retailers_dir)
+sys.path.append('tools/price_monitoring')
 
 try:
     # Import the extractor function
-    from absolute_cigars_extractor import extract_absolute_cigars_data
+    from retailers.absolute_cigars_extractor import extract_absolute_cigars_data
 except ImportError as e:
     print(f"[ERROR] Could not import extract_absolute_cigars_data. Make sure absolute_cigars_extractor.py is in tools/price_monitoring/retailers/")
     print(f"[ERROR] Import error details: {e}")
@@ -29,12 +28,12 @@ except ImportError as e:
 class AbsoluteCigarsCSVUpdaterWithMaster:
     def __init__(self, csv_path: str = None, master_path: str = None, dry_run: bool = False):
         if csv_path is None:
-            self.csv_path = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'absolutecigars.csv')
+            self.csv_path = os.path.join('static', 'data', 'absolutecigars.csv')
         else:
             self.csv_path = csv_path
             
         if master_path is None:
-            self.master_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'master_cigars.csv')
+            self.master_path = os.path.join('data', 'master_cigars.csv')
         else:
             self.master_path = master_path
             
@@ -101,7 +100,9 @@ class AbsoluteCigarsCSVUpdaterWithMaster:
             'vitola': row.get('Vitola', ''),
             'size': size,
             'box_qty': box_qty
-        }    def auto_populate_metadata(self, row: Dict) -> Dict:
+        }
+    
+    def auto_populate_metadata(self, row: Dict) -> Dict:
         """ALWAYS sync metadata from master file (master is authority source)"""
         cigar_id = row.get('cigar_id', '')
         if not cigar_id:
@@ -166,7 +167,7 @@ class AbsoluteCigarsCSVUpdaterWithMaster:
             print(f"[ERROR] Failed to load CSV: {e}")
             return []
     
-        def save_csv(self, data: List[Dict]) -> bool:
+    def save_csv(self, data: List[Dict]) -> bool:
         """Save the updated data back to CSV (respects dry_run mode)"""
         if not data:
             print("[ERROR] No data to save")
@@ -210,7 +211,7 @@ class AbsoluteCigarsCSVUpdaterWithMaster:
             print(f"[ERROR] Price extraction failed: {e}")
             return {'error': str(e)}
     
-        def run_update(self) -> bool:
+    def run_update(self) -> bool:
         """Run the complete update process"""
         mode_str = "[DRY RUN] " if self.dry_run else ""
         print("=" * 70)

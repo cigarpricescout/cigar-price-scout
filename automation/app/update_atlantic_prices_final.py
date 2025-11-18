@@ -14,7 +14,7 @@ from datetime import datetime
 from typing import List, Dict
 
 # Add the tools directory to path for importing the extractor
-sys.path.append(os.path.join(os.path.dirname(__file__), 'tools', 'price_monitoring'))
+sys.path.append('tools/price_monitoring')
 
 try:
     from retailers.atlantic_cigar_extractor import extract_atlantic_cigar_data
@@ -26,12 +26,12 @@ except ImportError:
 class AtlanticCigarsCSVUpdaterWithMaster:
     def __init__(self, csv_path: str = None, master_path: str = None, dry_run: bool = False):
         if csv_path is None:
-            self.csv_path = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'atlantic.csv')
+            self.csv_path = os.path.join('static', 'data', 'atlantic.csv')
         else:
             self.csv_path = csv_path
             
         if master_path is None:
-            self.master_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'master_cigars.csv')
+            self.master_path = os.path.join('data', 'master_cigars.csv')
         else:
             self.master_path = master_path
             
