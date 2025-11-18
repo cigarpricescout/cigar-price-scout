@@ -82,11 +82,11 @@ class CigarPriceAutomationEnhanced:
                 'updater_script': 'update_absolute_cigars_prices_final.py'
             },
             'smallbatch_cigar': {
-                'csv_file': 'smallbatch_cigar.csv',
+                'csv_file': 'smallbatchcigar.csv',
                 'updater_script': 'update_smallbatch_cigar_prices_final.py'
             },
             'planet_cigars': {
-                'csv_file': 'planet_cigars.csv',
+                'csv_file': 'planetcigars.csv',
                 'updater_script': 'update_planet_cigars_prices_final.py'
             },
             'holts': {

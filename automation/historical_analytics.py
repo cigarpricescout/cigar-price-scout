@@ -10,14 +10,33 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 class HistoricalPriceAnalyzer:
-    def __init__(self, db_path="data/historical_prices.db"):
-        self.db_path = Path(db_path)
-        if not self.db_path.exists():
-            print(f"Historical database not found at {self.db_path}")
+    def __init__(self, db_path=None):
+        # Try multiple possible database locations
+        if db_path is None:
+            possible_paths = [
+                "../data/historical_prices.db",  # Most likely location
+                "data/historical_prices.db",     # If running from root
+                "../automation/data/historical_prices.db"  # Alternative location
+            ]
+            
+            self.db_path = None
+            for path in possible_paths:
+                if Path(path).exists():
+                    self.db_path = Path(path)
+                    break
+        else:
+            self.db_path = Path(db_path)
+            
+        if self.db_path and self.db_path.exists():
+            print(f"Found historical database at: {self.db_path}")
+            self.db_available = True
+        else:
+            print(f"Historical database not found.")
+            print("Checked locations:")
+            for path in (possible_paths if db_path is None else [db_path]):
+                print(f"  - {path}")
             print("Make sure historical data collection has started.")
             self.db_available = False
-        else:
-            self.db_available = True
     
     def get_connection(self):
         """Get database connection"""
@@ -199,17 +218,17 @@ def main():
     analyzer = HistoricalPriceAnalyzer()
     
     if not analyzer.db_available:
-        print("❌ Historical database not available")
+        print("ERROR: Historical database not available")
         print("Deploy the enhanced automation_master.py and wait for the next automation run.")
         return
     
-    print("📊 HISTORICAL PRICE ANALYTICS")
+    print("=== HISTORICAL PRICE ANALYTICS ===")
     print("=" * 50)
     
     # Data summary
     summary = analyzer.get_data_summary()
     if summary:
-        print(f"📈 Data Collection Status:")
+        print(f"Data Collection Status:")
         print(f"  Total Records: {summary['total_records']:,}")
         print(f"  Retailers: {summary['unique_retailers']}")
         print(f"  Unique Cigars: {summary['unique_cigars']}")
@@ -246,7 +265,7 @@ def main():
             print(f"  {row['retailer']}: {row['brand']} {row['line']} "
                   f"({row['wrapper']}) - ${row['price']:.2f} - {row['timestamp'][:16]}")
     
-    print("\n✅ Analysis complete!")
+    print("\nAnalysis complete!")
     print("Run this script regularly to monitor retailer performance and market trends.")
 
 if __name__ == "__main__":
