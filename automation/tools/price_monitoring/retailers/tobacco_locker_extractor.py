@@ -70,44 +70,45 @@ def extract_tobacco_locker_data(url: str) -> Dict:
 
 
 def _extract_tobacco_locker_price(soup: BeautifulSoup) -> Optional[float]:
-    """Extract price from Tobacco Locker product page - focus on actual product pricing"""
+    """Extract price from Tobacco Locker product page - focus on actual current pricing"""
     
-    # Strategy 1: Look for price in structured elements first
-    price_selectors = [
-        '[class*="price"]',
-        '[data-price]', 
-        '.product-price',
-        '.price-box',
-        '.current-price'
+    # Strategy 1: Look for current sale price (not crossed out)
+    # First try to find elements that are NOT crossed out/strikethrough
+    current_price_selectors = [
+        '[class*="price"]:not([class*="compare"]):not([class*="was"]):not([class*="original"])',
+        '[class*="sale"]',
+        '.current-price',
+        '.price-box .price:not(.was-price)'
     ]
     
-    for selector in price_selectors:
+    for selector in current_price_selectors:
         price_elements = soup.select(selector)
         for elem in price_elements:
+            # Skip if this element appears to be struck through
+            if elem.find('s') or elem.find('del') or 'text-decoration: line-through' in elem.get('style', ''):
+                continue
+                
             text = elem.get_text().strip()
-            # Look for price pattern
             price_match = re.search(r'\$(\d{1,4}\.?\d{0,2})', text)
             if price_match:
                 try:
                     price_val = float(price_match.group(1))
-                    # Reasonable box price range
-                    if 50 <= price_val <= 800:
+                    if 50 <= price_val <= 1500:
                         return price_val
                 except ValueError:
                     continue
     
-    # Strategy 2: Look for prominent price displays in common locations
-    page_text = soup.get_text()
+    # Strategy 2: Look for all prices but prioritize non-crossed-out ones
+    all_text = soup.get_text()
     
-    # Find all dollar amounts in reasonable range
-    all_prices = re.findall(r'\$(\d{1,4}\.?\d{0,2})', page_text)
+    # Find all prices
+    all_prices = re.findall(r'\$(\d{1,4}\.?\d{0,2})', all_text)
     valid_prices = []
     
     for price_text in all_prices:
         try:
             price_val = float(price_text)
-            # Focus on typical cigar box price range
-            if 50 <= price_val <= 800:
+            if 50 <= price_val <= 1500:
                 valid_prices.append(price_val)
         except ValueError:
             continue
@@ -116,36 +117,35 @@ def _extract_tobacco_locker_price(soup: BeautifulSoup) -> Optional[float]:
         # Remove duplicates and sort
         unique_prices = sorted(list(set(valid_prices)))
         
-        # If we have multiple prices, prefer the one in the middle range
-        # (often the actual product price, avoiding very high MSRP or very low single prices)
+        # If we have multiple prices, apply intelligent selection
         if len(unique_prices) == 1:
             return unique_prices[0]
         elif len(unique_prices) == 2:
-            # Two prices - likely MSRP and sale price, take the lower one
+            # Two prices usually means original + sale price
+            # Take the LOWER one (sale price)
             return min(unique_prices)
         else:
-            # Multiple prices - filter out outliers and take a reasonable middle price
-            # Remove the highest and lowest, take from remaining
-            if len(unique_prices) >= 3:
-                middle_prices = unique_prices[1:-1]  # Remove highest and lowest
-                # Prefer prices in the 100-400 range for typical boxes
-                preferred_prices = [p for p in middle_prices if 100 <= p <= 400]
-                if preferred_prices:
-                    return min(preferred_prices)  # Take lowest of the preferred range
-                else:
-                    return min(middle_prices)  # Take lowest of middle range
+            # Multiple prices - prefer lower prices (likely current prices vs original prices)
+            # But not too low (avoid per-stick prices)
+            reasonable_prices = [p for p in unique_prices if p >= 100]
+            if reasonable_prices:
+                return min(reasonable_prices)  # Take lowest reasonable price
             else:
-                return min(unique_prices)  # Take lowest of what we have
+                return min(unique_prices)  # Fallback
     
-    # Strategy 3: Look for specific product price areas (fallback)
+    # Strategy 3: Fallback - look in specific product sections
     product_sections = soup.find_all(['div'], class_=re.compile(r'product|price', re.I))
     for section in product_sections:
+        # Skip sections that look like "was price" or "compare at"
+        if any(term in section.get('class', []) for term in ['was', 'compare', 'original']):
+            continue
+            
         section_text = section.get_text()
         price_match = re.search(r'\$(\d{1,4}\.?\d{0,2})', section_text)
         if price_match:
             try:
                 price_val = float(price_match.group(1))
-                if 50 <= price_val <= 800:
+                if 50 <= price_val <= 1500:
                     return price_val
             except ValueError:
                 continue
