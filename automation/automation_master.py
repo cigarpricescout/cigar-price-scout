@@ -101,6 +101,10 @@ class CigarPriceAutomationEnhanced:
                 'csv_file': 'twoguys.csv',
                 'updater_script': 'update_two_guys_prices.py'
             },
+            'cccrafter': {
+                'csv_file': 'cccrafter.csv', 
+                'updater_script': 'update_cccrafter_prices.py'
+            },
         }
         
         self.results = {}
