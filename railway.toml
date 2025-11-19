@@ -1,8 +1,0 @@
-[build]
-builder = "nixpacks"
-
-[build.env]
-NIXPACKS_APT_PKGS = "git"
-
-[deploy]
-startCommand = "python automation/automation_master.py"
