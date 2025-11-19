@@ -1,0 +1,11 @@
+# Create the Railway configuration file
+cat > railway.toml << 'EOF'
+[build]
+builder = "nixpacks"
+
+[build.env]
+NIXPACKS_APT_PKGS = "git"
+
+[deploy]
+startCommand = "python automation/automation_master.py"
+EOF
