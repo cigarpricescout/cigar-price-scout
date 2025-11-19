@@ -99,7 +99,7 @@ class CigarPriceAutomationEnhanced:
             },
             'twoguys': {
                 'csv_file': 'twoguys.csv',
-                'updater_script': 'update_two_guys_prices_final.py'
+                'updater_script': 'update_two_guys_prices.py'
             },
         }
         
