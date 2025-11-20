@@ -123,7 +123,7 @@ class CigarPriceAutomationEnhanced:
         try:
             # Check if git is available
             subprocess.run(['git', '--version'], 
-                          check=True, capture_output=True, cwd='/app')
+                        check=True, capture_output=True, cwd='/app')
             
             # Get GitHub token from environment
             github_token = os.getenv('GITHUB_TOKEN')
@@ -131,13 +131,26 @@ class CigarPriceAutomationEnhanced:
                 logger.warning("No GITHUB_TOKEN found - git sync will be disabled")
                 return False
             
-            # Configure git credentials
+            # Initialize git repository if needed
+            try:
+                subprocess.run(['git', 'status'], capture_output=True, check=True, cwd='/app')
+                logger.info("Git repository already initialized")
+            except subprocess.CalledProcessError:
+                logger.info("Initializing git repository...")
+                subprocess.run(['git', 'init'], check=True, cwd='/app')
+                subprocess.run(['git', 'remote', 'add', 'origin', 'https://github.com/cigarpricescout/cigar-price-scout.git'], check=True, cwd='/app')
+                
+                # Initial pull to get the repository structure  
+                subprocess.run(['git', 'pull', 'origin', 'main'], check=True, cwd='/app')
+                logger.info("Git repository initialized and synced")
+            
+            # Configure git credentials (now this will work)
             subprocess.run(['git', 'config', 'user.email', 
-                          os.getenv('GIT_AUTHOR_EMAIL', 'automation@cigarpricescout.com')], 
-                          check=True, cwd='/app')
+                        os.getenv('GIT_AUTHOR_EMAIL', 'automation@cigarpricescout.com')], 
+                        check=True, cwd='/app')
             subprocess.run(['git', 'config', 'user.name', 
-                          os.getenv('GIT_AUTHOR_NAME', 'Price Scout Automation')], 
-                          check=True, cwd='/app')
+                        os.getenv('GIT_AUTHOR_NAME', 'Price Scout Automation')], 
+                        check=True, cwd='/app')
             
             # Set up credential helper for GitHub token
             subprocess.run(['git', 'config', 'credential.helper', 'store'], 
