@@ -15,11 +15,15 @@ from datetime import datetime
 from pathlib import Path
 
 # Configure logging
+import os
+log_dir = 'logs'
+os.makedirs(log_dir, exist_ok=True)
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('/app/logs/automation.log'),
+        logging.FileHandler(os.path.join(log_dir, 'automation.log')),
         logging.StreamHandler()
     ]
 )
@@ -29,6 +33,7 @@ class CigarPriceAutomationEnhanced:
     def __init__(self):
         self.base_path = Path('/app')
         self.static_path = self.base_path / 'static' / 'data'
+        self.tools_path = self.base_path / 'tools'
         self.app_path = self.base_path / 'app'
         
         # Retailer configurations

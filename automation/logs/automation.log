@@ -1,0 +1,9 @@
+2025-11-19 20:01:29,179 - ERROR - Failed to setup git authentication: [WinError 267] The directory name is invalid
+2025-11-19 20:01:29,809 - INFO - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2025-11-19 20:01:29,809 - INFO - Automation scheduled - Daily updates at 3 AM UTC
+2025-11-19 20:01:29,809 - INFO - Manual trigger: python automation_master.py manual
+2025-11-19 20:01:29,811 - INFO - Added job "CigarPriceAutomationEnhanced.run_full_update" to job store "default"
+2025-11-19 20:01:29,811 - INFO - Scheduler started
+2025-11-19 20:02:34,758 - ERROR - Failed to setup git authentication: [WinError 267] The directory name is invalid
+2025-11-19 20:02:34,758 - INFO - Starting cccrafter price update...
+2025-11-19 20:02:34,758 - ERROR - cccrafter update crashed: [WinError 267] The directory name is invalid
