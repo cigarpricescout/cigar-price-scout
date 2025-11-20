@@ -1,2 +1,3 @@
-title,url,brand,line,wrapper,vitola,size,box_qty,price,in_stock
-Fuente Fuente OpusX Robusto (Box of 29),https://baysidecigars.com/product/arturo-fuente-opusx-robusto/,Arturo Fuente,Opus X,Dominican Rosado,Robusto,5.25x50,29,900,false
+cigar_id,title,url,brand,line,wrapper,vitola,size,box_qty,price,in_stock
+ARTUROFUENTE|ARTUROFUENTE|OPUSX|ROBUSTO|ROBUSTO|5.25x50|DOM|BOX29,,https://baysidecigars.com/product/arturo-fuente-opusx-robusto/
+ARTUROFUENTE|ARTUROFUENTE|HEMINGWAY|BESTSELLER|BESTSELLER|4.5x55|CAM|BOX25,,https://baysidecigars.com/product/arturo-fuente-hemingway-best-seller-natural-box/

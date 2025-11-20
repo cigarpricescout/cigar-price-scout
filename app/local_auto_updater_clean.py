@@ -22,10 +22,10 @@ class LocalPriceUpdater:
         self.base_path = Path('.')
         # Try multiple common CSV locations
         self.csv_search_paths = [
+            self.base_path / '..' / 'static' / 'data',  # MAIN CSV LOCATION - prioritize this!
             self.base_path / 'static' / 'data',
-            self.base_path / 'data',
+            self.base_path / 'data', 
             self.base_path,  # Current directory
-            self.base_path / '..' / 'static' / 'data',  # One level up
         ]
         self.results = {}
     
@@ -58,14 +58,25 @@ class LocalPriceUpdater:
                 
                 # Map script names to actual CSV names
                 retailer_name_map = {
+                    'absolute_cigars': 'absolutecigars',           # update_absolute_cigars_* -> absolutecigars.csv
                     'atlantic': 'atlantic',
                     'bnbtobacco': 'bnbtobacco', 
-                    'cigarcountry': 'cigarcountry',
+                    'cccrafter': 'cccrafter',                      # update_cccrafter_* -> cccrafter.csv
+                    'cigarplace': 'cigarplace',                    # update_cigarplace_* -> cigarplace.csv
+                    'cigarsdirect': 'cigarsdirect',                # update_cigarsdirect_* -> cigarsdirect.csv
                     'foxcigar': 'foxcigar',
-                    'gotham': 'gothamcigars',  # update_gotham_* -> gothamcigars.csv
-                    'hilandscigars': 'hilands',  # update_hilandscigars_* -> hilands.csv
+                    'gotham': 'gothamcigars',                      # update_gotham_* -> gothamcigars.csv
+                    'hilandscigars': 'hilands',                    # update_hilandscigars_* -> hilands.csv
+                    'holts': 'holts',                              # update_holts_* -> holts.csv
                     'neptune': 'neptune',
-                    'nicks': 'nickscigarworld'  # update_nicks_* -> nickscigarworld.csv
+                    'nicks': 'nickscigarworld',                    # update_nicks_* -> nickscigarworld.csv
+                    'planet_cigars': 'planetcigars',               # update_planet_cigars_* -> planetcigars.csv
+                    'smallbatch_cigar': 'smallbatchcigar',         # update_smallbatch_cigar_* -> smallbatchcigar.csv
+                    'smokeinn': 'smokeinn',                        # update_smokeinn_* -> smokeinn.csv
+                    'tampasweethearts': 'tampasweethearts',        # update_tampasweethearts_* -> tampasweethearts.csv
+                    'tobaccolocker': 'tobaccolocker',              # update_tobaccolocker_* -> tobaccolocker.csv
+                    'two_guys': 'twoguys',                         # update_two_guys_* -> twoguys.csv
+                    'watchcity': 'watchcity'                       # update_watchcity_* -> watchcity.csv
                 }
                 
                 retailer_name = retailer_name_map.get(script_base, script_base)

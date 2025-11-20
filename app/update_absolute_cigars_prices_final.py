@@ -101,7 +101,9 @@ class AbsoluteCigarsCSVUpdaterWithMaster:
             'vitola': row.get('Vitola', ''),
             'size': size,
             'box_qty': box_qty
-        }    def auto_populate_metadata(self, row: Dict) -> Dict:
+        }
+        
+    def auto_populate_metadata(self, row: Dict) -> Dict:
         """ALWAYS sync metadata from master file (master is authority source)"""
         cigar_id = row.get('cigar_id', '')
         if not cigar_id:
@@ -126,15 +128,6 @@ class AbsoluteCigarsCSVUpdaterWithMaster:
         # Log metadata sync changes
         if metadata_changes:
             print(f"  [MASTER SYNC] Updated metadata: {', '.join(metadata_changes)}")
-        
-        return row
-        
-        metadata = self.get_cigar_metadata(cigar_id)
-        
-        # Auto-populate fields that are empty or missing
-        for field in ['title', 'brand', 'line', 'wrapper', 'vitola', 'size', 'box_qty']:
-            if not row.get(field) and field in metadata and metadata[field]:
-                row[field] = metadata[field]
         
         return row
     
@@ -166,7 +159,7 @@ class AbsoluteCigarsCSVUpdaterWithMaster:
             print(f"[ERROR] Failed to load CSV: {e}")
             return []
     
-        def save_csv(self, data: List[Dict]) -> bool:
+    def save_csv(self, data: List[Dict]) -> bool:
         """Save the updated data back to CSV (respects dry_run mode)"""
         if not data:
             print("[ERROR] No data to save")
@@ -210,13 +203,12 @@ class AbsoluteCigarsCSVUpdaterWithMaster:
             print(f"[ERROR] Price extraction failed: {e}")
             return {'error': str(e)}
     
-        def run_update(self) -> bool:
+    def run_update(self) -> bool:
         """Run the complete update process"""
         mode_str = "[DRY RUN] " if self.dry_run else ""
         print("=" * 70)
         print(f"{mode_str}ABSOLUTE CIGARS ENHANCED PRICE UPDATE - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         print("MASTER-DRIVEN METADATA SYNC: All metadata always synced from master file")
-        print(f"ABSOLUTE CIGARS PRICE UPDATE - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         print("=" * 70)
         
         # Load master file
@@ -235,7 +227,6 @@ class AbsoluteCigarsCSVUpdaterWithMaster:
         # Update each product
         successful_updates = 0
         failed_updates = 0
-        metadata_sync_count = 0
         
         for i, row in enumerate(data):
             cigar_id = row.get('cigar_id', 'Unknown')

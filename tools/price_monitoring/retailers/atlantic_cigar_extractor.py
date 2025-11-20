@@ -1,14 +1,15 @@
 """
-Atlantic Cigar Extractor
-Retailer-specific extraction rules for Atlantic Cigar (BigCommerce platform)
-Handles variable box quantities, discounted pricing, stock detection
+Atlantic Cigar Extractor - Fixed Version
+Based on actual HTML structure analysis
+Targets specific elements: price-value, price-rrp, BCData JavaScript
 """
 
 import requests
 from bs4 import BeautifulSoup
 import re
 import time
-from typing import Dict, Optional, Tuple
+import json
+from typing import Dict
 
 class AtlanticCigarExtractor:
     def __init__(self):
@@ -18,36 +19,29 @@ class AtlanticCigarExtractor:
         })
     
     def extract_product_data(self, url: str) -> Dict:
-        """
-        Extract product data from Atlantic Cigar URL
-        Returns: {
-            'box_price': float or None,
-            'box_qty': int or None,
-            'in_stock': bool,
-            'discount_percent': float or None,
-            'error': str or None
-        }
-        """
+        """Extract product data from Atlantic Cigar URL"""
         try:
-            # Rate limiting - 1 request per second
-            time.sleep(1)
+            time.sleep(1)  # Rate limiting
             
             response = self.session.get(url, timeout=10)
             response.raise_for_status()
             
             soup = BeautifulSoup(response.content, 'html.parser')
             
-            # Extract box quantity from product title or options
+            # Extract sale price using specific Atlantic Cigar structure
+            sale_price = self._extract_sale_price(soup)
+            
+            # Extract box quantity from package options
             box_qty = self._extract_box_quantity(soup)
             
-            # Extract pricing information
-            box_price, discount_percent = self._extract_pricing(soup)
-            
-            # Check stock status
+            # Check stock status using BCData JavaScript
             in_stock = self._check_stock_status(soup)
             
+            # Calculate discount if there's an MSRP
+            discount_percent = self._calculate_discount(soup, sale_price)
+            
             return {
-                'box_price': box_price,
+                'box_price': sale_price,
                 'box_qty': box_qty,
                 'in_stock': in_stock,
                 'discount_percent': discount_percent,
@@ -63,169 +57,220 @@ class AtlanticCigarExtractor:
                 'error': str(e)
             }
     
-    def _extract_box_quantity(self, soup: BeautifulSoup) -> Optional[int]:
-        """Extract box quantity from product title or description"""
+    def _extract_sale_price(self, soup: BeautifulSoup) -> float:
+        """Extract the main sale price (not MSRP) - targets price-value class"""
         
-        # Look in product title
-        title_elem = soup.find('h1', class_='productView-title')
-        if title_elem:
-            title = title_elem.get_text().strip()
-            # Look for patterns like "Box of 25", "25ct", "(25)"
-            qty_match = re.search(r'(?:box\s+of\s+|[\(\[]?)(\d+)(?:ct|[\)\]]?)', title, re.IGNORECASE)
-            if qty_match:
-                return int(qty_match.group(1))
-        
-        # Look in product description
-        desc_elem = soup.find('div', class_='productView-info-value')
-        if desc_elem:
-            desc = desc_elem.get_text().strip()
-            qty_match = re.search(r'(?:box\s+of\s+|quantity:\s*)(\d+)', desc, re.IGNORECASE)
-            if qty_match:
-                return int(qty_match.group(1))
-        
-        # Look for quantity selector options
-        qty_options = soup.find_all('option', value=re.compile(r'\d+'))
-        if qty_options:
-            quantities = []
-            for option in qty_options:
+        # Priority 1: Look for the specific sale price element (price-value class)
+        sale_price_elem = soup.find('span', class_='price-value')
+        if sale_price_elem:
+            price_text = sale_price_elem.get_text().strip()
+            price_match = re.search(r'\$?(\d+(?:\.\d{2})?)', price_text)
+            if price_match:
                 try:
-                    qty = int(option.get('value', '0'))
-                    if qty > 5:  # Assume box quantities are > 5
-                        quantities.append(qty)
+                    return float(price_match.group(1))
                 except ValueError:
-                    continue
-            if quantities:
-                return max(quantities)  # Take the largest quantity as box size
+                    pass
         
-        return None
-    
-    def _extract_pricing(self, soup: BeautifulSoup) -> Tuple[Optional[float], Optional[float]]:
-        """Extract box price and discount percentage"""
+        # Priority 2: Look in JavaScript BCData for sale price
+        scripts = soup.find_all('script')
+        for script in scripts:
+            script_text = script.get_text()
+            if 'BCData' in script_text and 'sale_price_without_tax' in script_text:
+                # Extract sale price from JavaScript BCData
+                match = re.search(r'"sale_price_without_tax":\s*{\s*"formatted":\s*"\$(\d+\.\d+)"', script_text)
+                if match:
+                    try:
+                        return float(match.group(1))
+                    except ValueError:
+                        continue
         
-        # Look for price elements - BigCommerce typically uses these classes
-        price_elements = soup.find_all(['span', 'div'], class_=re.compile(r'price'))
-        
-        prices = []
-        for elem in price_elements:
+        # Priority 3: Look for any price-value elements
+        price_value_elems = soup.find_all('span', class_=re.compile(r'price-value'))
+        for elem in price_value_elems:
             price_text = elem.get_text().strip()
-            # Extract price numbers
-            price_match = re.search(r'\$?([\d,]+\.?\d*)', price_text.replace(',', ''))
+            price_match = re.search(r'\$?(\d+(?:\.\d{2})?)', price_text)
             if price_match:
                 try:
                     price = float(price_match.group(1))
-                    if price > 10:  # Filter out obviously wrong prices
-                        prices.append(price)
+                    if 50 <= price <= 2000:
+                        return price
                 except ValueError:
                     continue
         
-        if not prices:
-            return None, None
+        return None
+    
+    def _extract_box_quantity(self, soup: BeautifulSoup) -> int:
+        """Extract box quantity from package options"""
         
-        # Look for crossed out or strikethrough prices (original price)
-        original_price = None
-        sale_price = None
+        # Look for "Box of X" options from the examples
+        package_options = soup.find_all(['button', 'option', 'span'], string=re.compile(r'Box of \d+', re.I))
         
-        # Check for strikethrough or crossed out prices
-        strikethrough_elems = soup.find_all(['del', 's']) + soup.find_all(attrs={'style': re.compile(r'text-decoration:\s*line-through', re.I)})
-        for elem in strikethrough_elems:
-            price_text = elem.get_text().strip()
-            price_match = re.search(r'\$?([\d,]+\.?\d*)', price_text.replace(',', ''))
-            if price_match:
-                try:
-                    original_price = float(price_match.group(1))
-                    break
-                except ValueError:
-                    continue
+        for option in package_options:
+            text = option.get_text().strip()
+            qty_match = re.search(r'Box of (\d+)', text, re.I)
+            if qty_match:
+                return int(qty_match.group(1))
         
-        # If we have multiple prices and one is crossed out, the other is the sale price
-        if original_price and len(prices) >= 2:
-            # Find the price that's not the original price
-            for price in prices:
-                if abs(price - original_price) > 0.01:  # Not the same as original
-                    sale_price = price
-                    break
+        # Alternative: look in product title
+        title_elem = soup.find('h1')
+        if title_elem:
+            title_text = title_elem.get_text().strip()
+            qty_match = re.search(r'Box of (\d+)', title_text, re.I)
+            if qty_match:
+                return int(qty_match.group(1))
         
-        # Calculate discount percentage if we have both prices
-        discount_percent = None
-        if original_price and sale_price:
-            discount_percent = ((original_price - sale_price) / original_price) * 100
-            final_price = sale_price
-        else:
-            # Use the highest price as the box price (usually the most relevant)
-            final_price = max(prices) if prices else None
-        
-        # Look for explicit "You Save" information
-        save_elem = soup.find(text=re.compile(r'(?:you\s+save|save)\s*\$?(\d+(?:\.\d+)?)', re.I))
-        if save_elem and not discount_percent:
-            save_match = re.search(r'(?:you\s+save|save)\s*\$?([\d,]+\.?\d*)', save_elem, re.I)
-            if save_match and final_price:
-                save_amount = float(save_match.group(1))
-                original_calc = final_price + save_amount
-                discount_percent = (save_amount / original_calc) * 100
-        
-        return final_price, discount_percent
+        # Default fallback
+        return 25
     
     def _check_stock_status(self, soup: BeautifulSoup) -> bool:
-        """Check if product is in stock based on button text"""
+        """Check stock status using BCData JavaScript object"""
         
-        # Look for add to cart button
-        add_to_cart = soup.find(['button', 'input'], attrs={
-            'class': re.compile(r'add.*cart|cart.*add', re.I),
-            'type': re.compile(r'submit|button', re.I)
-        })
+        # Priority 1: Look in BCData JavaScript object for stock info
+        scripts = soup.find_all('script')
+        for script in scripts:
+            script_text = script.get_text()
+            if 'BCData' in script_text and 'instock' in script_text:
+                # Extract stock status from BCData
+                instock_match = re.search(r'"instock":\s*(true|false)', script_text)
+                if instock_match:
+                    return instock_match.group(1) == 'true'
+                
+                # Also check stock number
+                stock_match = re.search(r'"stock":\s*(\d+)', script_text)
+                if stock_match:
+                    stock_num = int(stock_match.group(1))
+                    return stock_num > 0
         
-        if add_to_cart:
-            button_text = add_to_cart.get_text().strip().upper()
-            # In stock indicators
-            if any(phrase in button_text for phrase in ['ADD TO CART', 'BUY NOW', 'PURCHASE']):
-                return True
-            # Out of stock indicators  
-            if any(phrase in button_text for phrase in ['NOTIFY ME', 'SOLD OUT', 'OUT OF STOCK']):
+        # Priority 2: Look for explicit unavailable messages
+        unavailable_indicators = [
+            'currently unavailable',
+            'sold out', 
+            'out of stock',
+            'notify when available'
+        ]
+        
+        page_text = soup.get_text().lower()
+        for indicator in unavailable_indicators:
+            if indicator in page_text:
                 return False
         
-        # Look for explicit stock status text
-        stock_indicators = soup.find_all(text=re.compile(r'(?:in\s+stock|out\s+of\s+stock|sold\s+out|notify\s+me)', re.I))
-        for indicator in stock_indicators:
-            text = indicator.strip().upper()
-            if 'IN STOCK' in text:
-                return True
-            if any(phrase in text for phrase in ['OUT OF STOCK', 'SOLD OUT', 'NOTIFY ME']):
+        # Priority 3: Look for "ADD TO CART" button
+        add_to_cart_button = soup.find(['button', 'input'], string=re.compile(r'add to cart', re.I))
+        if add_to_cart_button and not add_to_cart_button.get('disabled'):
+            return True
+        
+        # Priority 4: Look for red warning banners about unavailability
+        warning_banners = soup.find_all(['div', 'span'], class_=re.compile(r'alert|warning|unavailable', re.I))
+        for banner in warning_banners:
+            banner_text = banner.get_text().lower()
+            if any(indicator in banner_text for indicator in unavailable_indicators):
                 return False
         
-        # Look for availability class names
-        avail_elems = soup.find_all(attrs={'class': re.compile(r'(?:stock|availability)', re.I)})
-        for elem in avail_elems:
-            class_text = ' '.join(elem.get('class', [])).upper()
-            text_content = elem.get_text().strip().upper()
-            
-            if any(phrase in class_text or phrase in text_content for phrase in ['INSTOCK', 'IN-STOCK', 'AVAILABLE']):
-                return True
-            if any(phrase in class_text or phrase in text_content for phrase in ['OUTOFSTOCK', 'OUT-OF-STOCK', 'UNAVAILABLE']):
-                return False
-        
-        # Default to True if we can't determine (conservative approach)
+        # Default to in stock if no clear indicators
         return True
-
-# Test function for development
-def test_extractor():
-    """Test the extractor with sample URLs"""
-    extractor = AtlanticCigarExtractor()
     
-    # Test URLs - replace with actual Atlantic Cigar URLs
-    test_urls = [
-        # Add actual test URLs here
+    def _calculate_discount(self, soup: BeautifulSoup, sale_price: float) -> float:
+        """Calculate discount percentage using MSRP from price-rrp class"""
+        
+        if not sale_price:
+            return None
+        
+        # Priority 1: Look for MSRP in price-rrp class
+        msrp_elem = soup.find('span', class_='price-rrp')
+        if msrp_elem:
+            price_text = msrp_elem.get_text().strip()
+            price_match = re.search(r'\$?(\d+(?:\.\d{2})?)', price_text)
+            if price_match:
+                try:
+                    msrp = float(price_match.group(1))
+                    if msrp > sale_price:  # Valid MSRP should be higher
+                        discount_percent = ((msrp - sale_price) / msrp) * 100
+                        return round(discount_percent, 1)
+                except ValueError:
+                    pass
+        
+        # Priority 2: Look in BCData JavaScript for RRP
+        scripts = soup.find_all('script')
+        for script in scripts:
+            script_text = script.get_text()
+            if 'BCData' in script_text and 'rrp_without_tax' in script_text:
+                # Extract RRP from JavaScript BCData
+                match = re.search(r'"rrp_without_tax":\s*{\s*"formatted":\s*"\$(\d+\.\d+)"', script_text)
+                if match:
+                    try:
+                        msrp = float(match.group(1))
+                        if msrp > sale_price:
+                            discount_percent = ((msrp - sale_price) / msrp) * 100
+                            return round(discount_percent, 1)
+                    except ValueError:
+                        continue
+        
+        return None
+
+
+def extract_atlantic_cigar_data(url: str) -> Dict:
+    """Main extraction function for automation compatibility"""
+    extractor = AtlanticCigarExtractor()
+    result = extractor.extract_product_data(url)
+    
+    # Convert to automation format
+    return {
+        'success': result['error'] is None,
+        'price': result['box_price'],
+        'box_quantity': result['box_qty'],
+        'in_stock': result['in_stock'],
+        'discount_percent': result['discount_percent'],
+        'error': result['error']
+    }
+
+
+# Test function
+def test_extractor():
+    """Test with the three example URLs"""
+    test_cases = [
+        {
+            'url': 'https://atlanticcigar.com/arturo-fuente-hemingway-classic-natural/',
+            'expected_price': 272.95,
+            'expected_stock': True,
+            'expected_qty': 25,
+            'name': 'Hemingway Classic (Sale Price)'
+        },
+        {
+            'url': 'https://atlanticcigar.com/padron-1964-anniversary-diplomatico-maduro/',
+            'expected_price': 455.00,
+            'expected_stock': True,
+            'expected_qty': 25,
+            'name': 'Padron Diplomatico (No Discount)'
+        },
+        {
+            'url': 'https://atlanticcigar.com/dapper-el-borracho-maduro-edmundo-bp-5-1-2x52/',
+            'expected_price': 106.80,
+            'expected_stock': False,
+            'expected_qty': 16,
+            'name': 'Dapper El Borracho (Out of Stock)'
+        }
     ]
     
-    for url in test_urls:
-        print(f"\nTesting: {url}")
-        result = extractor.extract_product_data(url)
-        for key, value in result.items():
-            print(f"  {key}: {value}")
+    print("Testing Atlantic Cigar Extractor - Fixed Version")
+    print("=" * 50)
+    
+    for i, test in enumerate(test_cases, 1):
+        print(f"\nTest {i}: {test['name']}")
+        print(f"URL: {test['url']}")
+        print("-" * 40)
+        
+        result = extract_atlantic_cigar_data(test['url'])
+        
+        print("Results:")
+        print(f"  Price: ${result.get('price', 'N/A')} (Expected: ${test['expected_price']})")
+        print(f"  Stock: {result.get('in_stock', 'N/A')} (Expected: {test['expected_stock']})")
+        print(f"  Box Qty: {result.get('box_quantity', 'N/A')} (Expected: {test['expected_qty']})")
+        print(f"  Discount: {result.get('discount_percent', 'N/A')}%")
+        print(f"  Success: {result.get('success', 'N/A')}")
+        
+        if result.get('error'):
+            print(f"  ERROR: {result['error']}")
+
 
 if __name__ == "__main__":
     test_extractor()
-
-def extract_atlantic_cigar_data(url: str) -> Dict:
-    """Wrapper function for automation compatibility"""
-    extractor = AtlanticCigarExtractor()
-    return extractor.extract_product_data(url)

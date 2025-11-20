@@ -13,15 +13,16 @@ import pandas as pd
 from datetime import datetime
 from typing import List, Dict
 
-# Add the tools directory to path for importing the extractor
-sys.path.append(os.path.join(os.path.dirname(__file__), 'tools', 'price_monitoring'))
+# Add the retailers directory to path
+retailers_dir = os.path.join(os.path.dirname(__file__), '..', 'tools', 'price_monitoring', 'retailers')
+sys.path.append(retailers_dir)
 
 try:
-    from retailers.atlantic_cigar_extractor import extract_atlantic_cigar_data
-except ImportError:
-    print("[ERROR] Could not import extract_atlantic_cigar_data. Make sure the extractor is in tools/price_monitoring/retailers/atlantic_cigar_extractor.py")
+    from atlantic_cigar_extractor import extract_atlantic_cigar_data
+except ImportError as e:
+    print(f"[ERROR] Could not import extract_atlantic_cigar_data. Make sure the extractor is in tools/price_monitoring/retailers/atlantic_cigar_extractor.py")
+    print(f"[ERROR] Import error details: {e}")
     sys.exit(1)
-
 
 class AtlanticCigarsCSVUpdaterWithMaster:
     def __init__(self, csv_path: str = None, master_path: str = None, dry_run: bool = False):
