@@ -5,7 +5,11 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>{{BRAND}} {{LINE}} Prices - Compare Deals | Cigar Price Scout</title>
     
-    <meta name="description" content="Compare {{BRAND}} {{LINE}} cigar prices across 35+ online retailers. Find the best deals with shipping and tax calculations." />
+     <meta name="description"
+        content="Compare {{BRAND}} {{LINE}} cigar prices across 35+ online retailers. Find the best deals with shipping and tax calculations." />
+      
+    <link rel="canonical"
+        href="https://cigarpricescout.com/cigars/{{BRAND_SLUG}}/{{LINE_SLUG}}" />
     
     <!-- Same styling as your index.html -->
     <link rel="icon" type="image/png" href="/static/logo.png">
@@ -38,35 +42,45 @@
       .footer a{color:var(--accent);text-decoration:none}
     </style>
 
-    <script type="application/ld+json">
-    {
-      "@context": "https://schema.org",
-      "@type": "Product",
-      "name": "{{BRAND}} {{LINE}}",
-      "brand": {
-        "@type": "Brand",
-        "name": "{{BRAND}}"
-      },
-      "description": "Compare {{BRAND}} {{LINE}} cigar prices across 35+ online retailers",
-      "offers": {
-        "@type": "AggregateOffer",
-        "priceCurrency": "USD",
-        "lowPrice": "0",
-        "highPrice": "1000",
-        "offerCount": "35"
+      <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Product",
+        "name": "{{BRAND}} {{LINE}}",
+        "url": "https://cigarpricescout.com/cigars/{{BRAND_SLUG}}/{{LINE_SLUG}}",
+        "brand": {
+          "@type": "Brand",
+          "name": "{{BRAND}}"
+        },
+        "description": "Compare {{BRAND}} {{LINE}} cigar prices across 35+ online retailers",
+        "offers": {
+          "@type": "AggregateOffer",
+          "priceCurrency": "USD",
+          "lowPrice": "0",
+          "highPrice": "1000",
+          "offerCount": "35"
+        }
       }
-    }
-    </script>
+      
+  </script>
 
-    <div style="text-align:center;font-size:14px;color:#6b7280;margin:10px 0;">
-  <a href="/" style="color:var(--accent);">Home</a> > 
-  <span>{{BRAND}}</span> > 
-  <span>{{LINE}}</span>
-</div>
+    <meta property="og:title" content="{{BRAND}} {{LINE}} Prices - Compare Deals | Cigar Price Scout" />
+    <meta property="og:description" content="Compare {{BRAND}} {{LINE}} cigar prices across 35+ online retailers." />
+    <meta property="og:url" content="https://cigarpricescout.com/cigars/{{BRAND_SLUG}}/{{LINE_SLUG}}" />
+    <meta property="og:type" content="product" />
+    <meta property="og:image" content="https://cigarpricescout.com/static/logo.png" />
 
-  </head>
-  
+    <meta name="twitter:card" content="summary_large_image" />
+
+   </head>
+
   <body>
+    <div style="text-align:center;font-size:14px;color:#6b7280;margin:10px 0;">
+      <a href="/" style="color:var(--accent);">Home</a> > 
+      <span>{{BRAND}}</span> > 
+      <span>{{LINE}}</span>
+    </div>
+  
     <!-- Age Verification Modal -->
     <div id="ageModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:1000;align-items:center;justify-content:center;">
       <div style="background:#fff;padding:40px;border-radius:12px;text-align:center;max-width:400px;margin:20px;">
@@ -92,9 +106,15 @@
       
       <main>
         <section id="results">
-      
-      <main>
-        <section id="results">
+
+          <h2 id="resultsTitle">
+            {{BRAND}} {{LINE}} – Best Box Prices
+          </h2>
+
+          <p id="resultsSummary" 
+                style="text-align:center;color:#4b5563;font-size:16px;margin-top:4px;">
+              Loading cigar details…
+          </p>
 
           <div style="display:flex;gap:12px;justify-content:center;margin:20px 0;flex-wrap:wrap;">
             <select id="wrapperFilter" style="padding:10px 14px;border:1px solid #e5e7eb;border-radius:8px;font-family:'Cormorant Garamond',serif;font-size:16px;background:#fff;">
@@ -122,7 +142,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr><td colspan="6">Loading...</td></tr>
+              <tr><td colspan="7">Loading...</td></tr>
             </tbody>
           </table>
         </section>
@@ -161,38 +181,95 @@
         } catch (error) {
           console.error('Error loading prices:', error);
           document.querySelector('#resultsTable tbody').innerHTML = 
-            '<tr><td colspan="6">Error loading prices. Please try again.</td></tr>';
+            '<tr><td colspan="7">Error loading prices. Please try again.</td></tr>';
         }
       }
       
       let allResults = []; // Store all results for filtering
       
-      function displayResults(data) {
+     function displayResults(data) {
+        const titleEl = document.getElementById('resultsTitle');
+        const metaDesc = document.querySelector('meta[name="description"]');
+
+        // No results
         if (!data.results || data.results.length === 0) {
-          document.querySelector('h2').textContent = 'No results found';
-          document.querySelector('#resultsTable tbody').innerHTML = 
-            '<tr><td colspan="7">No matching cigars found.</td></tr>';
-          return;
+            if (titleEl) {
+                titleEl.textContent = 'No results found';
+            }
+            document.querySelector('#resultsTable tbody').innerHTML = 
+                '<tr><td colspan="7">No matching cigars found.</td></tr>';
+            return;
         }
-        
-        // Sort by price
+
+        // Sort by delivered price
         data.results.sort((a, b) => {
-          const priceA = parseFloat(a.delivered_after_promo.replace("$", ""));
-          const priceB = parseFloat(b.delivered_after_promo.replace("$", ""));
-          return priceA - priceB;
+            const priceA = parseFloat(a.delivered_after_promo.replace("$", ""));
+            const priceB = parseFloat(b.delivered_after_promo.replace("$", ""));
+            return priceA - priceB;
         });
-        
+
         allResults = data.results;
-        
-        document.querySelector('h2').textContent = 
-          `${data.brand} ${data.line} - Best Prices`;
-        
+
+        // ---------------------------------------------
+        // SEO enrichment (wrapper/vitola in title/meta)
+        // ---------------------------------------------
+        const wrappers = new Set();
+        const vitolas = new Set();
+
+        data.results.forEach(r => {
+            if (r.wrapper) wrappers.add(r.wrapper);
+            if (r.vitola) vitolas.add(r.vitola);
+        });
+
+        const wrapperText =
+            wrappers.size === 1 ? ` ${[...wrappers][0]} wrapper` : '';
+        const vitolaText =
+            vitolas.size === 1 ? ` ${[...vitolas][0]}` : '';
+
+        const seoTitle =
+            `${data.brand} ${data.line}${wrapperText}${vitolaText} Prices - Compare Deals | Cigar Price Scout`;
+
+        const seoDesc =
+            `Compare ${data.brand} ${data.line}${wrapperText}${vitolaText} cigar prices across 35+ online retailers with shipping and tax included.`;
+
+        document.title = seoTitle;
+        if (metaDesc) metaDesc.setAttribute('content', seoDesc);
+
+        // ---------------------------------------------
+        // INSERT SUMMARY BLOCK HERE
+        // ---------------------------------------------
+        const summaryEl = document.getElementById('resultsSummary');
+        if (summaryEl) {
+            const wrapperList = Array.from(wrappers).sort().join(', ');
+            const vitolaList = Array.from(vitolas).sort().join(', ');
+
+            let summary = `We found ${data.results.length} ${data.brand} ${data.line} box listings`;
+
+            if (wrapperList) summary += ` in wrappers such as ${wrapperList}`;
+            if (vitolaList) summary += ` and vitolas like ${vitolaList}`;
+
+            summary += `. Use the filters below to explore sizes, wrappers, and retailers.`;
+
+            summaryEl.textContent = summary;
+        }
+
+        // ---------------------------------------------
+        // END SUMMARY BLOCK
+        // ---------------------------------------------
+
+        // Update page heading
+        if (titleEl) {
+            titleEl.textContent = `${data.brand} ${data.line} – Best Prices`;
+        }
+
         // Populate filter dropdowns
         populateFilters(data.results);
-        
+
         // Render initial table
         renderTable(data.results);
-      }
+    }
+
+
       
       function populateFilters(results) {
         const wrappers = new Set();

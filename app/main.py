@@ -1,6 +1,6 @@
-from fastapi import FastAPI, Query, Form
+from fastapi import FastAPI, Query, Form, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, FileResponse, Response
+from fastapi.responses import HTMLResponse, FileResponse, Response, RedirectResponse
 from pathlib import Path
 import csv
 from typing import Optional
@@ -294,6 +294,19 @@ def start_scheduler():
     logger.info("✓ Scheduler started - CJ feeds at 3 AM, Awin at 3:30 AM Pacific")    
 
 app = FastAPI()
+
+# Middleware to force redirect www → non-www
+@app.middleware("http")
+async def www_redirect_middleware(request: Request, call_next):
+    host = request.headers.get("host", "")
+    
+    # If the request is for www.cigarpricescout.com, redirect to cigarpricescout.com
+    if host.startswith("www."):
+        url = str(request.url).replace("://www.", "://")
+        return RedirectResponse(url=url, status_code=301)
+    
+    return await call_next(request)
+
 app.mount("/static", StaticFiles(directory="../static"), name="static")
 
 #@app.on_event("startup")
@@ -952,30 +965,30 @@ Submitted: {submission_time}
 
 @app.get("/cigars/{brand}/{line}", response_class=HTMLResponse)
 async def cigar_landing_page(brand: str, line: str):
-    """
-    SEO-friendly landing page for specific cigar brands/lines
-    URL format: /cigars/padron/1964-anniversary-series
-    """
-    # Read the template
     template_path = Path("../static/cigar-template.html")
     
     if not template_path.exists():
-        # Fallback if template doesn't exist yet
         return HTMLResponse(content="<h1>Page not found</h1>", status_code=404)
     
     with open(template_path, 'r', encoding='utf-8') as f:
         template = f.read()
-    
-    # Replace placeholders with actual values
-    # Convert URL-friendly format back to display format
+
+    # Display text: "My Father", "The Judge"
     brand_display = brand.replace('-', ' ').title()
     line_display = line.replace('-', ' ').title()
+
+    # Slugs for canonical/JSON-LD
+    brand_slug = brand.lower()
+    line_slug = line.lower()
     
-    html = template.replace('{{BRAND}}', brand_display)
-    html = html.replace('{{LINE}}', line_display)
+    html = (template
+        .replace('{{BRAND}}', brand_display)
+        .replace('{{LINE}}', line_display)
+        .replace('{{BRAND_SLUG}}', brand_slug)
+        .replace('{{LINE_SLUG}}', line_slug)
+    )
     
     return HTMLResponse(content=html)
-
 
 # Helper function to generate URL-friendly slugs
 def create_slug(text: str) -> str:
