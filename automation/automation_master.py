@@ -187,6 +187,10 @@ class CigarPriceAutomationEnhanced:
             subprocess.run(['git', 'pull', 'origin', 'main'], 
                           check=True, cwd='/app', capture_output=True)
             
+            # Switch to main branch (fix branch mismatch)  
+            subprocess.run(['git', 'checkout', 'main'], 
+                        check=True, cwd='/app', capture_output=True)
+            
             # Add the updated CSV files
             csv_files = list(Path('/app/static/data').glob('*.csv'))
             if csv_files:
