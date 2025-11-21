@@ -320,16 +320,6 @@ async def www_redirect_middleware(request: Request, call_next):
 
 app.mount("/static", StaticFiles(directory="../static"), name="static")
 
-@app.on_event("startup")
-async def startup_event():
-    """Initialize scheduler when app starts"""
-    try:
-        start_scheduler()
-        logger.info("Application started with scheduled feed processing")
-    except Exception as e:
-        logger.error(f"Scheduler startup failed: {e}")
-        logger.info("Application started without scheduling - manual trigger available")
-
 RETAILERS = [
     {"key": "abcfws", "name": "ABC Fine Wine & Spirits", "csv": "../static/data/abcfws.csv", "authorized": False},
     {"key": "absolutecigars", "name": "Absolute Cigars", "csv": "../static/data/absolutecigars.csv", "authorized": False},
@@ -1058,21 +1048,6 @@ async def sitemap():
                 "priority": "0.9",
                 "changefreq": "weekly"
             })
-    
-    # Generate XML
-    xml_content = '<?xml version="1.0" encoding="UTF-8"?>\n'
-    xml_content += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
-    
-    for url_data in urls:
-        xml_content += f'  <url>\n'
-        xml_content += f'    <loc>{url_data["url"]}</loc>\n'
-        xml_content += f'    <priority>{url_data["priority"]}</priority>\n'
-        xml_content += f'    <changefreq>{url_data["changefreq"]}</changefreq>\n'
-        xml_content += f'  </url>\n'
-    
-    xml_content += '</urlset>'
-    
-    return Response(content=xml_content, media_type="application/xml")
     
     # Generate XML
     xml_content = '<?xml version="1.0" encoding="UTF-8"?>\n'
