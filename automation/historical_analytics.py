@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Historical Price Analytics Script
+Historical Price Analytics Script - Windows Compatible Version
 Query and analyze collected historical pricing data for retailer performance insights
 """
 
@@ -240,7 +240,7 @@ def main():
     # Retailer performance
     performance = analyzer.get_retailer_performance(30)
     if performance is not None and not performance.empty:
-        print("🏪 Retailer Performance (Last 30 Days):")
+        print("RETAILER PERFORMANCE (Last 30 Days):")
         pd.set_option('display.max_columns', None)
         pd.set_option('display.width', None)
         print(performance.round(2))
@@ -249,7 +249,7 @@ def main():
     # Top tracked cigars
     top_cigars = analyzer.get_top_cigars_by_tracking(10)
     if top_cigars is not None and not top_cigars.empty:
-        print("🔥 Most Tracked Cigars:")
+        print("MOST TRACKED CIGARS:")
         for _, row in top_cigars.iterrows():
             print(f"  {row['brand']} {row['line']} ({row['wrapper']}) - "
                   f"{row['retailer_count']} retailers, "
@@ -260,7 +260,7 @@ def main():
     # Recent stock-outs
     stock_outs = analyzer.get_stock_out_events(7)
     if stock_outs is not None and not stock_outs.empty:
-        print("🚨 Recent Stock-Outs (Last 7 Days):")
+        print("RECENT STOCK-OUTS (Last 7 Days):")
         for _, row in stock_outs.head(10).iterrows():
             print(f"  {row['retailer']}: {row['brand']} {row['line']} "
                   f"({row['wrapper']}) - ${row['price']:.2f} - {row['timestamp'][:16]}")
