@@ -269,29 +269,40 @@ def run_awin_processor():
         logger.error(f"Failed to run Awin processor: {e}")
 
 def start_scheduler():
-    """Start the background scheduler"""
-    scheduler = BackgroundScheduler()
+    """Start the background scheduler - with proper error handling"""
+    if not scheduler_available:
+        logger.warning("APScheduler not available - automated scheduling disabled")
+        logger.info("Install apscheduler: pip install apscheduler")
+        logger.info("Manual trigger still available at /admin/trigger-feed-update")
+        return
     
-    # CJ feeds at 3:00 AM Pacific
-    scheduler.add_job(
-        run_feed_processor,
-        CronTrigger(hour=3, minute=0, timezone='America/Los_Angeles'),
-        id='cj_feed_processor',
-        name='Process CJ affiliate feeds',
-        replace_existing=True
-    )
-    
-    # Awin BnB Tobacco feed at 3:30 AM Pacific
-    scheduler.add_job(
-        run_awin_processor,
-        CronTrigger(hour=3, minute=30, timezone='America/Los_Angeles'),
-        id='awin_feed_processor',
-        name='Process Awin BnB Tobacco feed',
-        replace_existing=True
-    )
-    
-    scheduler.start()
-    logger.info("✓ Scheduler started - CJ feeds at 3 AM, Awin at 3:30 AM Pacific")    
+    try:
+        scheduler = BackgroundScheduler()
+        
+        # CJ feeds at 3:00 AM Pacific
+        scheduler.add_job(
+            run_feed_processor,
+            CronTrigger(hour=3, minute=0, timezone='America/Los_Angeles'),
+            id='cj_feed_processor',
+            name='Process CJ affiliate feeds',
+            replace_existing=True
+        )
+        
+        # Awin BnB Tobacco feed at 3:30 AM Pacific
+        scheduler.add_job(
+            run_awin_processor,
+            CronTrigger(hour=3, minute=30, timezone='America/Los_Angeles'),
+            id='awin_feed_processor',
+            name='Process Awin BnB Tobacco feed',
+            replace_existing=True
+        )
+        
+        scheduler.start()
+        logger.info("Scheduler started - CJ feeds at 3 AM, Awin at 3:30 AM Pacific")
+        
+    except Exception as e:
+        logger.error(f"Failed to start scheduler: {e}")
+        logger.info("Manual trigger still available at /admin/trigger-feed-update")
 
 app = FastAPI()
 
@@ -312,8 +323,12 @@ app.mount("/static", StaticFiles(directory="../static"), name="static")
 @app.on_event("startup")
 async def startup_event():
     """Initialize scheduler when app starts"""
-    start_scheduler()
-    logger.info("Application started with scheduled feed processing")
+    try:
+        start_scheduler()
+        logger.info("Application started with scheduled feed processing")
+    except Exception as e:
+        logger.error(f"Scheduler startup failed: {e}")
+        logger.info("Application started without scheduling - manual trigger available")
 
 RETAILERS = [
     {"key": "abcfws", "name": "ABC Fine Wine & Spirits", "csv": "../static/data/abcfws.csv", "authorized": False},
