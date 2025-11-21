@@ -6,7 +6,7 @@
     <title>{{BRAND}} {{LINE}} Prices - Compare Deals | Cigar Price Scout</title>
     
      <meta name="description"
-        content="Compare {{BRAND}} {{LINE}} cigar prices across 35+ online retailers. Find the best deals with shipping and tax calculations." />
+        content="Compare {{BRAND}} {{LINE}} cigar box prices across 35+ online retailers. Find the best deals with shipping and tax calculations when you visit cigarpricescout.com." />
       
     <link rel="canonical"
         href="https://cigarpricescout.com/cigars/{{BRAND_SLUG}}/{{LINE_SLUG}}" />
@@ -103,12 +103,16 @@
       <div style="text-align:center;margin:0px 0;">
         <a href="/" style="display:inline-block;border:none;border-radius:12px;padding:12px 24px;font-weight:700;background:var(--accent);color:#fff;text-decoration:none;font-family:'Cormorant Garamond',serif;font-size:18px;">Scout Other Cigar Boxes</a>
       </div>
-      
+
+      <p style="text-align:center;color:var(--muted);font-size:14px;margin-top:4px;">
+        Want shipping, tax, and promo calculations? Run a full comparison on our homepage.
+      </p>
+
       <main>
         <section id="results">
 
           <h2 id="resultsTitle">
-            {{BRAND}} {{LINE}} – Best Box Prices
+            {{BRAND}} {{LINE}} – Advertised Box Prices
           </h2>
 
           <p id="resultsSummary" 
@@ -123,9 +127,6 @@
             <select id="vitolaFilter" style="padding:10px 14px;border:1px solid #e5e7eb;border-radius:8px;font-family:'Cormorant Garamond',serif;font-size:16px;background:#fff;">
               <option value="">All Vitolas</option>
             </select>
-            <select id="sizeFilter" style="padding:10px 14px;border:1px solid #e5e7eb;border-radius:8px;font-family:'Cormorant Garamond',serif;font-size:16px;background:#fff;">
-              <option value="">All Sizes</option>
-            </select>
             <button onclick="clearFilters()" style="padding:10px 20px;border:1px solid var(--accent);border-radius:8px;background:#fff;color:var(--accent);cursor:pointer;font-family:'Cormorant Garamond',serif;font-size:16px;font-weight:600;">Clear Filters</button>
           </div>
 
@@ -135,14 +136,11 @@
                 <th>Retailer</th>
                 <th>Product Details</th>
                 <th>Advertised Price</th>
-                <th>Est. Shipping</th>
-                <th>Est. Tax</th>
-                <th>Est. Total</th>
                 <th>Stock Status</th>
               </tr>
             </thead>
             <tbody>
-              <tr><td colspan="7">Loading...</td></tr>
+              <tr><td colspan="4">Loading...</td></tr>
             </tbody>
           </table>
         </section>
@@ -181,7 +179,7 @@
         } catch (error) {
           console.error('Error loading prices:', error);
           document.querySelector('#resultsTable tbody').innerHTML = 
-            '<tr><td colspan="7">Error loading prices. Please try again.</td></tr>';
+            '<tr><td colspan="4">Error loading prices. Please try again.</td></tr>';
         }
       }
       
@@ -197,7 +195,7 @@
                 titleEl.textContent = 'No results found';
             }
             document.querySelector('#resultsTable tbody').innerHTML = 
-                '<tr><td colspan="7">No matching cigars found.</td></tr>';
+                '<tr><td colspan="4">No matching cigars found.</td></tr>';
             return;
         }
 
@@ -248,7 +246,7 @@
             if (wrapperList) summary += ` in wrappers such as ${wrapperList}`;
             if (vitolaList) summary += ` and vitolas like ${vitolaList}`;
 
-            summary += `. Use the filters below to explore sizes, wrappers, and retailers.`;
+            summary += `. Use the filters below to explore wrappers and vitolas. For ZIP-code-based shipping, promotions, and tax estimates, click the Scout Other Cigar Boxes button.`;
 
             summaryEl.textContent = summary;
         }
@@ -259,7 +257,7 @@
 
         // Update page heading
         if (titleEl) {
-            titleEl.textContent = `${data.brand} ${data.line} – Best Prices`;
+            titleEl.textContent = `${data.brand} ${data.line} – Advertised Box Prices`;
         }
 
         // Populate filter dropdowns
@@ -274,17 +272,14 @@
       function populateFilters(results) {
         const wrappers = new Set();
         const vitolas = new Set();
-        const sizes = new Set();
         
         results.forEach(r => {
           if (r.wrapper) wrappers.add(r.wrapper);
           if (r.vitola) vitolas.add(r.vitola);
-          if (r.size) sizes.add(r.size);
         });
         
         const wrapperFilter = document.getElementById('wrapperFilter');
         const vitolaFilter = document.getElementById('vitolaFilter');
-        const sizeFilter = document.getElementById('sizeFilter');
         
         wrapperFilter.innerHTML = '<option value="">All Wrappers</option>' +
           Array.from(wrappers).sort().map(w => `<option value="${w}">${w}</option>`).join('');
@@ -292,24 +287,18 @@
         vitolaFilter.innerHTML = '<option value="">All Vitolas</option>' +
           Array.from(vitolas).sort().map(v => `<option value="${v}">${v}</option>`).join('');
         
-        sizeFilter.innerHTML = '<option value="">All Sizes</option>' +
-          Array.from(sizes).sort().map(s => `<option value="${s}">${s}</option>`).join('');
-        
         // Add event listeners
         wrapperFilter.addEventListener('change', applyFilters);
         vitolaFilter.addEventListener('change', applyFilters);
-        sizeFilter.addEventListener('change', applyFilters);
       }
       
       function applyFilters() {
         const wrapperVal = document.getElementById('wrapperFilter').value;
         const vitolaVal = document.getElementById('vitolaFilter').value;
-        const sizeVal = document.getElementById('sizeFilter').value;
         
         const filtered = allResults.filter(r => {
           if (wrapperVal && r.wrapper !== wrapperVal) return false;
           if (vitolaVal && r.vitola !== vitolaVal) return false;
-          if (sizeVal && r.size !== sizeVal) return false;
           return true;
         });
         
@@ -319,7 +308,6 @@
       function clearFilters() {
         document.getElementById('wrapperFilter').value = '';
         document.getElementById('vitolaFilter').value = '';
-        document.getElementById('sizeFilter').value = '';
         renderTable(allResults);
       }
       
@@ -327,29 +315,32 @@
         const tbody = document.querySelector('#resultsTable tbody');
         
         if (results.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="7">No results match your filters.</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="4">No results match your filters.</td></tr>';
           return;
         }
         
         tbody.innerHTML = results.map(result => 
           `<tr>
             <td><a href="${result.url}" target="_blank">${result.retailer}</a></td>
+
             <td style="text-align:left;min-width:220px;padding:16px;">
-              <div style="font-weight:600;font-size:17px;margin-bottom:8px;">${result.size}</div>
               <div style="font-size:15px;color:#6b7280;line-height:1.8;">
-                ${result.wrapper ? '<div>Wrapper: ' + result.wrapper + '</div>' : ''}
-                ${result.vitola ? '<div>Vitola: ' + result.vitola + '</div>' : ''}
+                ${result.wrapper ? `<div>Wrapper: ${result.wrapper}</div>` : ''}
+                ${result.vitola ? `<div>Vitola: ${result.vitola}</div>` : ''}
                 <div>Box of ${result.box_qty}</div>
               </div>
             </td>
+
             <td class="price-cell">${result.base}</td>
-            <td class="price-cell">${result.shipping}</td>
-            <td class="price-cell">${result.tax}</td>
-            <td class="price-cell total-price ${result.cheapest ? 'best-total' : ''}">${result.delivered_after_promo}</td>
-            <td class="price-cell">${result.oos ? '<span class="oos">Out of Stock</span>' : '<span style="color: #059669; font-weight: 600;">In Stock</span>'}</td>
+
+            <td class="price-cell">
+              ${result.oos 
+                ? '<span class="oos">Out of Stock</span>' 
+                : '<span style="color:#059669;font-weight:600;">In Stock</span>'}
+            </td>
           </tr>`
         ).join('');
-      }
+
 
       // Age verification
       let ageVerified = false;
