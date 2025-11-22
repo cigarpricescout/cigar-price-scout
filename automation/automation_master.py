@@ -201,38 +201,49 @@ class CigarPriceAutomationEnhanced:
             subprocess.run(['git', 'checkout', 'main'], 
                         check=True, cwd='/app', capture_output=True)
             
-            # Add the updated CSV files
+            # Add the updated CSV files (including subdirectories)
             csv_files = list(Path('/app/static/data').glob('*.csv'))
-            historical_files = list(Path('/app/static/data').rglob('*.csv'))          
-            if csv_files or historical_files:
-                # Add all CSV files
-                subprocess.run(['git', 'add', 'static/data/'], 
-                            check=True, cwd='/app', capture_output=True)
-                
-                # Check if there are changes to commit
-                result = subprocess.run(['git', 'status', '--porcelain'], 
-                                    capture_output=True, text=True, cwd='/app')
-                
-                if result.stdout.strip():
-                    # Create commit
-                    commit_msg = f"Automated price update - {datetime.now().strftime('%Y-%m-%d %H:%M UTC')}"
-                    subprocess.run(['git', 'commit', '-m', commit_msg], 
-                                check=True, cwd='/app', capture_output=True)
-                    
-                    logger.info(f"Committed changes: {len(csv_files)} CSV files")
-                    
-                    # Push changes using token URL
-                    logger.info("Pushing updated prices to GitHub...")
-                    subprocess.run(['git', 'push', 'origin', 'main'], 
-                                check=True, cwd='/app', capture_output=True)
-                    
-                    logger.info("Successfully pushed price updates to GitHub")
-                    return True
-                else:
-                    logger.info("No changes to commit")
-                    return True
+            
+            # Always add the entire directory to capture subdirectories
+            subprocess.run(['git', 'add', 'static/data/'], 
+                          check=True, cwd='/app', capture_output=True)
+            
+            # DIAGNOSTIC: Check what files actually exist and what git staged
+            logger.info(f"Retailer CSV files found: {len(csv_files)}")
+            historical_path = Path('/app/static/data/historical')
+            if historical_path.exists():
+                historical_files = list(historical_path.glob('*.csv'))
+                logger.info(f"Historical files found: {len(historical_files)}")
+                for f in historical_files:
+                    logger.info(f"  Historical file: {f.name} ({f.stat().st_size} bytes)")
             else:
-                logger.warning("No CSV files found to sync")
+                logger.info("Historical directory does not exist")
+            
+            git_status = subprocess.run(['git', 'status', '--porcelain'], 
+                                      capture_output=True, text=True, cwd='/app')
+            logger.info(f"Git staged changes:\n{git_status.stdout}")
+            
+            # Check if there are changes to commit
+            result = subprocess.run(['git', 'status', '--porcelain'], 
+                                capture_output=True, text=True, cwd='/app')
+                
+            if result.stdout.strip():
+                # Create commit
+                commit_msg = f"Automated price update - {datetime.now().strftime('%Y-%m-%d %H:%M UTC')}"
+                subprocess.run(['git', 'commit', '-m', commit_msg], 
+                            check=True, cwd='/app', capture_output=True)
+                    
+                logger.info(f"Committed changes: {len(csv_files)} CSV files")
+                    
+                # Push changes using token URL
+                logger.info("Pushing updated prices to GitHub...")
+                subprocess.run(['git', 'push', 'origin', 'main'], 
+                            check=True, cwd='/app', capture_output=True)
+                    
+                logger.info("Successfully pushed price updates to GitHub")
+                return True
+            else:
+                logger.info("No changes to commit")
                 return True
                 
         except subprocess.CalledProcessError as e:
@@ -675,14 +686,14 @@ if __name__ == "__main__":
             from apscheduler.triggers.cron import CronTrigger
             
             scheduler = BlockingScheduler()
-            # Daily trigger at 9:45 AM PST
+            # Daily trigger at 11:!5 AM PST
             scheduler.add_job(
                 automation.run_full_update,
-                trigger=CronTrigger(hour=9, minute=45, timezone='America/Los_Angeles'),
+                trigger=CronTrigger(hour=11, minute=15, timezone='America/Los_Angeles'),
                 id='price_update_job'
             )
 
-            logger.info("Automation scheduled - Daily updates at 9:45 AM Pacific time")
+            logger.info("Automation scheduled - Daily updates at 11:!5 AM Pacific time")
             logger.info("Manual trigger: python automation_master.py manual")
             scheduler.start()
             
