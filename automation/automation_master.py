@@ -222,10 +222,6 @@ class CigarPriceAutomationEnhanced:
             git_status = subprocess.run(['git', 'status', '--porcelain'], 
                                       capture_output=True, text=True, cwd='/app')
             logger.info(f"Git staged changes:\n{git_status.stdout}")
-            
-            # Check if there are changes to commit
-            result = subprocess.run(['git', 'status', '--porcelain'], 
-                                capture_output=True, text=True, cwd='/app')
                 
             if result.stdout.strip():
                 # Create commit
