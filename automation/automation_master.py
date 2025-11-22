@@ -11,13 +11,11 @@ import subprocess
 import pandas as pd
 import sqlite3
 import csv
-import json  # Add this if not already present
+import json
 from datetime import datetime
 from pathlib import Path
 
-
 # Configure logging
-import os
 log_dir = 'logs'
 os.makedirs(log_dir, exist_ok=True)
 
@@ -146,7 +144,7 @@ class CigarPriceAutomationEnhanced:
                 subprocess.run(['git', 'pull', 'origin', 'main'], check=True, cwd='/app')
                 logger.info("Git repository initialized and synced")
             
-            # Configure git credentials (now this will work)
+            # Configure git credentials
             subprocess.run(['git', 'config', 'user.email', 
                         os.getenv('GIT_AUTHOR_EMAIL', 'automation@cigarpricescout.com')], 
                         check=True, cwd='/app')
@@ -173,7 +171,7 @@ class CigarPriceAutomationEnhanced:
             return False
     
     def sync_to_git(self) -> bool:
-        """Sync updated CSV files back to GitHub - FIXED VERSION"""
+        """Sync updated CSV files back to GitHub"""
         if not self.git_available:
             logger.info("Git sync skipped - not available in this environment")
             return True
@@ -201,7 +199,7 @@ class CigarPriceAutomationEnhanced:
             subprocess.run(['git', 'checkout', 'main'], 
                         check=True, cwd='/app', capture_output=True)
             
-            # Add the updated CSV files (including subdirectories)
+            # Add entire static/data directory
             subprocess.run(['git', 'add', 'static/data/'], 
                           check=True, cwd='/app', capture_output=True)
             
@@ -217,7 +215,7 @@ class CigarPriceAutomationEnhanced:
                 
                 logger.info("Committed changes to git")
                 
-                # Push changes using token URL
+                # Push changes
                 logger.info("Pushing updated prices to GitHub...")
                 subprocess.run(['git', 'push', 'origin', 'main'], 
                             check=True, cwd='/app', capture_output=True)
@@ -228,213 +226,108 @@ class CigarPriceAutomationEnhanced:
                 logger.info("No changes to commit")
                 return True
                 
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Git command failed: {e}")
-            if e.stdout:
-                logger.error(f"STDOUT: {e.stdout.decode()}")
-            if e.stderr:
-                logger.error(f"STDERR: {e.stderr.decode()}")
-            return False
         except Exception as e:
-            logger.error(f"Git sync error: {e}")
+            logger.error(f"Git sync failed: {e}")
             return False
     
-    def setup_historical_db(self, db_path):
-        """Create historical database tables if they don't exist"""
+    def capture_historical_snapshot(self) -> bool:
+        """Capture current price data to historical tracking database"""
         try:
+            db_path = '/app/price_history.db'
             conn = sqlite3.connect(db_path)
+            
+            # Create historical table if it doesn't exist
             conn.execute('''
                 CREATE TABLE IF NOT EXISTS price_history (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    timestamp TEXT,
-                    cigar_id TEXT,
-                    retailer TEXT,
-                    price REAL,
-                    in_stock BOOLEAN,
-                    box_qty INTEGER,
-                    title TEXT,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    retailer TEXT NOT NULL,
                     brand TEXT,
                     line TEXT,
                     wrapper TEXT,
                     vitola TEXT,
-                    size TEXT,
-                    UNIQUE(timestamp, cigar_id, retailer)
+                    price REAL,
+                    in_stock BOOLEAN,
+                    product_url TEXT,
+                    created_date DATE DEFAULT (date('now'))
                 )
             ''')
             
-            # Create index for better query performance
+            # Create index for faster queries
             conn.execute('''
-                CREATE INDEX IF NOT EXISTS idx_price_history_lookup 
-                ON price_history(cigar_id, retailer, timestamp)
+                CREATE INDEX IF NOT EXISTS idx_retailer_timestamp 
+                ON price_history(retailer, timestamp)
             ''')
             
-            conn.commit()
-            conn.close()
-            logger.info("Historical database tables ready")
-            return True
+            total_records = 0
             
-        except Exception as e:
-            logger.error(f"Error setting up historical database: {e}")
-            return False
-    
-    def capture_historical_snapshot(self):
-        """Capture current state after all retailer updates complete"""
-        try:
-            db_path = self.base_path / 'data' / 'historical_prices.db'
-            
-            # Ensure directory exists
-            db_path.parent.mkdir(exist_ok=True)
-            
-            # Setup database if first run
-            if not self.setup_historical_db(db_path):
-                logger.error("Failed to setup historical database")
-                return False
-            
-            timestamp = datetime.now().isoformat()
-            records = []
-            
-            logger.info("Capturing historical price snapshot...")
-            
-            # Read current state from all retailer CSVs
-            for retailer_key, config in self.retailers.items():
+            # Process each retailer CSV
+            for retailer, config in self.retailers.items():
                 csv_path = self.static_path / config['csv_file']
                 
                 if csv_path.exists():
                     try:
-                        with open(csv_path, 'r', encoding='utf-8') as f:
-                            reader = csv.DictReader(f)
-                            retailer_records = 0
-                            
-                            for row in reader:
-                                # Parse price safely
-                                price = None
-                                if row.get('price'):
-                                    try:
-                                        price = float(str(row['price']).replace('$', '').replace(',', ''))
-                                    except (ValueError, AttributeError):
-                                        price = None
-                                
-                                # Parse stock status
-                                in_stock = str(row.get('in_stock', 'False')).lower() in ['true', '1', 'yes']
-                                
-                                # Parse box quantity
-                                box_qty = 0
-                                if row.get('box_qty'):
-                                    try:
-                                        box_qty = int(row['box_qty'])
-                                    except (ValueError, TypeError):
-                                        box_qty = 0
-                                
-                                record = {
-                                    'timestamp': timestamp,
-                                    'cigar_id': row.get('cigar_id', ''),
-                                    'retailer': retailer_key,
-                                    'price': price,
-                                    'in_stock': in_stock,
-                                    'box_qty': box_qty,
-                                    'title': row.get('title', ''),
-                                    'brand': row.get('brand', ''),
-                                    'line': row.get('line', ''),
-                                    'wrapper': row.get('wrapper', ''),
-                                    'vitola': row.get('vitola', ''),
-                                    'size': row.get('size', '')
-                                }
-                                
-                                records.append(record)
-                                retailer_records += 1
-                            
-                            logger.info(f"  {retailer_key}: {retailer_records} products")
-                            
+                        df = pd.read_csv(csv_path)
+                        
+                        # Add retailer column
+                        df['retailer'] = retailer
+                        df['timestamp'] = datetime.now()
+                        
+                        # Select and rename columns to match database schema
+                        cols_to_insert = []
+                        if 'brand' in df.columns:
+                            cols_to_insert.append('brand')
+                        if 'line' in df.columns:
+                            cols_to_insert.append('line')
+                        if 'wrapper' in df.columns:
+                            cols_to_insert.append('wrapper')
+                        if 'vitola' in df.columns:
+                            cols_to_insert.append('vitola')
+                        if 'price' in df.columns:
+                            cols_to_insert.append('price')
+                        if 'in_stock' in df.columns:
+                            cols_to_insert.append('in_stock')
+                        if 'product_url' in df.columns:
+                            cols_to_insert.append('product_url')
+                        
+                        # Always include retailer and timestamp
+                        cols_to_insert.extend(['retailer', 'timestamp'])
+                        
+                        # Insert data
+                        df[cols_to_insert].to_sql('price_history', conn, 
+                                                if_exists='append', index=False)
+                        
+                        logger.info(f"  {retailer}: {len(df)} products")
+                        total_records += len(df)
+                        
                     except Exception as e:
-                        logger.error(f"Error reading {retailer_key} CSV: {e}")
-                else:
-                    logger.warning(f"CSV file not found for {retailer_key}: {csv_path}")
+                        logger.error(f"Error processing {retailer}: {e}")
             
-            # Insert into database
-            if records:
-                success = self.insert_historical_records(db_path, records)
-                if success:
-                    logger.info(f"Historical snapshot captured: {len(records)} records")
-                    return True
-                else:
-                    logger.error("Failed to insert historical records")
-                    return False
-            else:
-                logger.warning("No records to capture for historical snapshot")
-                return False
-                
+            conn.close()
+            logger.info(f"Historical snapshot captured: {total_records} records")
+            return True
+            
         except Exception as e:
             logger.error(f"Error capturing historical snapshot: {e}")
             return False
     
-    def insert_historical_records(self, db_path, records):
-        """Insert historical records into database"""
+    def export_historical_data(self) -> bool:
+        """Export historical data for local analysis"""
         try:
-            conn = sqlite3.connect(db_path)
-            inserted = 0
-            
-            for record in records:
-                try:
-                    conn.execute('''
-                        INSERT OR REPLACE INTO price_history 
-                        (timestamp, cigar_id, retailer, price, in_stock, box_qty, 
-                         title, brand, line, wrapper, vitola, size)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (
-                        record['timestamp'], record['cigar_id'], record['retailer'],
-                        record['price'], record['in_stock'], record['box_qty'],
-                        record['title'], record['brand'], record['line'], 
-                        record['wrapper'], record['vitola'], record['size']
-                    ))
-                    inserted += 1
-                    
-                except sqlite3.IntegrityError:
-                    # Record already exists, skip
-                    pass
-                except Exception as e:
-                    logger.error(f"Error inserting record for {record.get('retailer', 'unknown')}: {e}")
-            
-            conn.commit()
-            conn.close()
-            
-            logger.info(f"Successfully inserted {inserted} historical records")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Database error: {e}")
-            return False
-        
-    def export_historical_data(self):
-        """Export historical database to CSV files for local analysis"""
-        try:
-            db_path = '/app/data/historical_prices.db'
-            if not Path(db_path).exists():
-                logger.warning("Historical database not found - skipping export")
+            db_path = '/app/price_history.db'
+            if not os.path.exists(db_path):
+                logger.warning("No historical database found")
                 return False
+            
+            conn = sqlite3.connect(db_path)
             
             # Create export directory
             export_dir = Path('/app/static/data/historical')
             export_dir.mkdir(exist_ok=True)
             
-            conn = sqlite3.connect(db_path)
-            
-            # Export full historical data
-            logger.info("Exporting historical price data...")
+            # Export complete historical data
             full_data = pd.read_sql_query('''
-                SELECT 
-                    timestamp,
-                    retailer,
-                    cigar_id,
-                    brand,
-                    line,
-                    wrapper,
-                    vitola,
-                    size,
-                    box_qty,
-                    price,
-                    in_stock,
-                    title
-                FROM price_history 
+                SELECT * FROM price_history 
                 ORDER BY timestamp DESC, retailer, brand, line
             ''', conn)
             
@@ -446,47 +339,43 @@ class CigarPriceAutomationEnhanced:
             performance_data = pd.read_sql_query('''
                 SELECT 
                     retailer,
-                    COUNT(*) as total_observations,
-                    COUNT(DISTINCT cigar_id) as products_tracked,
+                    COUNT(*) as total_products,
+                    COUNT(CASE WHEN in_stock = 1 THEN 1 END) as in_stock_count,
+                    COUNT(CASE WHEN in_stock = 1 THEN 1 END) * 100.0 / COUNT(*) as stock_rate,
                     AVG(price) as avg_price,
                     MIN(price) as min_price,
                     MAX(price) as max_price,
-                    COUNT(CASE WHEN in_stock = 1 THEN 1 END) as in_stock_count,
-                    COUNT(CASE WHEN in_stock = 1 THEN 1 END) * 100.0 / COUNT(*) as stock_rate,
-                    COUNT(DISTINCT DATE(timestamp)) as days_active,
-                    MIN(DATE(timestamp)) as first_seen,
-                    MAX(DATE(timestamp)) as last_seen
+                    COUNT(DISTINCT DATE(timestamp)) as days_tracked,
+                    MAX(timestamp) as last_update
                 FROM price_history 
                 WHERE price IS NOT NULL
                 GROUP BY retailer
-                ORDER BY stock_rate DESC, avg_price ASC
+                ORDER BY stock_rate DESC, total_products DESC
             ''', conn)
             
             if not performance_data.empty:
                 performance_data.to_csv(export_dir / 'retailer_performance.csv', index=False)
                 logger.info(f"Exported performance data for {len(performance_data)} retailers")
             
-            # Export daily price snapshots (for trend analysis)
-            daily_snapshots = pd.read_sql_query('''
+            # Export daily price snapshots
+            daily_data = pd.read_sql_query('''
                 SELECT 
-                    DATE(timestamp) as date,
+                    DATE(timestamp) as snapshot_date,
                     retailer,
                     brand,
                     line,
                     wrapper,
                     vitola,
-                    AVG(price) as avg_daily_price,
-                    COUNT(*) as observations,
-                    COUNT(CASE WHEN in_stock = 1 THEN 1 END) as in_stock_count
+                    price,
+                    in_stock
                 FROM price_history 
                 WHERE price IS NOT NULL
-                GROUP BY DATE(timestamp), retailer, brand, line, wrapper, vitola
-                ORDER BY date DESC, retailer, brand, line
+                ORDER BY snapshot_date DESC, retailer, brand, line
             ''', conn)
             
-            if not daily_snapshots.empty:
-                daily_snapshots.to_csv(export_dir / 'daily_price_snapshots.csv', index=False)
-                logger.info(f"Exported {len(daily_snapshots)} daily price snapshots")
+            if not daily_data.empty:
+                daily_data.to_csv(export_dir / 'daily_price_snapshots.csv', index=False)
+                logger.info(f"Exported {len(daily_data)} daily price snapshots")
             
             # Export top tracked cigars
             top_cigars = pd.read_sql_query('''
@@ -529,7 +418,6 @@ class CigarPriceAutomationEnhanced:
             }
             
             with open(export_dir / 'export_summary.json', 'w') as f:
-                import json
                 json.dump(summary, f, indent=2)
             
             logger.info("Historical data export completed successfully")
@@ -625,9 +513,12 @@ class CigarPriceAutomationEnhanced:
         git_sync_success = self.sync_to_git()
         
         # Capture historical price snapshot after all updates complete
+        logger.info("Historical database tables ready")
+        logger.info("Capturing historical price snapshot...")
         historical_success = self.capture_historical_snapshot()
 
         # Export historical data for local analysis
+        logger.info("Exporting historical price data...")
         historical_export_success = self.export_historical_data()
         
         # Calculate summary
@@ -668,14 +559,14 @@ if __name__ == "__main__":
             from apscheduler.triggers.cron import CronTrigger
             
             scheduler = BlockingScheduler()
-            # Daily trigger at 11:!5 AM PST
+            # Daily trigger at 8:50 AM PST
             scheduler.add_job(
                 automation.run_full_update,
-                trigger=CronTrigger(hour=11, minute=15, timezone='America/Los_Angeles'),
+                trigger=CronTrigger(hour=8, minute=50, timezone='America/Los_Angeles'),
                 id='price_update_job'
             )
 
-            logger.info("Automation scheduled - Daily updates at 11:!5 AM Pacific time")
+            logger.info("Automation scheduled - Daily updates at 8:50 AM Pacific time")
             logger.info("Manual trigger: python automation_master.py manual")
             scheduler.start()
             
