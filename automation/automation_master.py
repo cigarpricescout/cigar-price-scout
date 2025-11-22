@@ -536,12 +536,11 @@ if __name__ == "__main__":
             # Daily trigger at 3 AM UTC
             scheduler.add_job(
                 automation.run_full_update,
-                trigger=CronTrigger(hour=3, minute=0),
-                timezone='UTC',  # Use string instead of pytz
+                trigger=CronTrigger(hour=7, minute=45, timezone='America/Los_Angeles'),
                 id='price_update_job'
             )
-            
-            logger.info("Automation scheduled - Daily updates at 3 AM UTC")
+
+            logger.info("Automation scheduled - Daily updates at 7:45 AM Pacific time")
             logger.info("Manual trigger: python automation_master.py manual")
             scheduler.start()
             
