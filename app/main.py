@@ -1064,11 +1064,11 @@ async def sitemap():
     
     return Response(content=xml_content, media_type="application/xml")
 
-@app.post("/admin/trigger-feed-update")
-async def trigger_feed_update():
-    """Manual trigger for testing (remove in production or add auth)"""
-    run_feed_processor()
-    return {"status": "Feed processor triggered"}
+# @app.post("/admin/trigger-feed-update")
+# async def trigger_feed_update():
+#    """Manual trigger for testing (remove in production or add auth)"""
+#    run_feed_processor()
+#    return {"status": "Feed processor triggered"}
 
 if __name__ == "__main__":
     import uvicorn

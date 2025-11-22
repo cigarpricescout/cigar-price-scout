@@ -171,66 +171,76 @@ class CigarPriceAutomationEnhanced:
             return False
     
     def sync_to_git(self) -> bool:
-        """Sync updated CSV files back to GitHub"""
+        """Sync updated CSV files back to GitHub - FIXED VERSION"""
         if not self.git_available:
             logger.info("Git sync skipped - not available in this environment")
-            return True  # Don't fail automation if git isn't available
+            return True
             
         try:
-            # Check if we have git authentication
-            if not os.path.exists('/app/.git-credentials'):
-                logger.warning("Git credentials not configured - skipping sync")
+            # Get GitHub token from environment
+            github_token = os.getenv('GITHUB_TOKEN')
+            if not github_token:
+                logger.warning("GITHUB_TOKEN not found - skipping git sync")
                 return True
             
-            # Pull latest changes first
+            # Pull latest changes first using token in URL
             logger.info("Pulling latest changes from GitHub...")
-            subprocess.run(['git', 'pull', 'origin', 'main'], 
-                          check=True, cwd='/app', capture_output=True)
+            pull_url = f'https://x-access-token:{github_token}@github.com/cigarpricescout/cigar-price-scout.git'
             
-            # Switch to main branch (fix branch mismatch)  
+            # Set remote URL with token
+            subprocess.run(['git', 'remote', 'set-url', 'origin', pull_url], 
+                        check=True, cwd='/app', capture_output=True)
+            
+            # Pull changes
+            subprocess.run(['git', 'pull', 'origin', 'main'], 
+                        check=True, cwd='/app', capture_output=True)
+            
+            # Switch to main branch
             subprocess.run(['git', 'checkout', 'main'], 
                         check=True, cwd='/app', capture_output=True)
             
             # Add the updated CSV files
             csv_files = list(Path('/app/static/data').glob('*.csv'))
             if csv_files:
-                for csv_file in csv_files:
-                    subprocess.run(['git', 'add', str(csv_file)], 
-                                  check=True, cwd='/app')
-                logger.info(f"Added {len(csv_files)} CSV files to git")
+                # Add all CSV files
+                subprocess.run(['git', 'add', 'static/data/*.csv'], 
+                            check=True, cwd='/app', capture_output=True)
+                
+                # Check if there are changes to commit
+                result = subprocess.run(['git', 'status', '--porcelain'], 
+                                    capture_output=True, text=True, cwd='/app')
+                
+                if result.stdout.strip():
+                    # Create commit
+                    commit_msg = f"Automated price update - {datetime.now().strftime('%Y-%m-%d %H:%M UTC')}"
+                    subprocess.run(['git', 'commit', '-m', commit_msg], 
+                                check=True, cwd='/app', capture_output=True)
+                    
+                    logger.info(f"Committed changes: {len(csv_files)} CSV files")
+                    
+                    # Push changes using token URL
+                    logger.info("Pushing updated prices to GitHub...")
+                    subprocess.run(['git', 'push', 'origin', 'main'], 
+                                check=True, cwd='/app', capture_output=True)
+                    
+                    logger.info("Successfully pushed price updates to GitHub")
+                    return True
+                else:
+                    logger.info("No changes to commit")
+                    return True
             else:
-                logger.warning("No CSV files found to add to git")
-            
-            # Check if there are any changes to commit
-            result = subprocess.run(['git', 'diff', '--cached', '--exit-code'], 
-                                  capture_output=True, cwd='/app')
-            
-            if result.returncode == 0:
-                logger.info("No price changes detected - skipping commit")
+                logger.warning("No CSV files found to sync")
                 return True
-            
-            # Commit the changes
-            commit_msg = f"Automated price update - {datetime.now().strftime('%Y-%m-%d %H:%M UTC')}"
-            subprocess.run(['git', 'commit', '-m', commit_msg], 
-                          check=True, cwd='/app')
-            
-            # Push to GitHub
-            logger.info("Pushing updated prices to GitHub...")
-            push_result = subprocess.run(['git', 'push', 'origin', 'main'], 
-                                       capture_output=True, text=True, cwd='/app')
-            
-            if push_result.returncode == 0:
-                logger.info("Updated CSV files synced back to GitHub")
-                return True
-            else:
-                logger.error(f"Git push failed: {push_result.stderr}")
-                return False
-            
+                
         except subprocess.CalledProcessError as e:
-            logger.error(f"Git sync failed: {e}")
+            logger.error(f"Git command failed: {e}")
+            if e.stdout:
+                logger.error(f"STDOUT: {e.stdout.decode()}")
+            if e.stderr:
+                logger.error(f"STDERR: {e.stderr.decode()}")
             return False
         except Exception as e:
-            logger.error(f"Unexpected error in git sync: {e}")
+            logger.error(f"Git sync error: {e}")
             return False
     
     def setup_historical_db(self, db_path):
