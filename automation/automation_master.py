@@ -210,9 +210,9 @@ if __name__ == "__main__":
             from apscheduler.triggers.cron import CronTrigger
             
             scheduler = BlockingScheduler()
-            scheduler.add_job(automation.run_full_update, trigger=CronTrigger(hour=8, minute=15, timezone='America/Los_Angeles'), id='price_update_job')
+            scheduler.add_job(automation.run_full_update, trigger=CronTrigger(hour=14, minute=00, timezone='America/Los_Angeles'), id='price_update_job')
 
-            logger.info("Automation scheduled - Daily updates at 8:15 AM Pacific time")
+            logger.info("Automation scheduled - Daily updates at 2PM Pacific time")
             logger.info("Manual trigger: python automation_master.py manual")
             scheduler.start()
             
