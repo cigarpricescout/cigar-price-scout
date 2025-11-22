@@ -11,8 +11,10 @@ import subprocess
 import pandas as pd
 import sqlite3
 import csv
+import json  # Add this if not already present
 from datetime import datetime
 from pathlib import Path
+
 
 # Configure logging
 import os
@@ -407,6 +409,148 @@ class CigarPriceAutomationEnhanced:
         except Exception as e:
             logger.error(f"Database error: {e}")
             return False
+        
+    def export_historical_data(self):
+        """Export historical database to CSV files for local analysis"""
+        try:
+            db_path = '/app/data/historical_prices.db'
+            if not Path(db_path).exists():
+                logger.warning("Historical database not found - skipping export")
+                return False
+            
+            # Create export directory
+            export_dir = Path('/app/static/data/historical')
+            export_dir.mkdir(exist_ok=True)
+            
+            conn = sqlite3.connect(db_path)
+            
+            # Export full historical data
+            logger.info("Exporting historical price data...")
+            full_data = pd.read_sql_query('''
+                SELECT 
+                    timestamp,
+                    retailer,
+                    cigar_id,
+                    brand,
+                    line,
+                    wrapper,
+                    vitola,
+                    size,
+                    box_qty,
+                    price,
+                    in_stock,
+                    title
+                FROM price_history 
+                ORDER BY timestamp DESC, retailer, brand, line
+            ''', conn)
+            
+            if not full_data.empty:
+                full_data.to_csv(export_dir / 'complete_price_history.csv', index=False)
+                logger.info(f"Exported {len(full_data)} historical records")
+            
+            # Export retailer performance summary
+            performance_data = pd.read_sql_query('''
+                SELECT 
+                    retailer,
+                    COUNT(*) as total_observations,
+                    COUNT(DISTINCT cigar_id) as products_tracked,
+                    AVG(price) as avg_price,
+                    MIN(price) as min_price,
+                    MAX(price) as max_price,
+                    COUNT(CASE WHEN in_stock = 1 THEN 1 END) as in_stock_count,
+                    COUNT(CASE WHEN in_stock = 1 THEN 1 END) * 100.0 / COUNT(*) as stock_rate,
+                    COUNT(DISTINCT DATE(timestamp)) as days_active,
+                    MIN(DATE(timestamp)) as first_seen,
+                    MAX(DATE(timestamp)) as last_seen
+                FROM price_history 
+                WHERE price IS NOT NULL
+                GROUP BY retailer
+                ORDER BY stock_rate DESC, avg_price ASC
+            ''', conn)
+            
+            if not performance_data.empty:
+                performance_data.to_csv(export_dir / 'retailer_performance.csv', index=False)
+                logger.info(f"Exported performance data for {len(performance_data)} retailers")
+            
+            # Export daily price snapshots (for trend analysis)
+            daily_snapshots = pd.read_sql_query('''
+                SELECT 
+                    DATE(timestamp) as date,
+                    retailer,
+                    brand,
+                    line,
+                    wrapper,
+                    vitola,
+                    AVG(price) as avg_daily_price,
+                    COUNT(*) as observations,
+                    COUNT(CASE WHEN in_stock = 1 THEN 1 END) as in_stock_count
+                FROM price_history 
+                WHERE price IS NOT NULL
+                GROUP BY DATE(timestamp), retailer, brand, line, wrapper, vitola
+                ORDER BY date DESC, retailer, brand, line
+            ''', conn)
+            
+            if not daily_snapshots.empty:
+                daily_snapshots.to_csv(export_dir / 'daily_price_snapshots.csv', index=False)
+                logger.info(f"Exported {len(daily_snapshots)} daily price snapshots")
+            
+            # Export top tracked cigars
+            top_cigars = pd.read_sql_query('''
+                SELECT 
+                    brand,
+                    line,
+                    wrapper,
+                    vitola,
+                    COUNT(DISTINCT retailer) as retailer_count,
+                    AVG(price) as avg_price,
+                    MIN(price) as min_price,
+                    MAX(price) as max_price,
+                    COUNT(CASE WHEN in_stock = 1 THEN 1 END) * 100.0 / COUNT(*) as avg_stock_rate,
+                    COUNT(*) as total_observations
+                FROM price_history 
+                WHERE price IS NOT NULL
+                GROUP BY brand, line, wrapper, vitola
+                HAVING COUNT(DISTINCT retailer) > 2
+                ORDER BY retailer_count DESC, avg_stock_rate DESC
+            ''', conn)
+            
+            if not top_cigars.empty:
+                top_cigars.to_csv(export_dir / 'top_tracked_cigars.csv', index=False)
+                logger.info(f"Exported data for {len(top_cigars)} top tracked cigars")
+            
+            conn.close()
+            
+            # Create analysis summary
+            summary = {
+                'export_timestamp': datetime.now().isoformat(),
+                'total_records': len(full_data) if not full_data.empty else 0,
+                'retailers': len(performance_data) if not performance_data.empty else 0,
+                'unique_cigars': len(top_cigars) if not top_cigars.empty else 0,
+                'files_exported': [
+                    'complete_price_history.csv',
+                    'retailer_performance.csv', 
+                    'daily_price_snapshots.csv',
+                    'top_tracked_cigars.csv'
+                ]
+            }
+            
+            with open(export_dir / 'export_summary.json', 'w') as f:
+                import json
+                json.dump(summary, f, indent=2)
+            
+            logger.info("Historical data export completed successfully")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error exporting historical data: {e}")
+            return False
+
+    # Add this to the run_full_update method, after historical snapshot:
+    # Export historical data for local analysis
+    historical_export_success = self.export_historical_data()
+
+    # Update the final summary to include export status:
+    logger.info(f"Historical Export: {'SUCCESS' if historical_export_success else 'FAILED'}")
     
     def update_retailer(self, retailer: str) -> dict:
         """Update prices for a specific retailer"""
@@ -495,6 +639,9 @@ class CigarPriceAutomationEnhanced:
         
         # Capture historical price snapshot after all updates complete
         historical_success = self.capture_historical_snapshot()
+
+        # Export historical data for local analysis
+        historical_export_success = self.export_historical_data()
         
         # Calculate summary
         total_duration = (datetime.now() - start_time).total_seconds()
@@ -508,6 +655,7 @@ class CigarPriceAutomationEnhanced:
         logger.info(f"Products Updated: {total_products}")
         logger.info(f"Git Sync: {'SUCCESS' if git_sync_success else 'FAILED'}")
         logger.info(f"Historical Snapshot: {'SUCCESS' if historical_success else 'FAILED'}")
+        logger.info(f"Historical Export: {'SUCCESS' if historical_export_success else 'FAILED'}")
         
         if git_sync_success:
             logger.info("Automation complete! Updated prices are now live on your website.")
@@ -533,14 +681,14 @@ if __name__ == "__main__":
             from apscheduler.triggers.cron import CronTrigger
             
             scheduler = BlockingScheduler()
-            # Daily trigger at 3 AM UTC
+            # Daily trigger at 8:15 AM PST
             scheduler.add_job(
                 automation.run_full_update,
-                trigger=CronTrigger(hour=7, minute=45, timezone='America/Los_Angeles'),
+                trigger=CronTrigger(hour=8, minute=15, timezone='America/Los_Angeles'),
                 id='price_update_job'
             )
 
-            logger.info("Automation scheduled - Daily updates at 7:45 AM Pacific time")
+            logger.info("Automation scheduled - Daily updates at 8:15 AM Pacific time")
             logger.info("Manual trigger: python automation_master.py manual")
             scheduler.start()
             
