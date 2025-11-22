@@ -202,40 +202,26 @@ class CigarPriceAutomationEnhanced:
                         check=True, cwd='/app', capture_output=True)
             
             # Add the updated CSV files (including subdirectories)
-            csv_files = list(Path('/app/static/data').glob('*.csv'))
-            
-            # Always add the entire directory to capture subdirectories
             subprocess.run(['git', 'add', 'static/data/'], 
                           check=True, cwd='/app', capture_output=True)
             
-            # DIAGNOSTIC: Check what files actually exist and what git staged
-            logger.info(f"Retailer CSV files found: {len(csv_files)}")
-            historical_path = Path('/app/static/data/historical')
-            if historical_path.exists():
-                historical_files = list(historical_path.glob('*.csv'))
-                logger.info(f"Historical files found: {len(historical_files)}")
-                for f in historical_files:
-                    logger.info(f"  Historical file: {f.name} ({f.stat().st_size} bytes)")
-            else:
-                logger.info("Historical directory does not exist")
-            
-            git_status = subprocess.run(['git', 'status', '--porcelain'], 
-                                      capture_output=True, text=True, cwd='/app')
-            logger.info(f"Git staged changes:\n{git_status.stdout}")
+            # Check if there are changes to commit
+            result = subprocess.run(['git', 'status', '--porcelain'], 
+                                capture_output=True, text=True, cwd='/app')
                 
             if result.stdout.strip():
                 # Create commit
                 commit_msg = f"Automated price update - {datetime.now().strftime('%Y-%m-%d %H:%M UTC')}"
                 subprocess.run(['git', 'commit', '-m', commit_msg], 
                             check=True, cwd='/app', capture_output=True)
-                    
-                logger.info(f"Committed changes: {len(csv_files)} CSV files")
-                    
+                
+                logger.info("Committed changes to git")
+                
                 # Push changes using token URL
                 logger.info("Pushing updated prices to GitHub...")
                 subprocess.run(['git', 'push', 'origin', 'main'], 
                             check=True, cwd='/app', capture_output=True)
-                    
+                
                 logger.info("Successfully pushed price updates to GitHub")
                 return True
             else:
