@@ -203,7 +203,7 @@ class CigarPriceAutomationEnhanced:
             
             # Add the updated CSV files
             csv_files = list(Path('/app/static/data').glob('*.csv'))
-            historical_files = list(Path('/app/static/data').glob('**/*.csv', recursive=True))
+            historical_files = list(Path('/app/static/data').rglob('*.csv'))          
             if csv_files or historical_files:
                 # Add all CSV files
                 subprocess.run(['git', 'add', 'static/data/'], 
@@ -675,14 +675,14 @@ if __name__ == "__main__":
             from apscheduler.triggers.cron import CronTrigger
             
             scheduler = BlockingScheduler()
-            # Daily trigger at 9:08 AM PST
+            # Daily trigger at 9:22 AM PST
             scheduler.add_job(
                 automation.run_full_update,
-                trigger=CronTrigger(hour=9, minute=8, timezone='America/Los_Angeles'),
+                trigger=CronTrigger(hour=9, minute=22, timezone='America/Los_Angeles'),
                 id='price_update_job'
             )
 
-            logger.info("Automation scheduled - Daily updates at 9:08 AM Pacific time")
+            logger.info("Automation scheduled - Daily updates at 9:22 AM Pacific time")
             logger.info("Manual trigger: python automation_master.py manual")
             scheduler.start()
             
