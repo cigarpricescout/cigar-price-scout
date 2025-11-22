@@ -1,0 +1,10 @@
+cigar_id,title,url,brand,line,wrapper,vitola,size,box_qty,price,in_stock
+ARTUROFUENTE|ARTUROFUENTE|HEMINGWAY|CLASSIC|CLASSIC|7x48|CAM|BOX25,Classic,https://www.holts.com/cigars/all-cigar-brands/arturo-fuente-hemingway.html,Arturo Fuente,Hemingway,Cameroon,Classic,7x48,25,282.95,True
+ARTUROFUENTE|ARTUROFUENTE|HEMINGWAY|BESTSELLER|BESTSELLER|4.5x55|CAM|BOX25,Best Seller,https://www.holts.com/cigars/all-cigar-brands/arturo-fuente-hemingway.html,Arturo Fuente,Hemingway,Cameroon,Best Seller,4.5x55,25,204.95,True
+ARTUROFUENTE|ARTUROFUENTE|HEMINGWAY|SIGNATURE|SIGNATURE|6x46|CAM|BOX25,Signature,https://www.holts.com/cigars/all-cigar-brands/arturo-fuente-hemingway.html,Arturo Fuente,Hemingway,Cameroon,Signature,6x46,25,258.95,True
+ARTUROFUENTE|ARTUROFUENTE|HEMINGWAY|BESTSELLER|BESTSELLER|4.5x55|MAD|BOX25,Best Seller,https://www.holts.com/cigars/all-cigar-brands/arturo-fuente-hemingway-maduro.html,Arturo Fuente,Hemingway,Maduro,Best Seller,4.5x55,25,243.75,False
+PERDOMO|PERDOMO|RESERVE10THANNIVERSARYCHAMPAGNE|EPICURE|EPICURE|6x54|ECU|BOX25,Epicure,https://www.holts.com/cigars/all-cigar-brands/perdomo-10th-anniversary-champagne.html,Perdomo,Reserve 10th Anniversary Champagne,Ecuadorian Connecticut,Epicure,6x54,25,248.95,True
+HOYODEMONTERREY|HOYODEMONTERREY|EXCALIBUR|EPICURE|EPICURE|5.25x50|CT|BOX20,Epicure,https://www.holts.com/cigars/all-cigar-brands/excalibur.html,Hoyo de Monterrey,Excalibur,Connecticut Shade,Epicure,5.25x50,20,160.04,True
+PADRON|PADRON|1964ANNIVERSARY|DIPLOMATICO|DIPLOMATICO|7x50|MAD|BOX25,Diplomatico,https://www.holts.com/cigars/all-cigar-brands/padron-1964-anniversary.html,Padron,1964 Anniversary,Maduro,Diplomatico,7x50,25,455.0,True
+ROMEOYJULIETA|ROMEOYJULIETA|1875|CHURCHILL|CHURCHILL|7x50|IND|BOX25,Churchill,https://www.holts.com/cigars/all-cigar-brands/romeo-y-julieta-1875.html,Romeo y Julieta,1875,Indonesian Shade Grown TBN,Churchill,7x50,25,201.0,True
+ASHTON|ASHTON|VSG|ROBUSTO|ROBUSTO|5.5x50|ECU|BOX24,Robusto,https://www.holts.com/cigars/all-cigar-brands/ashton-vsg.html,Ashton,VSG,Ecuadorian Sun Grown,Robusto,5.5x50,24,344.95,True
