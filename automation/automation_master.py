@@ -544,13 +544,6 @@ class CigarPriceAutomationEnhanced:
         except Exception as e:
             logger.error(f"Error exporting historical data: {e}")
             return False
-
-    # Add this to the run_full_update method, after historical snapshot:
-    # Export historical data for local analysis
-    historical_export_success = self.export_historical_data()
-
-    # Update the final summary to include export status:
-    logger.info(f"Historical Export: {'SUCCESS' if historical_export_success else 'FAILED'}")
     
     def update_retailer(self, retailer: str) -> dict:
         """Update prices for a specific retailer"""
