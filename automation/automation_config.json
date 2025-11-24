@@ -1,0 +1,29 @@
+{
+  "email_notifications": {
+    "enabled": true,
+    "smtp_server": "smtp.gmail.com",
+    "smtp_port": 587,
+    "sender_email": "mikeyjoneill@gmail.com",
+    "sender_password": "fsyx makm xscr mbao",
+    "recipient_email": "mikeyjoneill@gmail.com",
+    "send_on_success": true,
+    "send_on_failure": true
+  },
+  "git_automation": {
+    "enabled": true,
+    "auto_commit": true,
+    "auto_push": true,
+    "commit_message_template": "Automated price update - {date}"
+  },
+  "price_update_settings": {
+    "timeout_minutes": 30,
+    "retry_failed_retailers": true,
+    "delay_between_retailers": 2
+  },
+  "historical_tracking": {
+    "enabled": true,
+    "track_price_changes": true,
+    "track_stock_changes": true,
+    "retention_days": 365
+  }
+}
