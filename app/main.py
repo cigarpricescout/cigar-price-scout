@@ -10,6 +10,9 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
 import os
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 try:
     from apscheduler.schedulers.background import BackgroundScheduler
@@ -215,6 +218,54 @@ except Exception:
  # Configure logging  ← NO INDENTATION
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+class EmailService:
+    def __init__(self):
+        self.smtp_server = "smtp.gmail.com" 
+        self.smtp_port = 587
+        self.email = os.getenv("GMAIL_ADDRESS", "mikeyjoneill@gmail.com")
+        self.password = os.getenv("GMAIL_APP_PASSWORD")
+        
+    def send_notification(self, subject, body, form_type="general"):
+        """Send notification email to mikeyjoneill@gmail.com"""
+        try:
+            if not self.password:
+                print("WARNING: GMAIL_APP_PASSWORD not set - email will not send")
+                return False
+                
+            msg = MIMEMultipart()
+            msg['From'] = self.email
+            msg['To'] = self.email  # Send to yourself
+            msg['Subject'] = f"[CigarPriceScout] {subject}"
+            
+            # Format the email nicely
+            formatted_body = f"""
+Form Type: {form_type}
+Submitted: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+{body}
+
+---
+Sent from CigarPriceScout.com
+            """
+            
+            msg.attach(MIMEText(formatted_body, 'plain'))
+            
+            server = smtplib.SMTP(self.smtp_server, self.smtp_port)
+            server.starttls()
+            server.login(self.email, self.password)
+            server.send_message(msg)
+            server.quit()
+            
+            print(f"Email sent successfully: {subject}")
+            return True
+            
+        except Exception as e:
+            print(f"Email failed: {e}")
+            return False
+
+# Initialize email service
+email_service = EmailService()
 
 # Box Pricing Request Model
 class BoxPricingRequest(BaseModel):
@@ -935,10 +986,37 @@ async def request_box_pricing():
 @app.post("/api/box-pricing-request")
 async def submit_box_pricing_request(request: BoxPricingRequest):
     try:
-        # Format the email content
-        subject = f"Box Pricing Request: {request.brand} {request.line}"
+        # Format the request nicely for email
+        email_body = f"""
+NEW BOX PRICING REQUEST
+
+Customer Details:
+- Name: {request.name}
+- Email: {request.email}
+- ZIP Code: {request.zip}
+
+Cigar Details:
+- Brand: {request.brand}
+- Line: {request.line}
+- Wrapper: {request.wrapper or 'Any wrapper'}
+- Vitola: {request.vitola or 'Any vitola'}  
+- Box Size: {request.boxSize or 'Any size'}
+
+Additional Notes:
+{request.notes or 'None provided'}
+
+---
+Reply to customer: {request.email}
+        """
         
-        # Log the complete request details
+        # Send email notification
+        email_sent = email_service.send_notification(
+            subject=f"Box Request: {request.brand} {request.line}",
+            body=email_body,
+            form_type="Box Pricing Request"
+        )
+        
+        # Also log for backup (Railway logs)
         submission_time = datetime.now().strftime('%Y-%m-%d at %H:%M:%S')
         full_request = f"""
 ========== NEW BOX PRICING REQUEST ==========
@@ -957,17 +1035,24 @@ CUSTOMER INFO:
 ADDITIONAL NOTES:
 {request.notes or 'None'}
 
+Email Sent: {'Yes' if email_sent else 'Failed'}
 Submitted: {submission_time}
 ============================================
 """
         logger.info(full_request)
         
-        return {"status": "success", "message": "Your box pricing request has been submitted successfully!"}
+        return {
+            "status": "success", 
+            "message": "Your box pricing request has been submitted successfully! We'll email you with pricing options soon."
+        }
         
     except Exception as e:
         logger.error(f"Error processing box pricing request: {e}")
-        return {"status": "error", "message": "There was an error submitting your request. Please try again."}
-
+        return {
+            "status": "error", 
+            "message": "There was an error submitting your request. Please try again or email us directly."
+        }
+    
 @app.get("/cigars/{brand}/{line}", response_class=HTMLResponse)
 async def cigar_landing_page(brand: str, line: str):
     template_path = Path("../static/cigar-template.html")

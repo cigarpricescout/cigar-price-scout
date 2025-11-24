@@ -1,0 +1,2 @@
+id,retailer,cigar_id,date,old_price,new_price,price_change,change_type,created_at
+1,absolutecigars,MYFATHER|MYFATHER|THEJUDGE|GRANDROBUSTO|GRANDROBUSTO|5.625x60|ECU|BOX23,2025-11-24,304.0,259.0,-45.0,decrease,2025-11-24 17:07:25
