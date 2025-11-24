@@ -1,0 +1,27 @@
+# Railway Ignore File
+# Prevents automation files from being deployed to Railway
+# Railway only needs the web application, not the local automation
+
+# Ignore entire automation directory
+automation/
+
+# Ignore automation logs
+logs/
+
+# Ignore backup files
+static/data/*_backup_*.csv
+
+# Ignore historical database (local only)
+data/historical_prices.db
+
+# Ignore any local development files
+*.pyc
+__pycache__/
+.env.local
+.venv/
+venv/
+
+# Ignore documentation that's not needed for deployment
+README_Automation.md
+CIGAR_AUTOMATION_TRANSITION_PACKAGE.md
+TRANSITION_PACKAGE.md
