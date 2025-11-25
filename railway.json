@@ -9,7 +9,7 @@
   "cron": [
     {
       "command": "python automation_runner.py",
-      "schedule": "0 15 * * *"
+      "schedule": "0 23 * * *"
     }
   ]
 }
