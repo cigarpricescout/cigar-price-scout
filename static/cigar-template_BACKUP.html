@@ -17,215 +17,29 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap" rel="stylesheet" />
     
-    <!-- Complete CSS including mobile responsiveness -->
+    <!-- Copy all your CSS from index.html here -->
     <style>
-      :root{
-        --ink:#111;
-        --muted:#4b5563;
-        --rule:#e5e7eb;
-        --accent:#7c5c2e;
-      }
-
-      body{
-        margin:0;
-        color:var(--ink);
-        background:#faf7f2;
-        font-family:"Cormorant Garamond", serif;
-        font-size:18px;
-        line-height:1.5;
-      }
-      
+      :root{--ink:#111;--muted:#4b5563;--rule:#e5e7eb;--accent:#7c5c2e}
+      body{margin:0;color:var(--ink);background:#faf7f2;font-family:"Cormorant Garamond", serif;font-size:18px;line-height:1.5}
       .wrap{max-width:900px;margin:0 auto;padding:0 20px}
-      
-      .heroheader{
-        display:flex;flex-direction:column;align-items:center;justify-content:center;
-        gap:8px;padding:28px 0 10px;text-align:center;
-      }
-      
+      .heroheader{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:28px 0 10px;text-align:center}
       .scout-hat{width:100px;height:80px;object-fit:contain}
-      
-      .brandname{
-        font-family:"Cinzel", serif;
-        font-weight:700;
-        letter-spacing:.4px;
-        font-size:28px;
-      }
-      
-      .tag{
-        font-style:italic;
-        color:var(--muted);
-        font-size:20px;
-        margin-top:2px;
-      }
-      
+      .brandname{font-family:"Cinzel", serif;font-weight:700;letter-spacing:.4px;font-size:28px}
+      .tag{font-style:italic;color:var(--muted);font-size:20px;margin-top:2px}
       h2{font-family:"Cinzel", serif;font-weight:700;letter-spacing:.3px;margin:18px 0 8px;font-size:24px;text-align:center}
-      
-      /* Desktop table styles */
-      .price-table-container {
-        overflow-x: auto;
-      }
-      
-      table{
-        width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--rule);
-        border-radius:12px;overflow:hidden;margin-top:20px;
-        box-shadow:0 1px 3px rgba(0,0,0,0.05);
-        min-width:1000px;
-      }
-      
-      th,td{
-        padding:20px 16px;border-bottom:1px solid var(--rule);text-align:center;
-        font-size:18px;line-height:1.6;
-      }
-      
-      th{
-        background:#fcfbf9;color:var(--ink);font-family:"Cinzel", serif;
-        font-weight:600;font-size:16px;letter-spacing:0.3px;
-      }
-      
-      td{color:var(--ink);background:#fff}
-      
+      table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--rule);border-radius:12px;overflow:hidden;margin-top:20px;box-shadow:0 1px 3px rgba(0,0,0,0.05);min-width:1000px}
+      th,td{padding:20px 16px;border-bottom:1px solid var(--rule);text-align:center;font-size:18px;line-height:1.6}
+      th{background:#fcfbf9;color:var(--ink);font-family:"Cinzel", serif;font-weight:600;font-size:16px;letter-spacing:0.3px}
       td a{color:var(--accent);text-decoration:none;font-weight:600;font-size:19px}
       td a:hover{text-decoration:underline}
-      
-      .price-cell{
-        font-weight:600;
-        font-size:20px;
-      }
-      
-      .total-price{
-        font-weight:700;
-        font-size:21px;
-        color:var(--accent);
-      }
-      
-      .best-total {
-        color: #059669 !important;
-        font-weight: 700 !important;
-      }
-
+      .price-cell{font-weight:600;font-size:20px}
+      .total-price{font-weight:700;font-size:21px;color:var(--accent)}
+      .best-total{color:#059669 !important;font-weight:700 !important}
       .oos{color:#dc2626;font-weight:600;font-size:14px;text-transform:uppercase}
-
-      /* Mobile card styles */
-      .mobile-cards {
-        display: none;
-      }
-      
-      .price-card {
-        background: #fff;
-        border: 1px solid var(--rule);
-        border-radius: 12px;
-        margin: 15px 0;
-        padding: 20px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-      }
-      
-      .card-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 15px;
-        padding-bottom: 15px;
-        border-bottom: 1px solid var(--rule);
-      }
-      
-      .card-retailer {
-        font-family: "Cinzel", serif;
-        font-weight: 600;
-        font-size: 18px;
-        color: var(--ink);
-      }
-      
-      .card-price {
-        font-size: 22px;
-        font-weight: 700;
-        color: var(--accent);
-      }
-      
-      .card-details {
-        margin: 15px 0;
-      }
-      
-      .card-item {
-        display: flex;
-        justify-content: space-between;
-        padding: 8px 0;
-        border-bottom: 1px solid #f3f4f6;
-      }
-      
-      .card-label {
-        color: var(--muted);
-        font-weight: 500;
-      }
-      
-      .card-value {
-        font-weight: 600;
-        color: var(--ink);
-      }
-      
-      .card-button {
-        display: block;
-        width: calc(100% - 60px);
-        margin: 20px 30px 0 30px;
-        padding: 15px;
-        background: var(--accent);
-        color: white;
-        text-decoration: none;
-        text-align: center;
-        border-radius: 12px;
-        font-weight: 600;
-        font-size: 18px;
-        transition: all 0.3s;
-        box-sizing: border-box;
-      }
-      
-      .card-button:hover {
-        filter: brightness(0.95);
-        color: white;
-        text-decoration: none;
-      }
-
       .cta{border:none;border-radius:12px;padding:12px 24px;font-weight:700;cursor:pointer;background:var(--accent);color:#fff;margin:20px auto;display:block}
       .cta:hover{filter:brightness(.95)}
-
       .footer{margin-top:40px;padding:20px 0;border-top:1px solid var(--rule);text-align:center;color:var(--muted);font-size:16px}
       .footer a{color:var(--accent);text-decoration:none}
-      .footer a:hover{text-decoration:underline}
-      
-      /* Responsive breakpoints */
-      @media(max-width:768px){
-        .heroheader{padding:20px 0 8px}
-        .brandname{font-size:24px}
-        .tag{font-size:18px}
-        
-        .hide-tablet {
-          display: none;
-        }
-      }
-      
-      @media(max-width:480px){
-        .price-table-container {
-          display: none;
-        }
-        
-        .mobile-cards {
-          display: block;
-        }
-        
-        .price-card {
-          margin: 10px -10px;
-          border-radius: 0;
-          border-left: none;
-          border-right: none;
-        }
-
-        .heroheader {
-          text-align: center;
-        }
-  
-        .brandname, .tag {
-          text-align: center;
-        }
-      }
     </style>
 
       <script type="application/ld+json">
@@ -316,27 +130,19 @@
             <button onclick="clearFilters()" style="padding:10px 20px;border:1px solid var(--accent);border-radius:8px;background:#fff;color:var(--accent);cursor:pointer;font-family:'Cormorant Garamond',serif;font-size:16px;font-weight:600;">Clear Filters</button>
           </div>
 
-          <!-- Desktop Table -->
-          <div class="price-table-container">
-            <table id="resultsTable">
-              <thead>
-                <tr>
-                  <th>Retailer</th>
-                  <th>Product Details</th>
-                  <th>Advertised Price</th>
-                  <th>Stock Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr><td colspan="4">Loading...</td></tr>
-              </tbody>
-            </table>
-          </div>
-          
-          <!-- Mobile Cards -->
-          <div id="mobileCards" class="mobile-cards">
-            <!-- Mobile cards populated by JavaScript -->
-          </div>
+          <table id="resultsTable">
+            <thead>
+              <tr>
+                <th>Retailer</th>
+                <th>Product Details</th>
+                <th>Advertised Price</th>
+                <th>Stock Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="4">Loading...</td></tr>
+            </tbody>
+          </table>
         </section>
         
       </main>
@@ -353,8 +159,6 @@
     </div>
 
     <script>
-      let allResults = [];
-      
       // Extract brand and line from URL path
       const pathParts = window.location.pathname.split('/');
       const brandSlug = pathParts[2] || '';
@@ -376,12 +180,12 @@
           console.error('Error loading prices:', error);
           document.querySelector('#resultsTable tbody').innerHTML = 
             '<tr><td colspan="4">Error loading prices. Please try again.</td></tr>';
-          document.getElementById('mobileCards').innerHTML = 
-            '<div class="price-card">Error loading prices. Please try again.</div>';
         }
       }
       
-      function displayResults(data) {
+      let allResults = []; // Store all results for filtering
+      
+     function displayResults(data) {
         const titleEl = document.getElementById('resultsTitle');
         const metaDesc = document.querySelector('meta[name="description"]');
 
@@ -392,8 +196,6 @@
             }
             document.querySelector('#resultsTable tbody').innerHTML = 
                 '<tr><td colspan="4">No matching cigars found.</td></tr>';
-            document.getElementById('mobileCards').innerHTML = 
-                '<div class="price-card">No matching cigars found.</div>';
             return;
         }
 
@@ -406,7 +208,9 @@
 
         allResults = data.results;
 
+        // ---------------------------------------------
         // SEO enrichment (wrapper/vitola in title/meta)
+        // ---------------------------------------------
         const wrappers = new Set();
         const vitolas = new Set();
 
@@ -429,7 +233,9 @@
         document.title = seoTitle;
         if (metaDesc) metaDesc.setAttribute('content', seoDesc);
 
-        // Summary block
+        // ---------------------------------------------
+        // INSERT SUMMARY BLOCK HERE
+        // ---------------------------------------------
         const summaryEl = document.getElementById('resultsSummary');
         if (summaryEl) {
             const wrapperList = Array.from(wrappers).sort().join(', ');
@@ -445,6 +251,10 @@
             summaryEl.textContent = summary;
         }
 
+        // ---------------------------------------------
+        // END SUMMARY BLOCK
+        // ---------------------------------------------
+
         // Update page heading
         if (titleEl) {
             titleEl.textContent = `${data.brand} ${data.line} – Advertised Box Prices`;
@@ -453,10 +263,10 @@
         // Populate filter dropdowns
         populateFilters(data.results);
 
-        // Render initial table and mobile cards
+        // Render initial table
         renderTable(data.results);
-        renderMobileCards(data.results);
     }
+
 
       
       function populateFilters(results) {
@@ -493,14 +303,12 @@
         });
         
         renderTable(filtered);
-        renderMobileCards(filtered);
       }
       
       function clearFilters() {
         document.getElementById('wrapperFilter').value = '';
         document.getElementById('vitolaFilter').value = '';
         renderTable(allResults);
-        renderMobileCards(allResults);
       }
       
       function renderTable(results) {
@@ -534,52 +342,6 @@
         ).join('');
       }
 
-      function renderMobileCards(results) {
-        const mobileContainer = document.getElementById('mobileCards');
-        
-        if (results.length === 0) {
-          mobileContainer.innerHTML = '<div class="price-card">No results match your filters.</div>';
-          return;
-        }
-        
-        mobileContainer.innerHTML = results.map(result => 
-          `<div class="price-card">
-            <div class="card-header">
-              <div class="card-retailer">${result.retailer}</div>
-              <div class="card-price">${result.base}</div>
-            </div>
-            
-            <div class="card-details">
-              ${result.wrapper ? `
-                <div class="card-item">
-                  <span class="card-label">Wrapper:</span>
-                  <span class="card-value">${result.wrapper}</span>
-                </div>` : ''}
-              ${result.vitola ? `
-                <div class="card-item">
-                  <span class="card-label">Vitola:</span>
-                  <span class="card-value">${result.vitola}</span>
-                </div>` : ''}
-              <div class="card-item">
-                <span class="card-label">Box Size:</span>
-                <span class="card-value">${result.box_qty}</span>
-              </div>
-              <div class="card-item">
-                <span class="card-label">Stock:</span>
-                <span class="card-value">
-                  ${result.oos 
-                    ? '<span style="color: #dc2626; font-weight: 600;">Out of Stock</span>' 
-                    : '<span style="color: #059669; font-weight: 600;">In Stock</span>'}
-                </span>
-              </div>
-            </div>
-            
-            <a href="${result.url}" class="card-button" target="_blank" rel="noopener">
-              View at ${result.retailer}
-            </a>
-          </div>`
-        ).join('');
-      }
 
       // Age verification
       let ageVerified = false;
