@@ -12,6 +12,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Cigar Price Scout - Find the Best Cigar Deals with Wrapper & Vitola Search</title>
+    <link rel="canonical" href="https://cigarpricescout.com/" />
     
     <meta name="fo-verify" content="cc05d5b4-848a-4809-b7d9-5c4ae620bb8f" />
 
@@ -485,8 +486,8 @@
       <header class="heroheader">
         <img src="/static/logo.png" alt="Cigar Price Scout Logo" class="scout-hat" />
         <h1 class="brandname">Cigar Price Scout</h1>
-        <p class="tag">Search your cigar - we'll scout the lowest prices on full boxes (20+ cigars, or otherwise requested)</p>
-        <div class="last-updated">Updated daily</div>
+        <p class="tag">Search your cigar — we’ll scout the lowest prices on full boxes (20+ cigars, or otherwise requested)</p>
+        <div class="last-updated">Updates performed every day at 0600 PST</div>
         <div style="font-size:13px;color:var(--muted);margin-top:4px;font-style:italic;">
         </div>
       </header>
@@ -529,8 +530,8 @@
           </div>
         </div>
 
-        <!-- Request Box to Scout and Report Data Issue Buttons -->
-        <div style="display: flex; justify-content: center; gap: 15px; margin: 20px 0; flex-wrap: wrap;">
+        <!-- Request Box to Scout Button -->
+        <div style="display: flex; justify-content: center; margin: 20px 0;">
           <a href="/request-box-pricing.html" style="
             display: inline-block;
             background: #7c5c2e;
@@ -546,36 +547,14 @@
           ">
             Request a Box to Scout
           </a>
-          
-          <a href="#" id="reportIssueBtn" style="
-            display: inline-block;
-            background: #dc2626;
-            color: #fff;
-            padding: 12px 24px;
-            border-radius: 8px;
-            text-decoration: none;
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 18px;
-            font-weight: 600;
-            transition: all 0.3s;
-            box-shadow: 0 2px 4px rgba(220, 38, 38, 0.3);
-          ">
-            Report a Data Issue
-          </a>
         </div>
 
         <style>
-        /* Hover effect for the buttons */
+        /* Hover effect for the button */
         a[href="/request-box-pricing.html"]:hover {
           filter: brightness(0.95);
           transform: translateY(-1px);
           box-shadow: 0 4px 8px rgba(124, 92, 46, 0.4);
-        }
-        
-        #reportIssueBtn:hover {
-          filter: brightness(0.95);
-          transform: translateY(-1px);
-          box-shadow: 0 4px 8px rgba(220, 38, 38, 0.4);
         }
         </style>
         
@@ -615,7 +594,7 @@
                   <th>Est. Tax</th>
                   <th style="font-weight: 750;">Est. Total</th>
                   <th>Stock Status</th>
-                  <th>Price Context <span style="color: #6b7280; font-size: 14px; cursor: help;" title="Based on 10% median price threshold">?</span></th>
+                  <th>Price Context <span style="color: #6b7280; font-size: 14px; cursor: help;" title="Based on 10% median price threshold">❓</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -1065,10 +1044,6 @@
           
           const data = await response.json();
           console.log('API Response', data);
-          
-          // Store results for report issue functionality
-          window.lastSearchResults = data.results || [];
-          
           displayResults(data);
         } catch (error) {
           console.error('Search error:', error);
@@ -1215,57 +1190,6 @@
         
         resultsSection.style.display = 'block';
         resultsSection.scrollIntoView({ behavior: 'smooth' });
-      }
-
-      // Report Data Issue functionality
-      document.getElementById('reportIssueBtn').addEventListener('click', function(e) {
-        e.preventDefault();
-        
-        // Capture current search context
-        const searchContext = buildSearchContext();
-        const currentUrl = window.location.href;
-        const timestamp = new Date().toISOString();
-        
-        // Store context in sessionStorage to pass to form
-        sessionStorage.setItem('reportIssueContext', JSON.stringify({
-          searchContext: searchContext,
-          currentUrl: currentUrl,
-          timestamp: timestamp,
-          currentResults: window.lastSearchResults || null
-        }));
-        
-        // Navigate to report form
-        window.location.href = '/report-data-issue.html';
-      });
-      
-      function buildSearchContext() {
-        let context = '';
-        
-        if (currentSelection.brand && currentSelection.line) {
-          context = `${currentSelection.brand} ${currentSelection.line}`;
-          
-          if (currentSelection.wrapper) {
-            context += ` (${currentSelection.wrapper} wrapper)`;
-          }
-          
-          if (currentSelection.vitola) {
-            context += ` ${currentSelection.vitola}`;
-          }
-          
-          const zipValue = zipInput.value.trim();
-          if (zipValue) {
-            context += ` - ZIP: ${zipValue}`;
-          }
-          
-          const authorizedOnly = document.getElementById('authorizedOnly').checked;
-          if (authorizedOnly) {
-            context += ' (Authorized dealers only)';
-          }
-        } else {
-          context = 'General website feedback (no specific search active)';
-        }
-        
-        return context;
       }
 
       // Initialize

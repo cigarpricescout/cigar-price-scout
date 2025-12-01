@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Report a Data Issue | Cigar Price Scout</title>
+    
+    <meta name="description" content="Report pricing or product data issues to help improve Cigar Price Scout's accuracy." />
+    <link rel="canonical" href="https://cigarpricescout.com/report-data-issue.html" />
+    
+    <!-- Same styling as main site -->
+    <link rel="icon" type="image/png" href="/static/logo.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap" rel="stylesheet" />
+    
+    <style>
+      :root{
+        --ink:#111;
+        --muted:#4b5563;
+        --rule:#e5e7eb;
+        --accent:#7c5c2e;
+      }
+
+      body{
+        margin:0;
+        color:var(--ink);
+        background:#faf7f2;
+        font-family:"Cormorant Garamond", serif;
+        font-size:18px;
+        line-height:1.5;
+      }
+      
+      .wrap{max-width:700px;margin:0 auto;padding:0 20px}
+      
+      .heroheader{
+        display:flex;flex-direction:column;align-items:center;justify-content:center;
+        gap:8px;padding:28px 0 20px;text-align:center;
+      }
+      
+      .scout-hat{width:80px;height:64px;object-fit:contain}
+      
+      .brandname{
+        font-family:"Cinzel", serif;
+        font-weight:700;
+        letter-spacing:.4px;
+        font-size:24px;
+      }
+      
+      .tag{
+        font-style:italic;
+        color:var(--muted);
+        font-size:18px;
+        margin-top:2px;
+      }
+      
+      .form-container{
+        background:#fff;
+        border:1px solid var(--rule);
+        border-radius:12px;
+        padding:32px;
+        margin:20px 0;
+        box-shadow:0 2px 8px rgba(0,0,0,0.1);
+      }
+      
+      .form-group{
+        margin-bottom:24px;
+      }
+      
+      label{
+        display:block;
+        font-weight:600;
+        margin-bottom:8px;
+        color:var(--ink);
+        font-size:16px;
+      }
+      
+      input, select, textarea{
+        width:100%;
+        padding:12px 16px;
+        border:1px solid var(--rule);
+        border-radius:8px;
+        font-family:"Cormorant Garamond", serif;
+        font-size:16px;
+        background:#fff;
+        box-sizing:border-box;
+      }
+      
+      input:focus, select:focus, textarea:focus{
+        outline:none;
+        border-color:var(--accent);
+        box-shadow:0 0 0 3px rgba(124, 92, 46, 0.1);
+      }
+      
+      textarea{
+        resize:vertical;
+        min-height:100px;
+      }
+      
+      .required{
+        color:#dc2626;
+        margin-left:4px;
+      }
+      
+      .context-display{
+        background:#f3f4f6;
+        padding:16px;
+        border-radius:8px;
+        font-family:monospace;
+        font-size:14px;
+        color:#374151;
+        margin-bottom:8px;
+      }
+      
+      .submit-btn{
+        background:var(--accent);
+        color:#fff;
+        border:none;
+        padding:14px 28px;
+        border-radius:8px;
+        font-family:"Cormorant Garamond", serif;
+        font-size:18px;
+        font-weight:600;
+        cursor:pointer;
+        transition:all 0.3s;
+        box-shadow:0 2px 4px rgba(124, 92, 46, 0.3);
+      }
+      
+      .submit-btn:hover{
+        filter:brightness(0.95);
+        transform:translateY(-1px);
+        box-shadow:0 4px 8px rgba(124, 92, 46, 0.4);
+      }
+      
+      .submit-btn:disabled{
+        opacity:0.6;
+        cursor:not-allowed;
+        transform:none;
+      }
+      
+      .back-link{
+        display:inline-block;
+        color:var(--accent);
+        text-decoration:none;
+        font-weight:600;
+        margin-bottom:20px;
+      }
+      
+      .back-link:hover{
+        text-decoration:underline;
+      }
+      
+      .success-message{
+        background:#d1fae5;
+        color:#065f46;
+        padding:16px;
+        border-radius:8px;
+        margin:20px 0;
+        text-align:center;
+        font-weight:600;
+      }
+      
+      .error-message{
+        background:#fee2e2;
+        color:#dc2626;
+        padding:16px;
+        border-radius:8px;
+        margin:20px 0;
+        text-align:center;
+        font-weight:600;
+      }
+      
+      .footer{
+        margin-top:40px;
+        padding:20px 0;
+        border-top:1px solid var(--rule);
+        text-align:center;
+        color:var(--muted);
+        font-size:16px;
+      }
+      
+      .footer a{color:var(--accent);text-decoration:none}
+      .footer a:hover{text-decoration:underline}
+    </style>
+  </head>
+  
+  <body>
+    <div class="wrap">
+      <header class="heroheader">
+        <img src="/static/logo.png" alt="Cigar Price Scout Logo" class="scout-hat" />
+        <h1 class="brandname">Report a Data Issue</h1>
+        <p class="tag">Help us keep our pricing data accurate and up-to-date</p>
+      </header>
+      
+      <a href="/" class="back-link">← Back to Price Scout</a>
+      
+      <form id="issueReportForm" class="form-container">
+        <div class="form-group">
+          <label>Search Context <span class="required">*</span></label>
+          <div class="context-display" id="contextDisplay">
+            Loading search context...
+          </div>
+          <input type="hidden" id="searchContext" name="searchContext" required />
+        </div>
+        
+        <div class="form-group">
+          <label for="retailer">Which retailer has the issue? <span class="required">*</span></label>
+          <select id="retailer" name="retailer" required>
+            <option value="">Select retailer...</option>
+            <option value="Multiple Retailers">Multiple Retailers</option>
+            <option value="General Issue">General Issue (not retailer-specific)</option>
+          </select>
+        </div>
+        
+        <div class="form-group">
+          <label for="issueType">What type of issue is this? <span class="required">*</span></label>
+          <select id="issueType" name="issueType" required>
+            <option value="">Select issue type...</option>
+            <option value="Incorrect Price">Incorrect Price</option>
+            <option value="Wrong Stock Status">Wrong Stock Status</option>
+            <option value="Incorrect Product Details">Incorrect Product Details (wrapper, vitola, etc.)</option>
+            <option value="Missing Product">Missing Product</option>
+            <option value="Website/Link Issue">Website/Link Issue</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        
+        <div class="form-group">
+          <label for="problemDescription">Describe the problem <span class="required">*</span></label>
+          <textarea id="problemDescription" name="problemDescription" placeholder="Please describe the specific issue you found. Be as detailed as possible..." required></textarea>
+        </div>
+        
+        <div class="form-group">
+          <label for="recommendedSolution">What should the correct information be? <span class="required">*</span></label>
+          <textarea id="recommendedSolution" name="recommendedSolution" placeholder="Tell us what you think the correct price, stock status, or product details should be..." required></textarea>
+        </div>
+        
+        <div class="form-group">
+          <label for="name">Your Name <span class="required">*</span></label>
+          <input type="text" id="name" name="name" required />
+        </div>
+        
+        <div class="form-group">
+          <label for="email">Your Email <span class="required">*</span></label>
+          <input type="email" id="email" name="email" required />
+        </div>
+        
+        <div style="text-align:center;margin-top:32px;">
+          <button type="submit" class="submit-btn">Submit Issue Report</button>
+        </div>
+      </form>
+      
+      <div id="messageArea"></div>
+      
+      <footer class="footer">
+        <p>
+          <a href="/about.html">About</a> | 
+          <a href="/privacy-policy.html">Privacy</a> | 
+          <a href="/terms-of-service.html">Terms</a> | 
+          <a href="/contact.html">Contact</a>
+        </p>
+        <p>&copy; 2025 Cigar Price Scout</p>
+      </footer>
+    </div>
+
+    <script>
+      // Load context from sessionStorage
+      window.addEventListener('load', function() {
+        const contextData = sessionStorage.getItem('reportIssueContext');
+        
+        if (contextData) {
+          const context = JSON.parse(contextData);
+          
+          // Display search context
+          document.getElementById('contextDisplay').textContent = context.searchContext;
+          document.getElementById('searchContext').value = context.searchContext;
+          
+          // Populate retailer dropdown with current results
+          populateRetailerDropdown(context.currentResults);
+          
+          // Store additional context for submission
+          window.reportContext = context;
+        } else {
+          // No context available
+          document.getElementById('contextDisplay').textContent = 'No search context available - general feedback form';
+          document.getElementById('searchContext').value = 'General website feedback';
+        }
+      });
+      
+      function populateRetailerDropdown(results) {
+        const retailerSelect = document.getElementById('retailer');
+        
+        if (results && results.length > 0) {
+          // Add retailers from current search results
+          const retailers = [...new Set(results.map(r => r.retailer))].sort();
+          
+          retailers.forEach(retailer => {
+            const option = document.createElement('option');
+            option.value = retailer;
+            option.textContent = retailer;
+            retailerSelect.appendChild(option);
+          });
+        }
+      }
+      
+      // Handle form submission
+      document.getElementById('issueReportForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const submitBtn = document.querySelector('.submit-btn');
+        const messageArea = document.getElementById('messageArea');
+        
+        // Disable submit button
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Submitting...';
+        
+        // Clear previous messages
+        messageArea.innerHTML = '';
+        
+        try {
+          // Gather form data
+          const formData = {
+            search_context: document.getElementById('searchContext').value,
+            retailer: document.getElementById('retailer').value,
+            issue_type: document.getElementById('issueType').value,
+            problem_description: document.getElementById('problemDescription').value,
+            recommended_solution: document.getElementById('recommendedSolution').value,
+            name: document.getElementById('name').value,
+            email: document.getElementById('email').value,
+            current_url: window.reportContext ? window.reportContext.currentUrl : window.location.href,
+            timestamp: window.reportContext ? window.reportContext.timestamp : new Date().toISOString()
+          };
+          
+          // Submit to backend
+          const response = await fetch('/api/data-issue-report', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(formData)
+          });
+          
+          const result = await response.json();
+          
+          if (result.status === 'success') {
+            messageArea.innerHTML = '<div class="success-message">' + result.message + '</div>';
+            // Reset form
+            document.getElementById('issueReportForm').reset();
+            // Clear session storage
+            sessionStorage.removeItem('reportIssueContext');
+          } else {
+            messageArea.innerHTML = '<div class="error-message">' + result.message + '</div>';
+          }
+          
+        } catch (error) {
+          console.error('Submission error:', error);
+          messageArea.innerHTML = '<div class="error-message">There was an error submitting your report. Please try again.</div>';
+        }
+        
+        // Re-enable submit button
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Submit Issue Report';
+        
+        // Scroll to message
+        messageArea.scrollIntoView({ behavior: 'smooth' });
+      });
+    </script>
+  </body>
+</html>
