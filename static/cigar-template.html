@@ -69,7 +69,6 @@
         width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--rule);
         border-radius:12px;overflow:hidden;margin-top:20px;
         box-shadow:0 1px 3px rgba(0,0,0,0.05);
-        min-width:1000px;
       }
       
       th,td{
@@ -355,13 +354,21 @@
     <script>
       let allResults = [];
       
-      // Extract brand and line from URL path
+      // Extract brand and line from URL path and convert to proper title case
       const pathParts = window.location.pathname.split('/');
       const brandSlug = pathParts[2] || '';
       const lineSlug = pathParts[3] || '';
       
-      const brand = brandSlug.replace(/-/g, ' ');
-      const line = lineSlug.replace(/-/g, ' ');
+      // Convert slugs to title case properly
+      function toTitleCase(str) {
+        return str.replace(/-/g, ' ')
+                 .split(' ')
+                 .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                 .join(' ');
+      }
+      
+      const brand = toTitleCase(brandSlug);
+      const line = toTitleCase(lineSlug);
       
       // Fetch prices on page load
       async function loadPrices() {
