@@ -190,12 +190,15 @@ def update_smokeinn_prices(dry_run=False):
     if not dry_run:
         try:
             updated_df = pd.DataFrame(updated_rows)
-            # Ensure consistent column order
-            expected_columns = ['cigar_id', 'title', 'url', 'brand', 'line', 'wrapper', 'vitola', 'size', 'box_qty', 'price', 'in_stock']
-            for col in expected_columns:
+            # Ensure consistent column order while preserving any additional columns
+            base_columns = ['cigar_id', 'title', 'url', 'brand', 'line', 'wrapper', 'vitola', 'size', 'box_qty', 'price', 'in_stock']
+            for col in base_columns:
                 if col not in updated_df.columns:
                     updated_df[col] = None
-            updated_df = updated_df[expected_columns]
+
+            # Reorder columns: base columns first, then any additional columns (like current_promotions_applied)
+            final_columns = base_columns + [col for col in updated_df.columns if col not in base_columns]
+            updated_df = updated_df[final_columns]
             
             updated_df.to_csv(csv_path, index=False, quoting=csv.QUOTE_MINIMAL)
             print(f"\n[SUCCESS] Updated {successful_updates}/{len(smokeinn_df)} products")

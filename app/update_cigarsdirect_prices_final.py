@@ -168,7 +168,7 @@ class CigarsDirectCSVUpdaterWithMaster:
             return True
         
         try:
-            fieldnames = ['cigar_id', 'title', 'url', 'brand', 'line', 'wrapper', 'vitola', 'size', 'box_qty', 'price', 'in_stock']
+            fieldnames = list(data[0].keys()) if data else ['cigar_id', 'title', 'url', 'brand', 'line', 'wrapper', 'vitola', 'size', 'box_qty', 'price', 'in_stock']
             
             # Clean the data to ensure no None keys and all required fields exist
             cleaned_data = []
