@@ -594,6 +594,40 @@ class AutomatedCigarPriceSystem:
         except Exception as e:
             self.logger.error(f"Failed to log automation run: {e}")
 
+    def apply_promotions(self) -> bool:
+        """Apply promotional discounts after price updates"""
+        try:
+            self.logger.info("Applying promotional discounts...")
+            
+            # Path to promotional processing script
+            promo_script = self.project_root / "tools" / "promotions" / "apply_promos.py"
+            promo_dir = promo_script.parent
+            
+            if not promo_script.exists():
+                self.logger.warning(f"Promo script not found at {promo_script}")
+                return True  # Not critical - continue without promos
+            
+            # Run promotional processing
+            result = subprocess.run(
+                [sys.executable, "apply_promos.py"],
+                capture_output=True,
+                text=True,
+                timeout=300,
+                cwd=promo_dir
+            )
+            
+            if result.returncode == 0:
+                self.logger.info("✓ Promotional processing completed successfully")
+                return True
+            else:
+                error_msg = f"Promotional processing failed: {result.stderr}"
+                self.logger.error(error_msg)
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"Error applying promotions: {e}")
+            return False
+
     def run_full_automation(self) -> bool:
         """Run the complete automation cycle"""
         start_time = datetime.now()
@@ -633,6 +667,11 @@ class AutomatedCigarPriceSystem:
             
             # 4. Capture post-update state and track changes
             self.capture_post_update_state(retailers, pre_state)
+
+            # 4.5. Apply promotional discounts  ← ADD THIS
+            promo_success = self.apply_promotions()
+            if not promo_success:
+                errors.append("Promotional processing failed")
             
             # 5. Git commit and push
             git_success = self.git_commit_and_push()

@@ -1253,11 +1253,11 @@
         
         if (discountMatch) {
         const discount = discountMatch[1]; // "25% off"
-        const tooltip = code ? `Code: ${code}` : 'Promotional discount';
+        const code = parts[1] || '';
         
         return `<div style="font-size: 18px;">
           <div class="promo-discount">${discount}</div>
-          ${code ? `<div style="font-size: 14px; color: #374151;">Code: ${code}</div>` : ''}
+          ${code ? `<div style="font-size: 14px; color: #374151;">Use Code: ${code}</div>` : ''}
         </div>`;
       }
         
