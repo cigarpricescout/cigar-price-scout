@@ -171,6 +171,55 @@ class LocalPriceUpdater:
                 'products_failed': 0
             }
     
+    def apply_promotions(self):
+        """Apply active promotions to all retailer CSVs"""
+        print("\n--- APPLYING PROMOTIONS ---")
+        start_time = datetime.now()
+        
+        try:
+            import subprocess
+            import os
+            
+            # Exact path from app/ to tools/promotions/
+            promo_script = "../tools/promotions/apply_promos.py"
+            
+            # Convert to absolute path to be safe
+            promo_script = os.path.abspath(promo_script)
+            
+            print(f"Looking for promo script at: {promo_script}")
+            
+            if not os.path.exists(promo_script):
+                print(f"Promo script not found at: {promo_script}")
+                return False
+                
+            # Run from the promotions directory so imports work correctly
+            promo_dir = os.path.dirname(promo_script)
+            
+            result = subprocess.run(
+                [sys.executable, "apply_promos.py"],
+                capture_output=True,
+                text=True,
+                timeout=300,
+                cwd=promo_dir  # This is the key - run FROM the promotions directory
+            )
+            
+            duration = (datetime.now() - start_time).total_seconds()
+            
+            if result.returncode == 0:
+                print(f"Promotions applied successfully in {duration:.1f}s")
+                if result.stdout:
+                    print(result.stdout)
+                return True
+            else:
+                print(f"Promotion application failed:")
+                print(result.stderr)
+                return False
+                
+        except Exception as e:
+            duration = (datetime.now() - start_time).total_seconds()
+            print(f"Promotion application crashed: {str(e)}")
+            return False
+    
     def run_all_updates(self, specific_retailer=None):
         """Run updates for all or specific retailer"""
         print("=" * 60)
@@ -206,9 +255,13 @@ class LocalPriceUpdater:
             if len(retailers) > 1:
                 time.sleep(2)
         
+        # Apply promotions after all price updates
+        print(f"\nAll price updates completed. Applying promotions...")
+        promo_success = self.apply_promotions()
+
         # Summary report
         self.print_summary(total_start)
-        
+
         return True
     
     def print_summary(self, start_time):

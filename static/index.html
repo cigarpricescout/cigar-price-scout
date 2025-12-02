@@ -328,6 +328,23 @@
         font-weight: 700 !important;
       }
 
+      /* Promo styling */
+      .promo-cell {
+        text-align: center;
+      }
+
+      .promo-price {
+        font-weight: 600;
+        color: #059669;
+      }
+
+      .promo-discount {
+        color: #dc2626;
+        font-weight: 700;
+        cursor: help;
+        font-size: 18px;
+      }
+
       /* Mobile card styles */
       .mobile-cards {
         display: none;
@@ -610,11 +627,12 @@
                   <th>Retailer</th>
                   <th class="hide-tablet">Dealer Type</th>
                   <th>Advertised Price</th>
+                  <th>Current Promo</th>
                   <th>Est. Shipping</th>
                   <th>Est. Tax</th>
                   <th style="font-weight: 750;">Est. Total</th>
                   <th>Stock Status</th>
-                  <th>Price Context <span style="color: #6b7280; font-size: 14px; cursor: help;" title="Based on 10% median price threshold">?</span></th>
+                  <th>Price Context<span style="color: #6b7280; font-size: 14px; cursor: help;" title="Based on 10% median price threshold">?</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -1122,6 +1140,7 @@
             (result.authorized ? '' : '<div class="risk-text">Buy at own risk</div>') +
             '</div></td>' +
             '<td class="price-cell">' + result.base + '</td>' +
+            '<td class="promo-cell">' + formatPromoPrice(result.current_promotions_applied) + '</td>' +
             '<td class="price-cell">' + result.shipping + '</td>' +
             '<td class="price-cell">' + result.tax + '</td>' +
             '<td class="price-cell total-price ' + (result.cheapest ? 'best-total' : '') + '">' + result.delivered_after_promo + '</td>' +
@@ -1150,6 +1169,11 @@
             '<span class="card-label">Advertised Price:</span>' +
             '<span class="card-value">' + result.base + '</span>' +
             '</div>' +
+            (result.current_promotions_applied ? 
+            '<div class="card-item">' +
+            '<span class="card-label">Promo Price:</span>' +
+            '<span class="card-value">' + formatPromoPrice(result.current_promotions_applied) + '</span>' +
+            '</div>' : '') +
             '<div class="card-item">' +
             '<span class="card-label">Est. Shipping:</span>' +
             '<span class="card-value">' + result.shipping + '</span>' +
@@ -1214,6 +1238,30 @@
         
         resultsSection.style.display = 'block';
         resultsSection.scrollIntoView({ behavior: 'smooth' });
+      }
+
+      function formatPromoPrice(promoText) {
+        if (!promoText || promoText === '') {
+          return '<span style="color: #6b7280;">—</span>';
+        }
+        
+        const parts = promoText.split('|');
+        const displayText = parts[0]; // "$139.80 [25% off]"
+        const code = parts[1] || '';
+        
+        const discountMatch = displayText.match(/\[([^\]]+)\]/);
+        
+        if (discountMatch) {
+        const discount = discountMatch[1]; // "25% off"
+        const tooltip = code ? `Code: ${code}` : 'Promotional discount';
+        
+        return `<div style="font-size: 18px;">
+          <div class="promo-discount">${discount}</div>
+          ${code ? `<div style="font-size: 14px; color: #374151;">Code: ${code}</div>` : ''}
+        </div>`;
+      }
+        
+        return '<span style="color: #6b7280;">—</span>';
       }
 
       // Report Data Issue functionality

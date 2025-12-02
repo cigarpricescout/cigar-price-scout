@@ -2,7 +2,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-MIN_PROMO_PERCENT = 20
+MIN_PROMO_PERCENT = 11
 
 def load_promotions():
     """Load promotions.json file"""

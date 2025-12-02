@@ -1,16 +1,40 @@
 {
   "ci": [],
-  "thompson": [],
-  "hiland": [ 
+  "thompson": [
     {
-      "code": "TEST25",
-      "discount": 25,
+      "code": "CM35",
+      "discount": 35,
       "scope": "sitewide",
       "end_date": "2025-12-03",
+      "active": true
+    }
+  ],
+  "hilands": [ 
+    {
+      "code": "TEST25",
+      "discount": 15,
+      "scope": "sitewide",
+      "end_date": "2025-12-01",
       "active": false
     }
   ],
-  "smokeinn": [],
-  "neptune": [],
+  "smokeinn": [
+     {
+      "code": "FEAST",
+      "discount": 15,
+      "scope": "sitewide",
+      "end_date": "2025-12-05",
+      "active": true
+    }
+  ],
+  "neptune": [
+    {
+      "code": "CYBER2025",
+      "discount": 25,
+      "scope": "sitewide",
+      "end_date": "2025-12-03",
+      "active": true
+    }
+  ],
   "gotham": []
 }
