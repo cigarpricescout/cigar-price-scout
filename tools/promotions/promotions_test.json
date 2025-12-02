@@ -1,0 +1,16 @@
+{
+  "ci": [],
+  "thompson": [],
+  "hiland": [ 
+    {
+      "code": "TEST25",
+      "discount": 25,
+      "scope": "sitewide",
+      "end_date": "2025-12-31",
+      "active": true
+    }
+  ],
+  "smokeinn": [],
+  "neptune": [],
+  "gotham": []
+}
