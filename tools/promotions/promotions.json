@@ -6,7 +6,7 @@
       "discount": 35,
       "scope": "sitewide",
       "end_date": "2025-12-02",
-      "active": true
+      "active": false
     }
   ],
   "hilands": [ 
@@ -24,7 +24,7 @@
       "discount": 15,
       "scope": "sitewide",
       "end_date": "2025-12-05",
-      "active": true
+      "active": false
     }
   ],
   "neptune": [
@@ -33,7 +33,7 @@
       "discount": 25,
       "scope": "sitewide",
       "end_date": "2025-12-02",
-      "active": true
+      "active": false
     }
   ],
   "gotham": []
