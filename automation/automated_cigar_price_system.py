@@ -154,7 +154,7 @@ class AutomatedCigarPriceSystem:
     def init_historical_database(self):
         """Initialize SQLite database for historical price tracking"""
         try:
-            conn = sqlite3.connect(self.historical_db_path)
+            conn = sqlite3.connect(self.historical_db_path, detect_types=0)
             cursor = conn.cursor()
             
             # Create tables
@@ -383,7 +383,7 @@ class AutomatedCigarPriceSystem:
             return
         
         try:
-            conn = sqlite3.connect(self.historical_db_path)
+            conn = sqlite3.connect(self.historical_db_path, detect_types=0)
             cursor = conn.cursor()
             
             today = datetime.now().date()
@@ -569,7 +569,7 @@ class AutomatedCigarPriceSystem:
                           git_success: bool, errors: List[str]):
         """Log this automation run to the database"""
         try:
-            conn = sqlite3.connect(self.historical_db_path)
+            conn = sqlite3.connect(self.historical_db_path, detect_types=0)
             cursor = conn.cursor()
             
             duration = int((end_time - start_time).total_seconds())
@@ -773,10 +773,10 @@ def main():
     success = automation.run_full_automation()
     
     if success:
-        print("\n🎯 Automation completed successfully!")
+        print("\nAutomation completed successfully!")
         sys.exit(0)
     else:
-        print("\n❌ Automation completed with errors.")
+        print("\nAutomation completed with errors.")
         sys.exit(1)
 
 
