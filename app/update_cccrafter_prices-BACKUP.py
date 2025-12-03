@@ -1,6 +1,8 @@
 """
-CCCrafter Price Updater with Master-Driven Metadata Sync - CORRECTED VERSION
-Fixed field mapping issues that were causing blank metadata
+CCCrafter Price Updater with Master-Driven Metadata Sync
+ALWAYS syncs ALL metadata from master_cigars.csv (master is authority source)
+Enhanced version: metadata changes in master file auto-propagate to retailer CSV
+Following the proven master-sync pattern for true data consistency
 """
 
 import csv
@@ -15,6 +17,7 @@ import time
 
 # Add the tools directory to path for importing the extractor
 current_dir = os.path.dirname(os.path.abspath(__file__))
+# Go up to project root, then down to tools
 project_root = os.path.dirname(current_dir)
 tools_dir = os.path.join(project_root, 'tools', 'price_monitoring', 'retailers')
 sys.path.append(tools_dir)
@@ -22,6 +25,7 @@ sys.path.append(tools_dir)
 try:
     from cccrafter_extractor import CCCrafterExtractor
 except ImportError:
+    # Try alternative path - same directory as this script
     script_dir = os.path.dirname(os.path.abspath(__file__))
     sys.path.append(script_dir)
     try:
@@ -30,19 +34,24 @@ except ImportError:
         print(f"[ERROR] Could not import CCCrafterExtractor.")
         print(f"[INFO] Looked in: {tools_dir}")
         print(f"[INFO] Also looked in: {script_dir}")
+        print(f"[FIX] Make sure cccrafter_extractor.py is in one of these locations:")
+        print(f"      - {tools_dir}/")
+        print(f"      - {script_dir}/")
         sys.exit(1)
 
 
 class CCCrafterCSVUpdaterWithMaster:
     def __init__(self, csv_path: str = None, master_path: str = None, dry_run: bool = False):
         if csv_path is None:
+            # More robust path finding - look for static/data/cccrafter.csv from current location
             current_dir = os.path.dirname(os.path.abspath(__file__))
-            project_root = os.path.dirname(current_dir)
+            project_root = os.path.dirname(current_dir)  # Go up from app/ to project root
             self.csv_path = os.path.join(project_root, 'static', 'data', 'cccrafter.csv')
         else:
             self.csv_path = csv_path
             
         if master_path is None:
+            # Look for master file in data/ directory
             current_dir = os.path.dirname(os.path.abspath(__file__))
             project_root = os.path.dirname(current_dir)
             self.master_path = os.path.join(project_root, 'data', 'master_cigars.csv')
@@ -54,11 +63,14 @@ class CCCrafterCSVUpdaterWithMaster:
         self.dry_run = dry_run
         self.extractor = CCCrafterExtractor()
         
+        # Configure for production use
         self.extractor.debug_mode = False
         
+        # Set logging to INFO level for production (less verbose)
         if not dry_run:
             logging.getLogger().setLevel(logging.INFO)
         
+        # Verify paths exist
         if not os.path.exists(self.csv_path) and not dry_run:
             print(f"[WARNING] CCCrafter CSV not found at: {self.csv_path}")
         if not os.path.exists(self.master_path):
@@ -87,7 +99,7 @@ class CCCrafterCSVUpdaterWithMaster:
             return False
     
     def get_cigar_metadata(self, cigar_id: str) -> Dict:
-        """Get metadata for a cigar from the master file - CORRECTED FIELD MAPPING"""
+        """Get metadata for a cigar from the master file"""
         if self.master_df is None:
             return {}
         
@@ -115,15 +127,14 @@ class CCCrafterCSVUpdaterWithMaster:
             except (ValueError, TypeError):
                 pass
         
-        # CORRECTED FIELD MAPPING - use actual master file column names
         return {
-            'title': str(row.get('Vitola', '')),  # Use Vitola as title (like "Classic", "Robusto")
-            'brand': str(row.get('Brand', '')), 
-            'line': str(row.get('Line', '')),
-            'wrapper': str(row.get('Wrapper', '')),
-            'vitola': str(row.get('Vitola', '')),
+            'title': row.get('product_name', ''),
+            'brand': row.get('Brand', ''), 
+            'line': row.get('Line', ''),
+            'wrapper': row.get('Wrapper', ''),
+            'vitola': row.get('Vitola', ''),
             'size': size,
-            'box_qty': str(box_qty)  # Convert to string for CSV consistency
+            'box_qty': box_qty
         }
     
     def auto_populate_metadata(self, row: Dict) -> Dict:
@@ -138,8 +149,8 @@ class CCCrafterCSVUpdaterWithMaster:
         metadata_changes = []
         for field in ['title', 'brand', 'line', 'wrapper', 'vitola', 'size', 'box_qty']:
             if field in metadata and metadata[field]:
-                old_value = str(row.get(field, ''))
-                new_value = str(metadata[field])
+                old_value = row.get(field, '')
+                new_value = metadata[field]
                 
                 # Track changes for logging
                 if old_value != new_value:
@@ -189,12 +200,11 @@ class CCCrafterCSVUpdaterWithMaster:
             return False
         
         if self.dry_run:
-            print("[DRY RUN] Would save updated CSV data")
+            print(f"[DRY RUN] Would save {len(data)} updated products to {self.csv_path}")
             return True
         
         try:
-            # Get fieldnames from first row
-            fieldnames = list(data[0].keys())
+            fieldnames = list(data[0].keys()) if data else ['cigar_id', 'title', 'url', 'brand', 'line', 'wrapper', 'vitola', 'size', 'box_qty', 'price', 'in_stock']
             
             with open(self.csv_path, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -208,9 +218,8 @@ class CCCrafterCSVUpdaterWithMaster:
             return False
     
     def update_pricing_data(self, url: str) -> Dict:
-        """Extract pricing data from URL using proper CCCrafter extractor"""
+        """Extract live pricing data from CCCrafter"""
         try:
-            # Use the proper CCCrafter extractor method
             result = self.extractor.extract_product_data(url)
             
             if result:
@@ -231,12 +240,7 @@ class CCCrafterCSVUpdaterWithMaster:
         except Exception as e:
             return {
                 'success': False,
-                'error': str(e),
-                'price': None,
-                'msrp_price': None,
-                'in_stock': False,
-                'box_quantity': None,
-                'title': None
+                'error': str(e)
             }
     
     def calculate_discount(self, sale_price: float, msrp_price: float) -> float:
@@ -251,8 +255,9 @@ class CCCrafterCSVUpdaterWithMaster:
         """Run the complete update process"""
         mode_str = "[DRY RUN] " if self.dry_run else ""
         print("=" * 70)
-        print(f"{mode_str}CCCRAFTER ENHANCED PRICE UPDATE - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"{mode_str}CCCRAFTER PRICE UPDATE - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         print("MASTER-DRIVEN METADATA SYNC: All metadata always synced from master file")
+        print("Rate Limited: 1 request/second | Timeout: 10s | BigCommerce Platform")
         print("=" * 70)
         
         # Load master file
@@ -347,9 +352,9 @@ class CCCrafterCSVUpdaterWithMaster:
                     old_price_float = float(old_price)
                     if old_price_float != new_price:
                         if new_price > old_price_float:
-                            price_change = " UP"
+                            price_change = " ↗"
                         else:
-                            price_change = " DOWN"
+                            price_change = " ↘"
                 except (ValueError, TypeError):
                     pass
             
@@ -361,18 +366,24 @@ class CCCrafterCSVUpdaterWithMaster:
             print(f"  [OK] {price_str}{price_change} | {stock_str}{stock_change}{discount_str}")
             successful_updates += 1
             
-            # Rate limiting - 1 request per second
-            time.sleep(1)
+            # Progress indicator
+            if (i + 1) % 10 == 0:
+                elapsed = time.time() - start_time
+                rate = (i + 1) / elapsed
+                remaining = len(data) - (i + 1)
+                eta = remaining / rate if rate > 0 else 0
+                print(f"  [PROGRESS] {i+1}/{len(data)} products | {rate:.1f}/min | ETA: {eta/60:.1f}min")
         
         # Save updated data
         if self.save_csv(data):
             total_time = time.time() - start_time
             print("\n" + "=" * 70)
-            print(f"{mode_str}UPDATE COMPLETE")
+            print(f"{mode_str}UPDATE COMPLETE - {total_time/60:.1f} minutes")
             print(f"Successful updates: {successful_updates}")
             print(f"Failed updates: {failed_updates}")
             print(f"Metadata synced: {metadata_sync_count} products")
             print(f"Total processed: {len(data)}")
+            print(f"Average rate: {len(data)/(total_time/60):.1f} products/min")
             print(f"Updated file: {self.csv_path}")
             if self.backup_path:
                 print(f"Backup file: {self.backup_path}")
@@ -386,7 +397,7 @@ def main():
     """Main function for command line usage"""
     import argparse
     
-    parser = argparse.ArgumentParser(description='CCCrafter price updater with corrected metadata sync')
+    parser = argparse.ArgumentParser(description='CCCrafter price updater with master-driven metadata sync')
     parser.add_argument('--csv', help='Path to CCCrafter CSV file')
     parser.add_argument('--master', help='Path to master cigars CSV file')
     parser.add_argument('--dry-run', action='store_true', help='Show what metadata would be updated without making changes')
@@ -408,9 +419,9 @@ def main():
     success = updater.run_update(max_products=args.limit)
     
     if success:
-        print("\n[SUCCESS] CCCrafter enhanced update completed successfully")
+        print("\n[SUCCESS] CCCrafter price update completed successfully")
     else:
-        print("\n[FAILED] CCCrafter enhanced update failed")
+        print("\n[FAILED] CCCrafter price update failed")
         sys.exit(1)
 
 

@@ -1,0 +1,73 @@
+cigar_id,title,url,brand,line,wrapper,vitola,size,box_qty,price,in_stock,current_promotions_applied
+HOYODEMONTERREY|HOYODEMONTERREY|EXCALIBUR|EPICURE|EPICURE|5.25x50|CT|BOX20,Epicure,https://absolutecigars.com/product/hoyo-de-monterrey-excalibur-epicure-natural/,Hoyo de Monterrey,Excalibur,Connecticut Shade,Epicure,5.25x50,20,203.0,True,
+ROMEOYJULIETA|ROMEOYJULIETA|1875|CHURCHILL|CHURCHILL|7x50|IND|BOX25,Churchill,https://absolutecigars.com/product/romeo-y-julieta-churchill/,Romeo y Julieta,1875,Indonesian Shade Grown TBN,Churchill,7x50,25,234.0,True,
+ARTUROFUENTE|ARTUROFUENTE|HEMINGWAY|BESTSELLER|BESTSELLER|4.5x55|CAM|BOX25,Best Seller,https://absolutecigars.com/product/bestseller-cigars/,Arturo Fuente,Hemingway,Cameroon,Best Seller,4.5x55,25,290.0,False,
+ASHTON|ASHTON|VSG|ROBUSTO|ROBUSTO|5.5x50|ECU|BOX24,Robusto,https://absolutecigars.com/product/ashton-vsg-robusto/,Ashton,VSG,Ecuadorian Sun Grown,Robusto,5.5x50,24,356.0,True,
+ARTUROFUENTE|ARTUROFUENTE|HEMINGWAY|SIGNATURE|SIGNATURE|6x46|CAM|BOX25,Signature,https://absolutecigars.com/product/hemingway-signature/,Arturo Fuente,Hemingway,Cameroon,Signature,6x46,25,290.0,True,
+PERDOMO|PERDOMO|RESERVE10THANNIVERSARYCHAMPAGNE|EPICURE|EPICURE|6x54|ECU|BOX25,Epicure,https://absolutecigars.com/product/perdomo-reserve-champagne-epicure/,Perdomo,Reserve 10th Anniversary Champagne,Ecuadorian Connecticut,Epicure,6x54,25,245.0,True,
+MYFATHER|MYFATHER|THEJUDGE|GRANDROBUSTO|GRANDROBUSTO|5.625x60|ECU|BOX23,Grand Robusto,https://absolutecigars.com/product/my-father-the-judge-grand-robusto/,My Father,The Judge,Ecuadorian Sumatra Oscuro,Grand Robusto,5.625x60,23,259.0,False,
+MYFATHER|MYFATHER|LEBIJOU1922|TORO|TORO|6.5x52|NIC|BOX23,Toro,https://absolutecigars.com/product/my-father-le-bijou-1922-toro/,My Father,Le Bijou 1922,Nicaraguan Habano Oscuro,Toro,6.5x52,23,279.0,True,
+ARTUROFUENTE|ARTUROFUENTE|HEMINGWAY|CLASSIC|CLASSIC|7x48|CAM|BOX25,Classic,https://absolutecigars.com/product/hemingway-classic/,Arturo Fuente,Hemingway,Cameroon,Classic,7x48,25,290.0,True,
+COHIBA||REDDOT|ROBUSTO|ROBUSTO|5x49|CAM|BOX25,Robusto,https://absolutecigars.com/product/cohiba-robusto-cigars/,Cohiba,Red Dot,Cameroon,Robusto,5x49,25,452.0,True,
+PADRON|PADRON|1964ANNIVERSARY|EXCLUSIVO|EXCLUSIVO|5.5x50|NAT|BOX26
+PADRON|PADRON|1964ANNIVERSARY|EXCLUSIVO|EXCLUSIVO|5.5x50|MAD|BOX26
+PADRON|PADRON|1964ANNIVERSARY|PRINCIPE|PRINCIPE|4.5x46|NAT|BOX26
+PADRON|PADRON|1964ANNIVERSARY|PRINCIPE|PRINCIPE|4.5x46|MAD|BOX26
+PADRON|PADRON|1964ANNIVERSARY|CORONA|CORONA|6x42|NAT|BOX26,,https://absolutecigars.com/product/padron-1964-corona/,,,,,,,293.0
+PADRON|PADRON|1964ANNIVERSARY|CORONA|CORONA|6x42|MAD|BOX26
+ARTUROFUENTE|ARTUROFUENTE|HEMINGWAY|SHORTSTORY|SHORTSTORY|4x49|CAM|BOX25,,https://absolutecigars.com/product/hemingway-short-story/
+ARTUROFUENTE|ARTUROFUENTE|HEMINGWAY|SHORTSTORY|SHORTSTORY|4x49|MAD|BOX25
+ARTUROFUENTE|ARTUROFUENTE|HEMINGWAY|WORKOFART|WORKOFART|4.875x60|CAM|BOX25,,https://absolutecigars.com/product/hemingway-work-of-art/
+ARTUROFUENTE|ARTUROFUENTE|HEMINGWAY|WORKOFART|WORKOFART|4.875x60|MAD|BOX25
+ARTUROFUENTE|ARTUROFUENTE|HEMINGWAY|BETWEENTHELINES|BETWEENTHELINES|4.5x54|CAM|BOX25
+ASHTON|ASHTON|VSG|ENCHANTMENT|ENCHANTMENT|5.5x48|ECU|BOX22,,https://absolutecigars.com/product/ashton-vsg-enchantment/
+ASHTON|ASHTON|VSG|SPELLBOUND|SPELLBOUND|6x50|ECU|BOX24,,https://absolutecigars.com/product/ashton-vsg-spellbound/
+ASHTON|ASHTON|VSG|ECLIPSE|ECLIPSE|6.75x50|ECU|BOX24
+ASHTON|ASHTON|VSG|WIZARD|WIZARD|7x52|ECU|BOX37
+ASHTON|ASHTON|VSG|BELICOSONO.1|BELICOSONO.1|5.5x52|ECU|BOX24,,https://absolutecigars.com/product/ashton-vsg-belicoso-no-1/
+ASHTON|ASHTON|VSG|ILLUSION|ILLUSION|6x54|ECU|BOX24
+COHIBA||REDDOT|CHURCHILL|CHURCHILL|6.875x48|CAM|BOX25,,https://absolutecigars.com/product/cohiba-churchill/
+COHIBA||REDDOT|CORONA|CORONA|5.625x43|CAM|BOX25
+COHIBA||REDDOT|LONSDALE|LONSDALE|6.5x43|CAM|BOX25
+OLIVA|OLIVA|SERIEV|ROBUSTO|ROBUSTO|5x54|ECU|BOX24
+OLIVA|OLIVA|SERIEV|BELICOSO|BELICOSO|5.5x54|ECU|BOX24,,https://absolutecigars.com/product/oliva-serie-v-belicoso/
+OLIVA|OLIVA|SERIEV|TORPEDO|TORPEDO|6.5x52|ECU|BOX24
+OLIVA|OLIVA|SERIEV|DOUBLEROBUSTO|DOUBLEROBUSTO|5x54|ECU|BOX20,,https://absolutecigars.com/product/oliva-serie-v-double-robusto/
+OLIVA|OLIVA|SERIEV|CHURCHILLEXTRA|CHURCHILLEXTRA|7x48|ECU|BOX24,,https://absolutecigars.com/product/oliva-serie-v-churchill/
+OLIVA|OLIVA|SERIEV|DOUBLETORO|DOUBLETORO|6x60|ECU|BOX24,,https://absolutecigars.com/product/oliva-serie-v-double-toro/
+OLIVA|OLIVA|SERIEV|ROBUSTO|ROBUSTO|5x54|MEX|BOX24
+OLIVA|OLIVA|SERIEV|TORPEDO|TORPEDO|6.5x52|MEX|BOX24,,https://absolutecigars.com/product/oliva-serie-v-torpedo/
+ROCKYPATEL|ROCKYPATEL|VINTAGE1990|ROBUSTO|ROBUSTO|5x50|HON|BOX20,,https://absolutecigars.com/product/rockey-patel-vintage-1990-robustos/
+ROCKYPATEL|ROCKYPATEL|VINTAGE1990|TORO|TORO|6x52|HON|BOX20,,https://absolutecigars.com/product/rocky-patel-vintage-1990-toro/
+ROCKYPATEL|ROCKYPATEL|VINTAGE1990|TORPEDO|TORPEDO|6.5x52|HON|BOX20,,https://absolutecigars.com/product/rocky-patel-vintage-1990-torpedo/
+ROCKYPATEL|ROCKYPATEL|VINTAGE1990|CHURCHILL|CHURCHILL|7x48|HON|BOX20,,https://absolutecigars.com/product/rocky-patel-vintage-1990-churchill/
+ROCKYPATEL|ROCKYPATEL|VINTAGE1992|ROBUSTO|ROBUSTO|5x50|ECU|BOX20,,https://absolutecigars.com/product/rocky-patel-vintage-1992-robusto/
+ROCKYPATEL|ROCKYPATEL|VINTAGE1992|TORO|TORO|6x52|ECU|BOX20,,https://absolutecigars.com/product/rocky-patel-vintage-1992-toro/
+ROCKYPATEL|ROCKYPATEL|VINTAGE1992|TORPEDO|TORPEDO|6.5x52|ECU|BOX20,,https://absolutecigars.com/product/rocky-patel-vintage-1992-torpedo/
+ROCKYPATEL|ROCKYPATEL|VINTAGE1992|CHURCHILL|CHURCHILL|7x48|ECU|BOX20,,https://absolutecigars.com/product/rocky-patel-vintage-1992-churchill/
+MACANUDO|MACANUDO|CAFE|HYDEPARK|HYDEPARK|5.5x49|CT|BOX25,,https://absolutecigars.com/product/macanudo-cafe-hyde-park/
+MACANUDO|MACANUDO|CAFE|HAMPTONCOURT|HAMPTONCOURT|5.25x42|CT|BOX25,,https://absolutecigars.com/product/macanudo-cafe-hampton-court/
+MACANUDO|MACANUDO|CAFE|PORTOFINO|PORTOFINO|7x34|CT|BOX25
+MACANUDO|MACANUDO|CAFE|DUKEOFDEVON|DUKEOFDEVON|5.5x42|CT|BOX25,,https://absolutecigars.com/product/macanudo-duke-of-devon/
+MACANUDO|MACANUDO|CAFE|BARONDEROTHSCHILD|BARONDEROTHSCHILD|6.5x42|CT|BOX25,,https://absolutecigars.com/product/macanudo-baron-de-rothschild/
+MACANUDO|MACANUDO|CAFE|ASCOT|ASCOT|4x32|CT|BOX10
+CAO|CAO|FLATHEAD|V554CAMSHAFT|V554CAMSHAFT|5.5x54|CT|BOX24,,https://absolutecigars.com/product/cao-flathead-v554-camshaft/
+CAO|CAO|FLATHEAD|V660CARB|V660CARB|6x60|CT|BOX24,,https://absolutecigars.com/product/cao-flathead-v660-carb-gordo/
+CAO|CAO|FLATHEAD|V770BIGBLOCK|V770BIGBLOCK|7x70|CT|BOX24,,https://absolutecigars.com/product/cao-flathead-v770/
+CAO|CAO|FLATHEAD|V450SPARKPLUG|V450SPARKPLUG|4.5x50|CT|BOX24,,https://absolutecigars.com/product/cao-flathead-v450-sparkplug-robusto/
+CAO|CAO|FLATHEADSTEELHORSE|BULLNECK|BULLNECK|5.625x52|ECU|BOX18,,https://absolutecigars.com/product/cao-steel-horse-bullneck/
+CAO|CAO|FLATHEADSTEELHORSE|KICKSTAND|KICKSTAND|6x52|ECU|BOX18
+CAO|CAO|FLATHEADSTEELHORSE|CLUTCH|CLUTCH|6x60|ECU|BOX18
+DREWESTATE|DREWESTATE|UNDERCROWNMADURO|CORONAVIVA|CORONAVIVA|5.625x46|SAN|BOX25
+DREWESTATE|DREWESTATE|UNDERCROWNMADURO|ROBUSTO|ROBUSTO|5x54|SAN|BOX25,,https://absolutecigars.com/product/undercrown-robusto/
+DREWESTATE|DREWESTATE|UNDERCROWNMADURO|BELICOSO|BELICOSO|6x52|SAN|BOX25
+DREWESTATE|DREWESTATE|UNDERCROWNMADURO|GRANTORO|GRANTORO|6x52|SAN|BOX25
+DREWESTATE|DREWESTATE|UNDERCROWNMADURO|CORONADOBLE|CORONADOBLE|7x54|SAN|BOX25
+DREWESTATE|DREWESTATE|UNDERCROWNMADURO|GORDITO|GORDITO|6x60|SAN|BOX25
+OLIVA|OLIVA|SERIEG|ROBUSTO|ROBUSTO|4.5x50|CAM|BOX25,,https://absolutecigars.com/product/oliva-g-robusto/
+OLIVA|OLIVA|SERIEG|TORO|TORO|6x50|CAM|BOX20
+OLIVA|OLIVA|SERIEG|CHURCHILL|CHURCHILL|7x48|CAM|BOX25,,https://absolutecigars.com/product/oliva-serie-g-churchill/
+OLIVA|OLIVA|SERIEG|BELICOSO|BELICOSO|6x52|CAM|BOX25
+OLIVA|OLIVA|SERIEG|ROBUSTO|ROBUSTO|4.5x50|MEX|BOX25
+OLIVA|OLIVA|SERIEG|BELICOSO|BELICOSO|6x52|MEX|BOX25
+OLIVA|OLIVA|SERIEG|DOUBLEROBUSTO|DOUBLEROBUSTO|5x54|CAM|BOX25,,https://absolutecigars.com/product/oliva-g-double-robusto/
