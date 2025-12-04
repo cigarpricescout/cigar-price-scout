@@ -348,70 +348,31 @@ def _extract_alternative_pricing(soup: BeautifulSoup, variant_id: str = None) ->
 
 
 def _extract_stock_status(soup: BeautifulSoup) -> bool:
-    """Extract stock status using BnB Tobacco-specific patterns"""
-    
-    page_text = soup.get_text().lower()
-    
-    print(f"[DEBUG] BnB Tobacco stock detection starting...")
-    
-    # BnB Tobacco specific out-of-stock indicators (from screenshot analysis)
-    bnb_out_patterns = [
-        'out of stock - notify me',
-        'out of stock',
-        'notify me!',
-        'notify when available'
-    ]
-    
-    # Check for BnB's specific out-of-stock text
-    for pattern in bnb_out_patterns:
-        if pattern in page_text:
-            print(f"[DEBUG] Found BnB out-of-stock pattern: '{pattern}'")
-            return False
-    
-    # Look for BnB's "Out of Stock" button (gray button instead of add to cart)
-    out_of_stock_buttons = soup.find_all(['button', 'div'], string=re.compile(r'out\s*of\s*stock', re.I))
-    if out_of_stock_buttons:
-        print(f"[DEBUG] Found out-of-stock button element")
-        return False
-    
-    # Look for BnB's add to cart patterns (when in stock)
-    add_to_cart_patterns = [
-        'add to cart',
-        'add to bag', 
-        'buy now',
-        'purchase now'
-    ]
-    
-    for pattern in add_to_cart_patterns:
-        if pattern in page_text:
-            print(f"[DEBUG] Found BnB in-stock pattern: '{pattern}'")
-            return True
-    
-    # Look for standard Shopify add to cart button elements
-    add_to_cart_buttons = soup.find_all(['button', 'input'], attrs={'name': re.compile(r'add', re.I)})
-    if add_to_cart_buttons:
-        for button in add_to_cart_buttons:
-            if not button.get('disabled'):
-                print(f"[DEBUG] Found enabled add to cart button")
-                return True
-    
-    # Check for Shopify variant availability in JavaScript
-    script_tags = soup.find_all('script')
-    for script in script_tags:
-        script_text = script.get_text().lower()
+    """Extract stock status"""
+    try:
+        out_of_stock_patterns = [
+            r'out\s*of\s*stock',
+            r'sold\s*out', 
+            r'unavailable',
+            r'notify\s*me',
+            r'back\s*in\s*stock'
+        ]
         
-        # Look for Shopify product availability data
-        if 'available' in script_text:
-            if re.search(r'"available"\s*:\s*true', script_text) or re.search(r"'available'\s*:\s*true", script_text):
-                print(f"[DEBUG] Found JavaScript availability: true")
-                return True
-            elif re.search(r'"available"\s*:\s*false', script_text) or re.search(r"'available'\s*:\s*false", script_text):
-                print(f"[DEBUG] Found JavaScript availability: false")
+        page_text = soup.get_text().lower()
+        
+        for pattern in out_of_stock_patterns:
+            if re.search(pattern, page_text):
                 return False
-    
-    # Default to in stock if no clear indicators found
-    print(f"[DEBUG] No clear BnB stock indicators found - defaulting to In Stock")
-    return True
+        
+        # Look for add to cart button
+        add_to_cart = soup.find(['button', 'input'], string=re.compile(r'add\s*to\s*cart', re.I))
+        if add_to_cart:
+            return True
+        
+        return True
+        
+    except Exception:
+        return True
 
 
 def _extract_box_quantity_from_page(soup: BeautifulSoup, target_packaging: str) -> Optional[int]:
