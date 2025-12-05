@@ -1,0 +1,81 @@
+2025-12-05 08:11:50,533 - INFO - Historical database initialized successfully
+2025-12-05 08:11:50,533 - INFO - Automated Cigar Price System initialized
+2025-12-05 08:11:50,533 - INFO - ======================================================================
+2025-12-05 08:11:50,533 - INFO - STARTING AUTOMATED CIGAR PRICE UPDATE CYCLE
+2025-12-05 08:11:50,533 - INFO - Time: 2025-12-05 08:11:50
+2025-12-05 08:11:50,533 - INFO - ======================================================================
+2025-12-05 08:11:50,533 - INFO - Auto-discovering retailer update scripts in app/ folder...
+2025-12-05 08:11:50,534 - INFO -   Found: absolutecigars -> update_absolute_cigars_prices_final.py
+2025-12-05 08:11:50,534 - INFO -   Found: atlantic -> update_atlantic_prices_final.py
+2025-12-05 08:11:50,535 - INFO -   Found: bighumidor -> update_bighumidor_prices_final.py
+2025-12-05 08:11:50,535 - INFO -   Found: bnbtobacco -> update_bnbtobacco_prices_final.py
+2025-12-05 08:11:50,535 - INFO -   Found: cigarsdirect -> update_cigarsdirect_prices_final.py
+2025-12-05 08:11:50,535 - INFO -   Found: foxcigar -> update_foxcigar_prices_final.py
+2025-12-05 08:11:50,535 - INFO -   Found: gothamcigars -> update_gotham_prices_final.py
+2025-12-05 08:11:50,535 - INFO -   Found: hilands -> update_hilandscigars_prices_final.py
+2025-12-05 08:11:50,535 - INFO -   Found: holts -> update_holts_prices_final.py
+2025-12-05 08:11:50,535 - INFO -   Found: neptune -> update_neptune_prices_final.py
+2025-12-05 08:11:50,535 - INFO -   Found: planetcigars -> update_planet_cigars_prices_final.py
+2025-12-05 08:11:50,535 - INFO -   Found: smallbatchcigar -> update_smallbatch_cigar_prices_final.py
+2025-12-05 08:11:50,536 - INFO -   Found: smokeinn -> update_smokeinn_prices_final.py
+2025-12-05 08:11:50,536 - INFO -   Found: tampasweethearts -> update_tampasweethearts_prices_final.py
+2025-12-05 08:11:50,536 - INFO -   Found: tobaccolocker -> update_tobaccolocker_prices_final.py
+2025-12-05 08:11:50,536 - INFO -   Found: watchcity -> update_watchcity_prices_final.py
+2025-12-05 08:11:50,536 - INFO -   Found: cccrafter -> update_cccrafter_prices.py
+2025-12-05 08:11:50,536 - INFO -   Found: nickscigarworld -> update_nicks_prices.py
+2025-12-05 08:11:50,537 - INFO -   Found: twoguys -> update_two_guys_prices.py
+2025-12-05 08:11:50,537 - INFO - Discovered 19 retailers
+2025-12-05 08:11:50,537 - INFO - Capturing pre-update state for historical tracking...
+2025-12-05 08:11:50,675 - INFO - Running updates for 19 retailers...
+2025-12-05 08:11:50,675 - INFO - Starting update for absolutecigars
+2025-12-05 08:13:30,401 - INFO - ✓ absolutecigars: 40 products updated in 99.7s
+2025-12-05 08:13:32,403 - INFO - Starting update for atlantic
+2025-12-05 08:14:58,653 - INFO - ✓ atlantic: 44 products updated in 86.2s
+2025-12-05 08:15:00,654 - INFO - Starting update for bighumidor
+2025-12-05 08:18:15,834 - INFO - ✓ bighumidor: 33 products updated in 195.2s
+2025-12-05 08:18:17,835 - INFO - Starting update for bnbtobacco
+2025-12-05 08:19:03,443 - INFO - ✓ bnbtobacco: 25 products updated in 45.6s
+2025-12-05 08:19:05,445 - INFO - Starting update for cigarsdirect
+2025-12-05 08:20:49,600 - INFO - ✓ cigarsdirect: 58 products updated in 104.2s
+2025-12-05 08:20:51,601 - INFO - Starting update for foxcigar
+2025-12-05 08:22:53,699 - INFO - ✓ foxcigar: 44 products updated in 122.1s
+2025-12-05 08:22:55,700 - INFO - Starting update for gothamcigars
+2025-12-05 08:23:57,829 - INFO - ✓ gothamcigars: 31 products updated in 62.1s
+2025-12-05 08:23:59,830 - INFO - Starting update for hilands
+2025-12-05 08:24:25,164 - INFO - ✓ hilands: 12 products updated in 25.3s
+2025-12-05 08:24:27,166 - INFO - Starting update for holts
+2025-12-05 08:25:47,608 - INFO - ✓ holts: 9 products updated in 80.4s
+2025-12-05 08:25:49,612 - INFO - Starting update for neptune
+2025-12-05 08:26:12,567 - INFO - ✓ neptune: 12 products updated in 23.0s
+2025-12-05 08:26:14,568 - INFO - Starting update for planetcigars
+2025-12-05 08:26:26,038 - INFO - ✓ planetcigars: 4 products updated in 11.5s
+2025-12-05 08:26:28,042 - INFO - Starting update for smallbatchcigar
+2025-12-05 08:26:53,141 - INFO - ✓ smallbatchcigar: 11 products updated in 25.1s
+2025-12-05 08:26:55,143 - INFO - Starting update for smokeinn
+2025-12-05 08:27:57,806 - INFO - ✓ smokeinn: 10 products updated in 62.7s
+2025-12-05 08:27:59,807 - INFO - Starting update for tampasweethearts
+2025-12-05 08:28:07,414 - INFO - ✓ tampasweethearts: 4 products updated in 7.6s
+2025-12-05 08:28:09,414 - INFO - Starting update for tobaccolocker
+2025-12-05 08:28:19,722 - INFO - ✓ tobaccolocker: 6 products updated in 10.3s
+2025-12-05 08:28:21,723 - INFO - Starting update for watchcity
+2025-12-05 08:28:30,316 - INFO - ✓ watchcity: 2 products updated in 8.6s
+2025-12-05 08:28:32,317 - INFO - Starting update for cccrafter
+2025-12-05 08:29:16,160 - INFO - ✓ cccrafter: 25 products updated in 43.8s
+2025-12-05 08:29:18,161 - INFO - Starting update for nickscigarworld
+2025-12-05 08:29:38,270 - INFO - ✓ nickscigarworld: 12 products updated in 20.1s
+2025-12-05 08:29:40,271 - INFO - Starting update for twoguys
+2025-12-05 08:29:46,160 - INFO - ✓ twoguys: 3 products updated in 5.9s
+2025-12-05 08:29:48,162 - INFO - Capturing post-update state and tracking changes...
+2025-12-05 08:29:48,598 - INFO - Applying promotional discounts...
+2025-12-05 08:29:48,724 - INFO - ✓ Promotional processing completed successfully
+2025-12-05 08:29:48,725 - INFO - Starting git commit and push...
+2025-12-05 08:29:49,211 - INFO - Git commit successful: Automated price update - 2025-12-05 08:29
+2025-12-05 08:29:51,858 - INFO - Git push successful
+2025-12-05 08:29:51,858 - INFO - ======================================================================
+2025-12-05 08:29:51,858 - INFO - AUTOMATION CYCLE COMPLETE
+2025-12-05 08:29:51,858 - INFO - Duration: 18.0 minutes
+2025-12-05 08:29:51,858 - INFO - Retailers: 19/19 successful
+2025-12-05 08:29:51,858 - INFO - Products Updated: 385
+2025-12-05 08:29:51,858 - INFO - Git Push: SUCCESS
+2025-12-05 08:29:51,858 - INFO - ======================================================================
+2025-12-05 08:29:53,022 - INFO - Notification email sent successfully
