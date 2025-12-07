@@ -1,7 +1,7 @@
 cigar_id,title,url,brand,line,wrapper,vitola,size,box_qty,price,in_stock,current_promotions_applied
 HOYODEMONTERREY|HOYODEMONTERREY|EXCALIBUR|EPICURE|EPICURE|5.25x50|CT|BOX20,Epicure,https://absolutecigars.com/product/hoyo-de-monterrey-excalibur-epicure-natural/,Hoyo de Monterrey,Excalibur,Connecticut Shade,Epicure,5.25x50,20,203.0,True,
 ROMEOYJULIETA|ROMEOYJULIETA|1875|CHURCHILL|CHURCHILL|7x50|IND|BOX25,Churchill,https://absolutecigars.com/product/romeo-y-julieta-churchill/,Romeo y Julieta,1875,Indonesian Shade Grown TBN,Churchill,7x50,25,234.0,True,
-ARTUROFUENTE|ARTUROFUENTE|HEMINGWAY|BESTSELLER|BESTSELLER|4.5x55|CAM|BOX25,Best Seller,https://absolutecigars.com/product/bestseller-cigars/,Arturo Fuente,Hemingway,Cameroon,Best Seller,4.5x55,25,294.0,False,
+ARTUROFUENTE|ARTUROFUENTE|HEMINGWAY|BESTSELLER|BESTSELLER|4.5x55|CAM|BOX25,Best Seller,https://absolutecigars.com/product/bestseller-cigars/,Arturo Fuente,Hemingway,Cameroon,Best Seller,4.5x55,25,234.0,False,
 ASHTON|ASHTON|VSG|ROBUSTO|ROBUSTO|5.5x50|ECU|BOX24,Robusto,https://absolutecigars.com/product/ashton-vsg-robusto/,Ashton,VSG,Ecuadorian Sun Grown,Robusto,5.5x50,24,356.0,True,
 ARTUROFUENTE|ARTUROFUENTE|HEMINGWAY|SIGNATURE|SIGNATURE|6x46|CAM|BOX25,Signature,https://absolutecigars.com/product/hemingway-signature/,Arturo Fuente,Hemingway,Cameroon,Signature,6x46,25,290.0,True,
 PERDOMO|PERDOMO|RESERVE10THANNIVERSARYCHAMPAGNE|EPICURE|EPICURE|6x54|ECU|BOX25,Epicure,https://absolutecigars.com/product/perdomo-reserve-champagne-epicure/,Perdomo,Reserve 10th Anniversary Champagne,Ecuadorian Connecticut,Epicure,6x54,25,245.0,True,
