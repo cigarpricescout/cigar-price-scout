@@ -1,7 +1,8 @@
 """
-CigarsDirect CORRECTED Price Updater - Uses Renamed cigarsdirect_extractor.py
-Imports the corrected extraction logic from your renamed extractor file
-Addresses the 90% -> 100% accuracy issue with pricing extraction
+CigarsDirect Enhanced CSV Updater with Master-Driven Metadata Sync
+ALWAYS syncs ALL metadata from master_cigars.csv (master is authority source)
+Enhanced version: metadata changes in master file auto-propagate to retailer CSV
+Following the proven master-sync pattern for true data consistency
 """
 
 import csv
@@ -22,7 +23,8 @@ except ImportError:
     print("[ERROR] Could not import extract_cigarsdirect_data. Make sure the extractor is in tools/price_monitoring/retailers/cigarsdirect_extractor.py")
     sys.exit(1)
 
-class CigarsDirectCSVUpdaterCorrected:
+
+class CigarsDirectCSVUpdaterWithMaster:
     def __init__(self, csv_path: str = None, master_path: str = None, dry_run: bool = False):
         if csv_path is None:
             self.csv_path = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'cigarsdirect.csv')
@@ -42,7 +44,11 @@ class CigarsDirectCSVUpdaterCorrected:
         """Load the master cigars file"""
         try:
             self.master_df = pd.read_csv(self.master_path)
+            
+            # Convert Box Quantity to numeric
             self.master_df['Box Quantity'] = pd.to_numeric(self.master_df['Box Quantity'], errors='coerce').fillna(0)
+            
+            # Filter to box quantities (5+)
             box_skus = self.master_df[self.master_df['Box Quantity'] >= 5]
             
             print(f"[INFO] Loaded master file with {len(self.master_df)} total cigars")
@@ -72,10 +78,12 @@ class CigarsDirectCSVUpdaterCorrected:
         
         row = matching_rows.iloc[0]
         
+        # Build size string from Length x Ring Gauge
         size = ''
         if pd.notna(row.get('Length')) and pd.notna(row.get('Ring Gauge')):
             size = f"{row.get('Length')}x{row.get('Ring Gauge')}"
         
+        # Get box quantity
         box_qty = 0
         if pd.notna(row.get('Box Quantity')):
             try:
@@ -94,24 +102,28 @@ class CigarsDirectCSVUpdaterCorrected:
         }
     
     def auto_populate_metadata(self, row: Dict) -> Dict:
-        """ALWAYS sync metadata from master file"""
+        """ALWAYS sync metadata from master file (master is authority source)"""
         cigar_id = row.get('cigar_id', '')
         if not cigar_id:
             return row
         
         metadata = self.get_cigar_metadata(cigar_id)
         
+        # ALWAYS override with master data - master file is authority source
         metadata_changes = []
         for field in ['title', 'brand', 'line', 'wrapper', 'vitola', 'size', 'box_qty']:
             if field in metadata and metadata[field]:
                 old_value = row.get(field, '')
                 new_value = metadata[field]
                 
+                # Track changes for logging
                 if old_value != new_value:
                     metadata_changes.append(f"{field}: '{old_value}' -> '{new_value}'")
                 
+                # Always update from master
                 row[field] = new_value
         
+        # Log metadata sync changes
         if metadata_changes:
             print(f"  [MASTER SYNC] Updated metadata: {', '.join(metadata_changes)}")
         
@@ -146,7 +158,7 @@ class CigarsDirectCSVUpdaterCorrected:
             return []
     
     def save_csv(self, data: List[Dict]) -> bool:
-        """Save the updated data back to CSV"""
+        """Save the updated data back to CSV (respects dry_run mode)"""
         if not data:
             print("[ERROR] No data to save")
             return False
@@ -156,19 +168,20 @@ class CigarsDirectCSVUpdaterCorrected:
             return True
         
         try:
-            fieldnames = list(data[0].keys()) if data else [
-                'cigar_id', 'title', 'url', 'brand', 'line', 'wrapper', 
-                'vitola', 'size', 'box_qty', 'price', 'in_stock'
-            ]
+            fieldnames = list(data[0].keys()) if data else ['cigar_id', 'title', 'url', 'brand', 'line', 'wrapper', 'vitola', 'size', 'box_qty', 'price', 'in_stock']
             
+            # Clean the data to ensure no None keys and all required fields exist
             cleaned_data = []
             for row in data:
+                # Remove any None keys
                 clean_row = {k: v for k, v in row.items() if k is not None}
                 
+                # Ensure all required fieldnames exist
                 for field in fieldnames:
                     if field not in clean_row:
                         clean_row[field] = ''
                 
+                # Keep only the fieldnames we want
                 final_row = {field: clean_row.get(field, '') for field in fieldnames}
                 cleaned_data.append(final_row)
             
@@ -184,8 +197,9 @@ class CigarsDirectCSVUpdaterCorrected:
             return False
     
     def update_pricing_data(self, url: str) -> Dict:
-        """Extract live pricing data using renamed cigarsdirect_extractor.py"""
+        """Extract live pricing data from CigarsDirect"""
         try:
+            # Validate URL
             if not url or not url.startswith(('http://', 'https://')):
                 return {'error': f'Invalid URL: "{url}" - URLs must start with http:// or https://'}
             
@@ -207,24 +221,27 @@ class CigarsDirectCSVUpdaterCorrected:
             return {'error': str(e)}
     
     def run_update(self) -> bool:
-        """Run the complete update process with CORRECTED pricing"""
+        """Run the complete update process"""
         mode_str = "[DRY RUN] " if self.dry_run else ""
         print("=" * 70)
-        print(f"{mode_str}CIGARSDIRECT CORRECTED PRICE UPDATE - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        print("CORRECTED PRICING: Uses renamed cigarsdirect_extractor.py with fixed pricing logic")
-        print("MASTER-DRIVEN METADATA SYNC: All metadata synced from master file")
+        print(f"{mode_str}CIGARSDIRECT ENHANCED PRICE UPDATE - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print("MASTER-DRIVEN METADATA SYNC: All metadata always synced from master file")
         print("=" * 70)
         
+        # Load master file
         if not self.load_master_file():
             return False
         
+        # Load CSV
         data = self.load_csv()
         if not data:
             return False
         
+        # Create backup (skip in dry run)
         if not self.dry_run and not self.create_backup():
             return False
         
+        # Update each product
         successful_updates = 0
         failed_updates = 0
         metadata_sync_count = 0
@@ -239,22 +256,25 @@ class CigarsDirectCSVUpdaterCorrected:
             original_row = row.copy()
             row = self.auto_populate_metadata(row)
             
+            # Check if metadata was updated
             metadata_updated = any(original_row.get(field) != row.get(field) 
                                  for field in ['title', 'brand', 'line', 'wrapper', 'vitola', 'size', 'box_qty'])
             if metadata_updated:
                 metadata_sync_count += 1
             
+            # Skip pricing extraction in dry run mode
             if self.dry_run:
                 print("  [DRY RUN] Skipping price extraction")
                 successful_updates += 1
                 continue
             
+            # Skip if no URL
             if not url:
                 print("  [SKIP] No URL provided")
                 failed_updates += 1
                 continue
             
-            # Extract pricing with CORRECTED method
+            # Extract live pricing
             pricing_data = self.update_pricing_data(url)
             
             if 'error' in pricing_data:
@@ -268,7 +288,7 @@ class CigarsDirectCSVUpdaterCorrected:
             if pricing_data.get('in_stock') is not None:
                 row['in_stock'] = pricing_data['in_stock']
             
-            # Show results
+            # Show results with comprehensive pricing info
             price_str = f"${pricing_data.get('price', 'N/A')}"
             
             if pricing_data.get('original_price'):
@@ -286,9 +306,10 @@ class CigarsDirectCSVUpdaterCorrected:
             print(f"  [OK] {price_str}{msrp_str}{discount_str} | {stock_str}")
             successful_updates += 1
         
+        # Save updated data
         if self.save_csv(data):
             print("\n" + "=" * 70)
-            print(f"{mode_str}CORRECTED UPDATE COMPLETE")
+            print(f"{mode_str}UPDATE COMPLETE")
             print(f"Successful updates: {successful_updates}")
             print(f"Failed updates: {failed_updates}")
             print(f"Metadata synced: {metadata_sync_count} products")
@@ -301,29 +322,37 @@ class CigarsDirectCSVUpdaterCorrected:
         else:
             return False
 
+
 def main():
     """Main function for command line usage"""
     import argparse
     
-    parser = argparse.ArgumentParser(description='CORRECTED CigarsDirect price updater - uses renamed cigarsdirect_extractor.py')
+    parser = argparse.ArgumentParser(description='Enhanced CigarsDirect price updater with master-driven metadata sync')
     parser.add_argument('--csv', help='Path to CigarsDirect CSV file')
     parser.add_argument('--master', help='Path to master cigars CSV file')
-    parser.add_argument('--dry-run', action='store_true', help='Show what would be updated without making changes')
+    parser.add_argument('--dry-run', action='store_true', help='Show what metadata would be updated without making changes')
+    parser.add_argument('--test', action='store_true', help='Deprecated: Use --dry-run instead')
     
     args = parser.parse_args()
     
-    updater = CigarsDirectCSVUpdaterCorrected(csv_path=args.csv, master_path=args.master, dry_run=args.dry_run)
+    # Handle deprecated --test flag
+    dry_run = args.dry_run or args.test
     
-    if args.dry_run:
-        print("[DRY RUN MODE] Showing what would be updated without making changes")
+    # Create updater instance
+    updater = CigarsDirectCSVUpdaterWithMaster(csv_path=args.csv, master_path=args.master, dry_run=dry_run)
     
+    if dry_run:
+        print("[DRY RUN MODE] Showing metadata changes without updating files")
+    
+    # Run the update
     success = updater.run_update()
     
     if success:
-        print("\n[SUCCESS] CigarsDirect CORRECTED update completed successfully")
+        print("\n[SUCCESS] CigarsDirect enhanced update completed successfully")
     else:
-        print("\n[FAILED] CigarsDirect CORRECTED update failed")
+        print("\n[FAILED] CigarsDirect enhanced update failed")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()
