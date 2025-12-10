@@ -46,10 +46,16 @@ class WatchCityCigarsCSVUpdaterWithMaster:
             self.master_df = pd.read_csv(self.master_path)
             
             # Convert Box Quantity to numeric
-            self.master_df['Box Quantity'] = pd.to_numeric(self.master_df['Box Quantity'], errors='coerce').fillna(0)
-            
-            # Filter to box quantities (5+)
-            box_skus = self.master_df[self.master_df['Box Quantity'] >= 5]
+            if 'Box Quantity' in self.master_df.columns:
+                self.master_df['Box Quantity'] = pd.to_numeric(self.master_df['Box Quantity'], errors='coerce').fillna(0)
+                box_skus = self.master_df[self.master_df['Box Quantity'] >= 5]
+            else:
+                # Alternative column names
+                if 'Box_Qty' in self.master_df.columns:
+                    self.master_df['Box_Qty'] = pd.to_numeric(self.master_df['Box_Qty'], errors='coerce').fillna(0)
+                    box_skus = self.master_df[self.master_df['Box_Qty'] >= 5]
+                else:
+                    box_skus = self.master_df  # Use all if no box quantity column
             
             print(f"[INFO] Loaded master file with {len(self.master_df)} total cigars")
             print(f"[INFO] Found {len(box_skus)} box SKUs for retail comparison")
@@ -78,25 +84,38 @@ class WatchCityCigarsCSVUpdaterWithMaster:
         
         row = matching_rows.iloc[0]
         
+        # Handle different possible column names
+        def get_column_value(row, possible_names):
+            for name in possible_names:
+                if name in row.index and pd.notna(row[name]):
+                    return row[name]
+            return ''
+        
         # Build size string from Length x Ring Gauge
         size = ''
-        if pd.notna(row.get('Length')) and pd.notna(row.get('Ring Gauge')):
-            size = f"{row.get('Length')}x{row.get('Ring Gauge')}"
+        length = get_column_value(row, ['Length', 'length'])
+        ring_gauge = get_column_value(row, ['Ring Gauge', 'ring_gauge', 'RingGauge'])
+        
+        if length and ring_gauge:
+            size = f"{length}x{ring_gauge}"
+        else:
+            size = get_column_value(row, ['Size', 'size'])
         
         # Get box quantity
-        box_qty = 0
-        if pd.notna(row.get('Box Quantity')):
+        box_qty = 25  # Default
+        box_qty_raw = get_column_value(row, ['Box Quantity', 'Box_Qty', 'box_qty'])
+        if box_qty_raw:
             try:
-                box_qty = int(row.get('Box Quantity', 0))
+                box_qty = int(box_qty_raw)
             except (ValueError, TypeError):
                 pass
         
         return {
-            'title': row.get('product_name', ''),
-            'brand': row.get('Brand', ''), 
-            'line': row.get('Line', ''),
-            'wrapper': row.get('Wrapper', ''),
-            'vitola': row.get('Vitola', ''),
+            'title': get_column_value(row, ['product_name', 'Product_Name', 'Vitola', 'vitola']),
+            'brand': get_column_value(row, ['Brand', 'brand']), 
+            'line': get_column_value(row, ['Line', 'line']),
+            'wrapper': get_column_value(row, ['Wrapper', 'wrapper']),
+            'vitola': get_column_value(row, ['Vitola', 'vitola']),
             'size': size,
             'box_qty': box_qty
         }

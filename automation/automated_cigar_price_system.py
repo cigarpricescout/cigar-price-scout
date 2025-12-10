@@ -214,8 +214,25 @@ class AutomatedCigarPriceSystem:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS retailer_runs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    automation_run_id INTEGER,
+                    retailer TEXT NOT NULL,
+                    success BOOLEAN NOT NULL,
+                    duration_seconds REAL,
+                    products_updated INTEGER,
+                    products_failed INTEGER,
+                    error TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (automation_run_id) REFERENCES automation_runs(id)
+                )
+            ''')
             
             # Create indexes for performance
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_retailer_runs_run_id ON retailer_runs(automation_run_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_retailer_runs_retailer ON retailer_runs(retailer)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_price_history_retailer_date ON price_history(retailer, date)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_price_changes_date ON price_changes(date)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_stock_changes_date ON stock_changes(date)')
@@ -590,9 +607,44 @@ class AutomatedCigarPriceSystem:
             
             conn.commit()
             conn.close()
+
+            return run_id
             
         except Exception as e:
             self.logger.error(f"Failed to log automation run: {e}")
+            return None
+        
+    def log_retailer_runs(self, automation_run_id):
+        """Log per-retailer results for this automation run"""
+        if automation_run_id is None:
+            self.logger.warning("Skipping retailer_runs logging because automation_run_id is None")
+            return
+
+        try:
+            conn = sqlite3.connect(self.historical_db_path, detect_types=0)
+            cursor = conn.cursor()
+
+            for retailer_name, result in self.run_results.items():
+                cursor.execute('''
+                    INSERT INTO retailer_runs
+                    (automation_run_id, retailer, success, duration_seconds,
+                     products_updated, products_failed, error)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    automation_run_id,
+                    retailer_name,
+                    1 if result.get('success') else 0,
+                    result.get('duration'),
+                    result.get('products_updated'),
+                    result.get('products_failed'),
+                    result.get('error'),
+                ))
+
+            conn.commit()
+            conn.close()
+
+        except Exception as e:
+            self.logger.error(f"Failed to log retailer runs: {e}")
 
     def apply_promotions(self) -> bool:
         """Apply promotional discounts after price updates"""
@@ -695,7 +747,8 @@ class AutomatedCigarPriceSystem:
             self.logger.info("=" * 70)
             
             # 7. Log to database
-            self.log_automation_run(start_time, end_time, git_success, errors)
+            automation_run_id = self.log_automation_run(start_time, end_time, git_success, errors)
+            self.log_retailer_runs(automation_run_id)
             
             # 8. Send notifications
             email_config = self.config['email_notifications']
