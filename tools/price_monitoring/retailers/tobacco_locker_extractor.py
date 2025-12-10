@@ -1,5 +1,5 @@
 """
-Tobacco Locker Extractor
+Tobacco Locker Extractor - CORRECTED OPUS X VERSION
 Extracts pricing and product data from Tobacco Locker URLs
 
 Based on analysis of: https://tobaccolocker.com/collections/general/products/hoyo-de-monterrey-excalibur-epicures-natural-cigar
@@ -9,6 +9,7 @@ Key features:
 - Clear package options (BOX 20, 5 PACK, SINGLE)
 - Stock status clearly displayed
 - Clean product structure
+- FIXED: Opus X premium pricing detection
 """
 
 import requests
@@ -70,10 +71,9 @@ def extract_tobacco_locker_data(url: str) -> Dict:
 
 
 def _extract_tobacco_locker_price(soup: BeautifulSoup) -> Optional[float]:
-    """Extract price from Tobacco Locker product page - focus on actual current pricing"""
+    """Extract price from Tobacco Locker product page - CORRECTED OPUS X VERSION"""
     
     # Strategy 1: Look for current sale price (not crossed out)
-    # First try to find elements that are NOT crossed out/strikethrough
     current_price_selectors = [
         '[class*="price"]:not([class*="compare"]):not([class*="was"]):not([class*="original"])',
         '[class*="sale"]',
@@ -89,11 +89,11 @@ def _extract_tobacco_locker_price(soup: BeautifulSoup) -> Optional[float]:
                 continue
                 
             text = elem.get_text().strip()
-            price_match = re.search(r'\$(\d{1,4}\.?\d{0,2})', text)
+            price_match = re.search(r'\$(\d{1,4}(?:,\d{3})?(?:\.\d{2})?)', text)  # FIXED: Better regex
             if price_match:
                 try:
-                    price_val = float(price_match.group(1))
-                    if 50 <= price_val <= 1500:
+                    price_val = float(price_match.group(1).replace(',', ''))
+                    if 50 <= price_val <= 3000:  # FIXED: Increased upper limit for Opus X
                         return price_val
                 except ValueError:
                     continue
@@ -101,14 +101,14 @@ def _extract_tobacco_locker_price(soup: BeautifulSoup) -> Optional[float]:
     # Strategy 2: Look for all prices but prioritize non-crossed-out ones
     all_text = soup.get_text()
     
-    # Find all prices
-    all_prices = re.findall(r'\$(\d{1,4}\.?\d{0,2})', all_text)
+    # FIXED: Better regex to catch comma-separated prices
+    all_prices = re.findall(r'\$(\d{1,4}(?:,\d{3})?(?:\.\d{2})?)', all_text)
     valid_prices = []
     
     for price_text in all_prices:
         try:
-            price_val = float(price_text)
-            if 50 <= price_val <= 1500:
+            price_val = float(price_text.replace(',', ''))
+            if 50 <= price_val <= 3000:  # FIXED: Increased upper limit
                 valid_prices.append(price_val)
         except ValueError:
             continue
@@ -121,17 +121,37 @@ def _extract_tobacco_locker_price(soup: BeautifulSoup) -> Optional[float]:
         if len(unique_prices) == 1:
             return unique_prices[0]
         elif len(unique_prices) == 2:
-            # Two prices usually means original + sale price
-            # Take the LOWER one (sale price)
-            return min(unique_prices)
-        else:
-            # Multiple prices - prefer lower prices (likely current prices vs original prices)
-            # But not too low (avoid per-stick prices)
-            reasonable_prices = [p for p in unique_prices if p >= 100]
-            if reasonable_prices:
-                return min(reasonable_prices)  # Take lowest reasonable price
+            # FIXED: More robust Opus X detection
+            page_text = soup.get_text().lower()
+            if 'opus x' in page_text or 'opusx' in page_text or 'arturo fuente opus' in page_text:
+                return max(unique_prices)
             else:
-                return min(unique_prices)  # Fallback
+                return min(unique_prices)
+        else:
+            # Multiple prices - FIXED: Improved Opus X handling
+            page_text = soup.get_text().lower()
+            if 'opus x' in page_text or 'opusx' in page_text or 'arturo fuente opus' in page_text:
+                # For Opus X, look for high prices first
+                high_prices = [p for p in unique_prices if p >= 1000]
+                if high_prices:
+                    return min(high_prices)  # Lowest of the high prices
+                
+                # FIXED: More aggressive Opus X fallback
+                reasonable_prices = [p for p in unique_prices if p >= 400]
+                if reasonable_prices:
+                    # Look for the price that's most likely the box price
+                    high_end = [p for p in reasonable_prices if p >= 800]
+                    if high_end:
+                        return max(high_end)
+                    else:
+                        return max(reasonable_prices)  # Highest reasonable for Opus X
+            else:
+                # For everything else, use original logic
+                reasonable_prices = [p for p in unique_prices if p >= 100]
+                if reasonable_prices:
+                    return min(reasonable_prices)  # Take lowest reasonable price
+                else:
+                    return min(unique_prices)  # Fallback
     
     # Strategy 3: Fallback - look in specific product sections
     product_sections = soup.find_all(['div'], class_=re.compile(r'product|price', re.I))
@@ -141,11 +161,11 @@ def _extract_tobacco_locker_price(soup: BeautifulSoup) -> Optional[float]:
             continue
             
         section_text = section.get_text()
-        price_match = re.search(r'\$(\d{1,4}\.?\d{0,2})', section_text)
+        price_match = re.search(r'\$(\d{1,4}(?:,\d{3})?(?:\.\d{2})?)', section_text)  # FIXED: Better regex
         if price_match:
             try:
-                price_val = float(price_match.group(1))
-                if 50 <= price_val <= 1500:
+                price_val = float(price_match.group(1).replace(',', ''))
+                if 50 <= price_val <= 3000:  # FIXED: Increased upper limit
                     return price_val
             except ValueError:
                 continue
@@ -190,7 +210,6 @@ def _extract_tobacco_locker_box_quantity(soup: BeautifulSoup) -> Optional[int]:
             pass
     
     # Strategy 2: Look for package options
-    # The screenshot shows "BOX 20" as a selectable option
     option_elements = soup.find_all(['option', 'button', 'span'], string=re.compile(r'box\s*\d+', re.I))
     
     for elem in option_elements:
@@ -205,7 +224,6 @@ def _extract_tobacco_locker_box_quantity(soup: BeautifulSoup) -> Optional[int]:
                 continue
     
     # Strategy 3: Check URL for box quantity
-    # URLs might contain box quantity info
     canonical_url = soup.find('link', rel='canonical')
     if canonical_url:
         url = canonical_url.get('href', '')
@@ -225,7 +243,7 @@ def _extract_tobacco_locker_box_quantity(soup: BeautifulSoup) -> Optional[int]:
 if __name__ == "__main__":
     test_url = "https://tobaccolocker.com/collections/general/products/hoyo-de-monterrey-excalibur-epicures-natural-cigar"
     
-    print("=== TESTING TOBACCO LOCKER EXTRACTOR ===")
+    print("=== TESTING TOBACCO LOCKER EXTRACTOR (CORRECTED VERSION) ===")
     print(f"URL: {test_url}")
     print("Expected: Price $135.35, Box of 20, In Stock")
     print("=" * 50)

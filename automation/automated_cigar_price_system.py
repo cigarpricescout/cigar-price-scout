@@ -584,15 +584,19 @@ class AutomatedCigarPriceSystem:
 
     def log_automation_run(self, start_time: datetime, end_time: datetime, 
                           git_success: bool, errors: List[str]):
-        """Log this automation run to the database"""
+        """Log this automation run to the database and return its ID"""
         try:
             conn = sqlite3.connect(self.historical_db_path, detect_types=0)
             cursor = conn.cursor()
             
             duration = int((end_time - start_time).total_seconds())
             retailers_attempted = len(self.run_results)
-            retailers_successful = sum(1 for r in self.run_results.values() if r['success'])
-            products_updated = sum(r.get('products_updated', 0) for r in self.run_results.values())
+            retailers_successful = sum(
+                1 for r in self.run_results.values() if r.get('success')
+            )
+            products_updated = sum(
+                r.get('products_updated', 0) for r in self.run_results.values()
+            )
             
             cursor.execute('''
                 INSERT INTO automation_runs 
@@ -602,8 +606,12 @@ class AutomatedCigarPriceSystem:
             ''', (
                 start_time.date(), start_time, end_time, duration,
                 retailers_attempted, retailers_successful, products_updated,
-                json.dumps(errors) if errors else None, git_success
+                json.dumps(errors) if errors else None,
+                git_success
             ))
+            
+            # 🔹 This is what was missing
+            run_id = cursor.lastrowid
             
             conn.commit()
             conn.close()

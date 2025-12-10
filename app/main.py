@@ -82,6 +82,8 @@ except Exception:
             return 0
         elif retailer_key == 'holts' and base_dollars >= 150:
             return 0
+        elif retailer_key == 'iheartcigars' and base_dollars >= 99:
+            return 0  # Free shipping over $99
         elif retailer_key == 'lmcigars' and base_dollars >= 100:
             return 0
         elif retailer_key == 'neptune' and base_dollars >= 99:
@@ -196,6 +198,7 @@ except Exception:
             'pyramidcigars': ['FL'],  # Estimated Florida
             'thecigarshouse': ['FL'],  # Estimated Florida  
             'tobacconistofgreenwich': ['CT'],  # Greenwich is in Connecticut
+            'iheartcigars': ['FL'],
         }
         
         # Load tax rates
@@ -388,6 +391,7 @@ RETAILERS = [
     {"key": "pyramidcigars", "name": "Pyramid Cigars", "csv": f"{CSV_PATH_PREFIX}/pyramidcigars.csv", "authorized": False},
     {"key": "thecigarshouse", "name": "The Cigars House", "csv": f"{CSV_PATH_PREFIX}/thecigarshouse.csv", "authorized": False},
     {"key": "tobacconistofgreenwich", "name": "Tobacconist of Greenwich", "csv": f"{CSV_PATH_PREFIX}/tobacconistofgreenwich.csv", "authorized": False},
+    {"key": "iheartcigars", "name": "iHeart Cigars", "csv": f"{CSV_PATH_PREFIX}/iheartcigars.csv", "authorized": False},
 ]
 
 # Enhanced CSV loader with wrapper and vitola support
@@ -1129,21 +1133,6 @@ async def sitemap():
                 "priority": "0.9",
                 "changefreq": "weekly"
             })
-    
-    # Generate XML
-    xml_content = '<?xml version="1.0" encoding="UTF-8"?>\n'
-    xml_content += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
-    
-    for url_data in urls:
-        xml_content += f'  <url>\n'
-        xml_content += f'    <loc>{url_data["url"]}</loc>\n'
-        xml_content += f'    <priority>{url_data["priority"]}</priority>\n'
-        xml_content += f'    <changefreq>{url_data["changefreq"]}</changefreq>\n'
-        xml_content += f'  </url>\n'
-    
-    xml_content += '</urlset>'
-    
-    return Response(content=xml_content, media_type="application/xml")
     
     # Generate XML
     xml_content = '<?xml version="1.0" encoding="UTF-8"?>\n'
