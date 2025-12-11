@@ -1,6 +1,6 @@
-from fastapi import FastAPI, Query, Form
+from fastapi import FastAPI, Query, Form, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, FileResponse, Response
+from fastapi.responses import HTMLResponse, FileResponse, Response, RedirectResponse
 from pathlib import Path
 import csv
 from typing import Optional
@@ -10,6 +10,10 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
 import os
+import sqlite3
+import hashlib
+import psycopg2
+from urllib.parse import quote_plus
 
 try:
     from apscheduler.schedulers.background import BackgroundScheduler
@@ -283,30 +287,15 @@ def run_awin_processor():
     except Exception as e:
         logger.error(f"Failed to run Awin processor: {e}")
 
-def start_scheduler():
-    """Start the background scheduler"""
-    scheduler = BackgroundScheduler()
-    
-    # CJ feeds at 3:00 AM Pacific
-    scheduler.add_job(
-        run_feed_processor,
-        CronTrigger(hour=3, minute=0, timezone='America/Los_Angeles'),
-        id='cj_feed_processor',
-        name='Process CJ affiliate feeds',
-        replace_existing=True
-    )
-    
-    # Awin BnB Tobacco feed at 3:30 AM Pacific
-    scheduler.add_job(
-        run_awin_processor,
-        CronTrigger(hour=3, minute=30, timezone='America/Los_Angeles'),
-        id='awin_feed_processor',
-        name='Process Awin BnB Tobacco feed',
-        replace_existing=True
-    )
-    
-    scheduler.start()
-    logger.info("âœ“ Scheduler started - CJ feeds at 3 AM, Awin at 3:30 AM Pacific")    
+BASE_DIR = Path(__file__).resolve().parent
+DATA_DIR = BASE_DIR / "data"
+
+def get_analytics_conn():
+    """Connect to Postgres using ANALYTICS_DB_URL from Railway."""
+    db_url = os.getenv("ANALYTICS_DB_URL")
+    if not db_url:
+        raise RuntimeError("ANALYTICS_DB_URL is not set")
+    return psycopg2.connect(db_url)  
 
 # Dynamic path resolution for local vs Railway deployment
 import os
@@ -320,11 +309,78 @@ else:
 app = FastAPI()
 app.mount("/static", StaticFiles(directory=STATIC_PATH), name="static")
 
+def send_notification_email(subject: str, body: str, to_email: str = "info@cigarpricescout.com"):
+    """Send notification email via Namecheap Private Email SMTP"""
+    try:
+        logger.info(f"Sending email to {to_email}: {subject}")
+        
+        # Create email message
+        msg = MIMEText(body)
+        msg['Subject'] = subject
+        msg['From'] = "info@cigarpricescout.com"  # Send FROM your business email
+        msg['To'] = to_email  # Send TO your business email (same address)
+        
+        # Send via Namecheap Private Email SMTP
+        server = smtplib.SMTP('mail.privateemail.com', 587)
+        server.starttls()
+        server.login('info@cigarpricescout.com', 'slaya001')
+        server.send_message(msg)
+        server.quit()
+        
+        logger.info(f"Email sent successfully to {to_email}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Email sending failed: {e}")
+        return False
+
+def init_analytics_tables():
+    """Create analytics tables in Postgres if they don't exist."""
+    conn = get_analytics_conn()
+    cur = conn.cursor()
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS search_events (
+            id SERIAL PRIMARY KEY,
+            ts TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+            brand TEXT,
+            line TEXT,
+            wrapper TEXT,
+            vitola TEXT,
+            size TEXT,
+            zip_prefix TEXT,
+            cid TEXT,
+            ip_hash TEXT,
+            user_agent TEXT
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS click_events (
+            id SERIAL PRIMARY KEY,
+            ts TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+            retailer TEXT,
+            cid TEXT,
+            target_url TEXT,
+            ip_hash TEXT,
+            user_agent TEXT
+        )
+    """)
+
+    conn.commit()
+    conn.close()
+
+@app.on_event("startup")
+def startup_event():
+    """Initialize analytics tables on app startup."""
+    init_analytics_tables()
+    # Later, if you re-enable the scheduler, you can also call start_scheduler() here.
+
 #@app.on_event("startup")
 #async def startup_event():
 #    """Initialize scheduler when app starts"""
 #    start_scheduler()
-#    logger.info("âœ“ Application started with scheduled feed processing")
+#    logger.info("✓ Application started with scheduled feed processing")
 
 RETAILERS = [
     {"key": "abcfws", "name": "ABC Fine Wine & Spirits", "csv": f"{CSV_PATH_PREFIX}/abcfws.csv", "authorized": False},
@@ -642,14 +698,49 @@ def compare(
     size: Optional[str] = Query(None),
     zip: str = Query("", description="ZIP code for shipping/tax estimates"),
     authorized_only: bool = Query(False, description="Show only authorized dealers"),
+    request: Request = None,
 ):
     """Compare prices for a specific cigar across all retailers with wrapper/vitola support"""
+    
+    # --- Analytics: log search event ---
+    try:
+        ua = request.headers.get("user-agent", "") if request else ""
+        ip = request.client.host if (request and request.client) else ""
+        ip_hash = hashlib.sha256(ip.encode()).hexdigest() if ip else None
+        zip_prefix = zip[:3] if zip else None
+
+        conn = get_analytics_conn()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO search_events
+            (brand, line, wrapper, vitola, size, zip_prefix, cid, ip_hash, user_agent)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                brand,
+                line,
+                wrapper,
+                vitola,
+                size,
+                zip_prefix,
+                None,  # cid can be filled later if you pick a canonical match
+                ip_hash,
+                ua,
+            ),
+        )
+
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[analytics] Search log failed: {e}")
     
     # Get state from ZIP for shipping/tax calculations
     state = zip_to_state(zip) if zip else 'OR'
     
     # Load all products and filter by criteria
     all_products = load_all_products()
+
     matching_products = []
     
     for p in all_products:
@@ -709,7 +800,7 @@ def compare(
             "state": state,
             "results": []
         }
-    
+
     # Calculate delivered prices and build results
     results = []
     in_stock_prices = []
@@ -765,7 +856,8 @@ def compare(
             else:
                 price_context = "Market"
 
-        # Build result entry
+                tracking_url = f"/go?retailer={product.retailer_key}&cid={product.cid}&url={quote_plus(product.url)}"
+
         result = {
             "retailer": product.retailer_name,
             "product": product_name,
@@ -782,7 +874,7 @@ def compare(
             "delivered_after_promo": f"${final_delivered_cents/100:.2f}",
             "url": product.url,
             "oos": not product.in_stock,
-            "cheapest": False,  # Will be set below
+            "cheapest": False,
             "authorized": is_authorized,
             "price_context": price_context,
             "current_promotions_applied": product.current_promotions_applied,
@@ -913,6 +1005,8 @@ def compare_all(
             final_delivered_cents = delivered_cents
             promo_code = None
 
+        tracking_url = f"/go?retailer={product.retailer_key}&cid={product.cid}&url={quote_plus(product.url)}"
+
         result = {
             "retailer": product.retailer_name,
             "product": product_name,
@@ -1010,44 +1104,82 @@ Submitted: {submission_time}
 ============================================
 """
         logger.info(full_request)
-        
+        send_notification_email(subject, full_request, "info@cigarpricescout.com")
         return {"status": "success", "message": "Your box pricing request has been submitted successfully!"}
         
     except Exception as e:
         logger.error(f"Error processing box pricing request: {e}")
         return {"status": "error", "message": "There was an error submitting your request. Please try again."}
 
-@app.post("/api/data-issue-report")
-async def submit_data_issue_report(request: DataIssueReport):
+@app.post("/api/contact")
+async def submit_contact_form(request: Request):
     try:
-        # Log the complete issue report
-        submission_time = datetime.now().strftime('%Y-%m-%d at %H:%M:%S')
+        data = await request.json()
+        
+        subject = f"Contact Form: {data.get('subject', 'General Inquiry')}"
+        
+        full_message = f"""
+========== NEW CONTACT FORM SUBMISSION ==========
+SUBJECT: {data.get('subject', 'Not specified')}
+
+FROM:
+- Name: {data.get('name', 'Not provided')}
+- Email: {data.get('email', 'Not provided')}
+
+MESSAGE:
+{data.get('message', 'No message provided')}
+
+Submitted: {datetime.now().strftime('%Y-%m-%d at %H:%M:%S')}
+================================================
+"""
+        
+        logger.info(full_message)
+        send_notification_email(subject, full_message, "info@cigarpricescout.com")
+        return {"status": "success", "message": "Your message has been sent successfully!"}
+        
+    except Exception as e:
+        logger.error(f"Error processing contact form: {e}")
+        return {"status": "error", "message": "There was an error sending your message. Please try again."}
+
+@app.post("/api/data-issue-report")
+async def submit_data_issue_report(request: Request):
+    try:
+        # LOAD THE JSON DATA FIRST
+        data = await request.json()
+        
+        # DEFINE SUBJECT VARIABLE
+        subject = f"Data Issue Report: {data.get('issue_type', 'General Issue')}"
+        
         full_report = f"""
 ========== NEW DATA ISSUE REPORT ==========
-SEARCH CONTEXT: {request.search_context}
-RETAILER: {request.retailer}
-ISSUE TYPE: {request.issue_type}
+SEARCH CONTEXT: {data.get('search_context', 'Not specified')}
+RETAILER: {data.get('retailer', 'Not specified')}
+ISSUE TYPE: {data.get('issue_type', 'Not specified')}
 
 PROBLEM DESCRIPTION:
-{request.problem_description}
+{data.get('problem_description', 'No description provided')}
 
 RECOMMENDED SOLUTION:
-{request.recommended_solution}
+{data.get('recommended_solution', 'No solution provided')}
 
 REPORTER INFO:
-- Name: {request.name}
-- Email: {request.email}
+- Name: {data.get('name', 'Not provided')}
+- Email: {data.get('email', 'Not provided')}
 
 TECHNICAL INFO:
-- URL: {request.current_url}
-- Timestamp: {request.timestamp}
+- URL: {data.get('current_url', 'Not provided')}
+- Timestamp: {data.get('timestamp', 'Not provided')}
 
-Submitted: {submission_time}
+Submitted: {datetime.now().strftime('%Y-%m-%d at %H:%M:%S')}
 ==========================================
 """
+        
         logger.info(full_report)
         
-        return {"status": "success", "message": "Your data issue report has been submitted successfully! We'll review it and make corrections as needed."}
+        # SEND EMAIL NOTIFICATION
+        send_notification_email(subject, full_report, "info@cigarpricescout.com")
+        
+        return {"status": "success", "message": "Your data issue report has been submitted successfully!"}
         
     except Exception as e:
         logger.error(f"Error processing data issue report: {e}")
@@ -1148,6 +1280,111 @@ async def sitemap():
     xml_content += '</urlset>'
     
     return Response(content=xml_content, media_type="application/xml")
+
+# Add this endpoint to your main.py after your other routes (around line 1200)
+
+@app.get("/debug/init_analytics")
+def debug_init_analytics():
+    """
+    One-time helper: create analytics tables (search_events, click_events) in Postgres.
+    You can hit this endpoint once after deploy to ensure tables exist.
+    """
+    conn = get_analytics_conn()
+    cur = conn.cursor()
+
+    # Create search_events table
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS search_events (
+            id SERIAL PRIMARY KEY,
+            ts TIMESTAMPTZ DEFAULT NOW(),
+            brand TEXT,
+            line TEXT,
+            wrapper TEXT,
+            vitola TEXT,
+            size TEXT,
+            zip_prefix TEXT,
+            cid TEXT,
+            ip_hash TEXT,
+            user_agent TEXT
+        )
+    """)
+
+    # Create click_events table
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS click_events (
+            id SERIAL PRIMARY KEY,
+            ts TIMESTAMPTZ DEFAULT NOW(),
+            retailer TEXT,
+            cid TEXT,
+            target_url TEXT,
+            ip_hash TEXT,
+            user_agent TEXT
+        )
+    """)
+
+    conn.commit()
+    conn.close()
+
+    return {"status": "ok", "message": "Analytics tables ensured in Postgres"}
+
+@app.get("/go")
+def go(retailer: str, cid: str, url: str, request: Request = None):
+    """Track retailer click-outs and redirect to target URL"""
+    # Log click event
+    try:
+        ua = request.headers.get("user-agent", "") if request else ""
+        ip = request.client.host if request and request.client else ""
+        ip_hash = hashlib.sha256(ip.encode()).hexdigest() if ip else None
+
+        conn = get_analytics_conn()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO click_events (retailer, cid, target_url, ip_hash, user_agent)
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            (retailer, cid, url, ip_hash, ua),
+        )
+        conn.commit()
+        conn.close()
+
+    except Exception as e:
+        print(f"[analytics] Click log failed: {e}")
+
+    return RedirectResponse(url, status_code=302)
+
+@app.get("/click")
+def log_click(retailer: str, cid: str, request: Request):
+    """
+    Logs when a user clicks out to a retailer's website.
+    """
+    try:
+        # Get IP without storing the real address
+        client_ip = request.client.host
+        ip_hash = hashlib.sha256(client_ip.encode()).hexdigest()
+
+        # Get user agent
+        user_agent = request.headers.get("User-Agent", "unknown")
+
+        # Connect to analytics DB
+        conn = get_analytics_conn()
+        cur = conn.cursor()
+
+        # Insert record
+        cur.execute("""
+            INSERT INTO click_events (retailer, cid, ip_hash, user_agent)
+            VALUES (%s, %s, %s, %s);
+        """, (retailer, cid, ip_hash, user_agent))
+
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        return {"status": "ok"}
+
+    except Exception as e:
+        print("CLICK ERROR:", e)
+        return {"status": "error", "detail": str(e)}
 
 @app.post("/admin/trigger-feed-update")
 async def trigger_feed_update():
