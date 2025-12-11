@@ -1143,37 +1143,44 @@ Submitted: {datetime.now().strftime('%Y-%m-%d at %H:%M:%S')}
         return {"status": "error", "message": "There was an error sending your message. Please try again."}
 
 @app.post("/api/data-issue-report")
-async def submit_data_issue_report(request: DataIssueReport):
+async def submit_data_issue_report(request: Request):
     try:
-        # Log the complete issue report
-        submission_time = datetime.now().strftime('%Y-%m-%d at %H:%M:%S')
+        # LOAD THE JSON DATA FIRST
+        data = await request.json()
+        
+        # DEFINE SUBJECT VARIABLE
+        subject = f"Data Issue Report: {data.get('issue_type', 'General Issue')}"
+        
         full_report = f"""
 ========== NEW DATA ISSUE REPORT ==========
-SEARCH CONTEXT: {request.search_context}
-RETAILER: {request.retailer}
-ISSUE TYPE: {request.issue_type}
+SEARCH CONTEXT: {data.get('search_context', 'Not specified')}
+RETAILER: {data.get('retailer', 'Not specified')}
+ISSUE TYPE: {data.get('issue_type', 'Not specified')}
 
 PROBLEM DESCRIPTION:
-{request.problem_description}
+{data.get('problem_description', 'No description provided')}
 
 RECOMMENDED SOLUTION:
-{request.recommended_solution}
+{data.get('recommended_solution', 'No solution provided')}
 
 REPORTER INFO:
-- Name: {request.name}
-- Email: {request.email}
+- Name: {data.get('name', 'Not provided')}
+- Email: {data.get('email', 'Not provided')}
 
 TECHNICAL INFO:
-- URL: {request.current_url}
-- Timestamp: {request.timestamp}
+- URL: {data.get('current_url', 'Not provided')}
+- Timestamp: {data.get('timestamp', 'Not provided')}
 
-Submitted: {submission_time}
+Submitted: {datetime.now().strftime('%Y-%m-%d at %H:%M:%S')}
 ==========================================
 """
+        
         logger.info(full_report)
-        subject = f"Data Issue Report: {data.get('issue_type', 'General Issue')}"
+        
+        # SEND EMAIL NOTIFICATION
         send_notification_email(subject, full_report, "info@cigarpricescout.com")
-        return {"status": "success", "message": "Your data issue report has been submitted successfully! We'll review it and make corrections as needed."}
+        
+        return {"status": "success", "message": "Your data issue report has been submitted successfully!"}
         
     except Exception as e:
         logger.error(f"Error processing data issue report: {e}")
