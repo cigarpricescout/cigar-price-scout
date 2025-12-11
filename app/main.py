@@ -1,6 +1,6 @@
-from fastapi import FastAPI, Query, Form
+from fastapi import FastAPI, Query, Form, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, FileResponse, Response
+from fastapi.responses import HTMLResponse, FileResponse, Response, RedirectResponse
 from pathlib import Path
 import csv
 from typing import Optional
@@ -10,6 +10,8 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
 import os
+import sqlite3
+import hashlib
 
 try:
     from apscheduler.schedulers.background import BackgroundScheduler
@@ -283,6 +285,15 @@ def run_awin_processor():
     except Exception as e:
         logger.error(f"Failed to run Awin processor: {e}")
 
+BASE_DIR = Path(__file__).resolve().parent
+DATA_DIR = BASE_DIR / "data"
+ANALYTICS_DB_PATH = DATA_DIR / "historical_prices.db"
+
+def get_analytics_conn():
+    conn = sqlite3.connect(ANALYTICS_DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
 def start_scheduler():
     """Start the background scheduler"""
     scheduler = BackgroundScheduler()
@@ -320,11 +331,53 @@ else:
 app = FastAPI()
 app.mount("/static", StaticFiles(directory=STATIC_PATH), name="static")
 
+def init_analytics_tables():
+    """Create analytics tables if they don't exist."""
+    conn = get_analytics_conn()
+    cur = conn.cursor()
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS search_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            brand TEXT,
+            line TEXT,
+            wrapper TEXT,
+            vitola TEXT,
+            size TEXT,
+            zip_prefix TEXT,
+            cid TEXT,
+            ip_hash TEXT,
+            user_agent TEXT
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS click_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            retailer TEXT,
+            cid TEXT,
+            target_url TEXT,
+            ip_hash TEXT,
+            user_agent TEXT
+        )
+    """)
+
+    conn.commit()
+    conn.close()
+
+@app.on_event("startup")
+def startup_event():
+    """Initialize analytics tables on app startup."""
+    init_analytics_tables()
+    # Later, if you re-enable the scheduler, you can also call start_scheduler() here.
+
 #@app.on_event("startup")
 #async def startup_event():
 #    """Initialize scheduler when app starts"""
 #    start_scheduler()
-#    logger.info("âœ“ Application started with scheduled feed processing")
+#    logger.info("✓ Application started with scheduled feed processing")
 
 RETAILERS = [
     {"key": "abcfws", "name": "ABC Fine Wine & Spirits", "csv": f"{CSV_PATH_PREFIX}/abcfws.csv", "authorized": False},
@@ -642,14 +695,45 @@ def compare(
     size: Optional[str] = Query(None),
     zip: str = Query("", description="ZIP code for shipping/tax estimates"),
     authorized_only: bool = Query(False, description="Show only authorized dealers"),
+    request: Request = None,
 ):
     """Compare prices for a specific cigar across all retailers with wrapper/vitola support"""
+    
+    # --- Analytics: log search event ---
+    try:
+        ua = request.headers.get("user-agent", "") if request else ""
+        ip = request.client.host if (request and request.client) else ""
+        ip_hash = hashlib.sha256(ip.encode()).hexdigest() if ip else None
+        zip_prefix = zip[:3] if zip else None
+
+        conn = get_analytics_conn()
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO search_events
+            (brand, line, wrapper, vitola, size, zip_prefix, cid, ip_hash, user_agent)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            brand,
+            line,
+            wrapper,
+            vitola,
+            size,
+            zip_prefix,
+            None,  # cid can be filled later if you pick a canonical match
+            ip_hash,
+            ua,
+        ))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[analytics] Search log failed: {e}")
     
     # Get state from ZIP for shipping/tax calculations
     state = zip_to_state(zip) if zip else 'OR'
     
     # Load all products and filter by criteria
     all_products = load_all_products()
+
     matching_products = []
     
     for p in all_products:
@@ -709,7 +793,7 @@ def compare(
             "state": state,
             "results": []
         }
-    
+
     # Calculate delivered prices and build results
     results = []
     in_stock_prices = []
@@ -1148,6 +1232,30 @@ async def sitemap():
     xml_content += '</urlset>'
     
     return Response(content=xml_content, media_type="application/xml")
+
+# Add this endpoint to your main.py after your other routes (around line 1200)
+
+@app.get("/go")
+def go(retailer: str, cid: str, url: str, request: Request = None):
+    """Track retailer click-outs and redirect to target URL"""
+    # Log click event
+    try:
+        ua = request.headers.get("user-agent", "") if request else ""
+        ip = request.client.host if request and request.client else ""
+        ip_hash = hashlib.sha256(ip.encode()).hexdigest() if ip else None
+
+        conn = get_analytics_conn()
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO click_events (retailer, cid, target_url, ip_hash, user_agent)
+            VALUES (?, ?, ?, ?, ?)
+        """, (retailer, cid, url, ip_hash, ua))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[analytics] Click log failed: {e}")
+
+    return RedirectResponse(url, status_code=302)
 
 @app.post("/admin/trigger-feed-update")
 async def trigger_feed_update():

@@ -24,7 +24,7 @@ def extract_iheartcigars_data_production(url):
     
     try:
         print(f"    [EXTRACT] Fetching iHeartCigars page...")
-        time.sleep(1.0)  # 1 req/sec compliance
+        time.sleep(3.0)  # 1 req/sec compliance
         
         response = requests.get(url, headers=headers, timeout=10)  # 10s timeout
         response.raise_for_status()

@@ -1,6 +1,6 @@
-from fastapi import FastAPI, Query, Form, Request
+from fastapi import FastAPI, Query, Form
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, FileResponse, Response, RedirectResponse
+from fastapi.responses import HTMLResponse, FileResponse, Response
 from pathlib import Path
 import csv
 from typing import Optional
@@ -10,9 +10,6 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
 import os
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 
 try:
     from apscheduler.schedulers.background import BackgroundScheduler
@@ -85,6 +82,8 @@ except Exception:
             return 0
         elif retailer_key == 'holts' and base_dollars >= 150:
             return 0
+        elif retailer_key == 'iheartcigars' and base_dollars >= 99:
+            return 0  # Free shipping over $99
         elif retailer_key == 'lmcigars' and base_dollars >= 100:
             return 0
         elif retailer_key == 'neptune' and base_dollars >= 99:
@@ -199,6 +198,7 @@ except Exception:
             'pyramidcigars': ['FL'],  # Estimated Florida
             'thecigarshouse': ['FL'],  # Estimated Florida  
             'tobacconistofgreenwich': ['CT'],  # Greenwich is in Connecticut
+            'iheartcigars': ['FL'],
         }
         
         # Load tax rates
@@ -215,57 +215,9 @@ except Exception:
         
         return 0
 
- # Configure logging  ← NO INDENTATION
+ # Configure logging  â† NO INDENTATION
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-class EmailService:
-    def __init__(self):
-        self.smtp_server = "smtp.gmail.com" 
-        self.smtp_port = 587
-        self.email = os.getenv("GMAIL_ADDRESS", "mikeyjoneill@gmail.com")
-        self.password = os.getenv("GMAIL_APP_PASSWORD")
-        
-    def send_notification(self, subject, body, form_type="general"):
-        """Send notification email to mikeyjoneill@gmail.com"""
-        try:
-            if not self.password:
-                print("WARNING: GMAIL_APP_PASSWORD not set - email will not send")
-                return False
-                
-            msg = MIMEMultipart()
-            msg['From'] = self.email
-            msg['To'] = self.email  # Send to yourself
-            msg['Subject'] = f"[CigarPriceScout] {subject}"
-            
-            # Format the email nicely
-            formatted_body = f"""
-Form Type: {form_type}
-Submitted: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-
-{body}
-
----
-Sent from CigarPriceScout.com
-            """
-            
-            msg.attach(MIMEText(formatted_body, 'plain'))
-            
-            server = smtplib.SMTP(self.smtp_server, self.smtp_port)
-            server.starttls()
-            server.login(self.email, self.password)
-            server.send_message(msg)
-            server.quit()
-            
-            print(f"Email sent successfully: {subject}")
-            return True
-            
-        except Exception as e:
-            print(f"Email failed: {e}")
-            return False
-
-# Initialize email service
-email_service = EmailService()
 
 # Box Pricing Request Model
 class BoxPricingRequest(BaseModel):
@@ -278,6 +230,18 @@ class BoxPricingRequest(BaseModel):
     email: str
     zip: str
     notes: str = ""
+
+# Data Issue Report Model
+class DataIssueReport(BaseModel):
+    search_context: str = ""
+    retailer: str = ""
+    issue_type: str
+    problem_description: str
+    recommended_solution: str
+    name: str
+    email: str
+    current_url: str = ""
+    timestamp: str = ""
 
 def run_feed_processor():
     """Run the CJ feed processing script"""
@@ -320,127 +284,119 @@ def run_awin_processor():
         logger.error(f"Failed to run Awin processor: {e}")
 
 def start_scheduler():
-    """Start the background scheduler - with proper error handling"""
-    if not scheduler_available:
-        logger.warning("APScheduler not available - automated scheduling disabled")
-        logger.info("Install apscheduler: pip install apscheduler")
-        logger.info("Manual trigger still available at /admin/trigger-feed-update")
-        return
+    """Start the background scheduler"""
+    scheduler = BackgroundScheduler()
     
-    try:
-        scheduler = BackgroundScheduler()
-        
-        # CJ feeds at 3:00 AM Pacific
-        scheduler.add_job(
-            run_feed_processor,
-            CronTrigger(hour=3, minute=0, timezone='America/Los_Angeles'),
-            id='cj_feed_processor',
-            name='Process CJ affiliate feeds',
-            replace_existing=True
-        )
-        
-        # Awin BnB Tobacco feed at 3:30 AM Pacific
-        scheduler.add_job(
-            run_awin_processor,
-            CronTrigger(hour=3, minute=30, timezone='America/Los_Angeles'),
-            id='awin_feed_processor',
-            name='Process Awin BnB Tobacco feed',
-            replace_existing=True
-        )
-        
-        scheduler.start()
-        logger.info("Scheduler started - CJ feeds at 3 AM, Awin at 3:30 AM Pacific")
-        
-    except Exception as e:
-        logger.error(f"Failed to start scheduler: {e}")
-        logger.info("Manual trigger still available at /admin/trigger-feed-update")
+    # CJ feeds at 3:00 AM Pacific
+    scheduler.add_job(
+        run_feed_processor,
+        CronTrigger(hour=3, minute=0, timezone='America/Los_Angeles'),
+        id='cj_feed_processor',
+        name='Process CJ affiliate feeds',
+        replace_existing=True
+    )
+    
+    # Awin BnB Tobacco feed at 3:30 AM Pacific
+    scheduler.add_job(
+        run_awin_processor,
+        CronTrigger(hour=3, minute=30, timezone='America/Los_Angeles'),
+        id='awin_feed_processor',
+        name='Process Awin BnB Tobacco feed',
+        replace_existing=True
+    )
+    
+    scheduler.start()
+    logger.info("âœ“ Scheduler started - CJ feeds at 3 AM, Awin at 3:30 AM Pacific")    
+
+# Dynamic path resolution for local vs Railway deployment
+import os
+if os.path.exists("../static"):
+    STATIC_PATH = "../static"
+    CSV_PATH_PREFIX = f"{STATIC_PATH}/data"
+else:
+    STATIC_PATH = "static"  
+    CSV_PATH_PREFIX = "static/data"
 
 app = FastAPI()
+app.mount("/static", StaticFiles(directory=STATIC_PATH), name="static")
 
-# Middleware to force redirect www → non-www
-@app.middleware("http")
-async def www_redirect_middleware(request: Request, call_next):
-    host = request.headers.get("host", "")
-    
-    # If the request is for www.cigarpricescout.com, redirect to cigarpricescout.com
-    if host.startswith("www."):
-        url = str(request.url).replace("://www.", "://")
-        return RedirectResponse(url=url, status_code=301)
-    
-    return await call_next(request)
-
-app.mount("/static", StaticFiles(directory="../static"), name="static")
+#@app.on_event("startup")
+#async def startup_event():
+#    """Initialize scheduler when app starts"""
+#    start_scheduler()
+#    logger.info("âœ“ Application started with scheduled feed processing")
 
 RETAILERS = [
-    {"key": "abcfws", "name": "ABC Fine Wine & Spirits", "csv": "../static/data/abcfws.csv", "authorized": False},
-    {"key": "absolutecigars", "name": "Absolute Cigars", "csv": "../static/data/absolutecigars.csv", "authorized": False},
-    {"key": "atlantic", "name": "Atlantic Cigar", "csv": "../static/data/atlantic.csv", "authorized": False},
-    {"key": "bestcigar", "name": "Best Cigar Prices", "csv": "../static/data/bestcigar.csv", "authorized": False},
-    {"key": "bighumidor", "name": "Big Humidor", "csv": "../static/data/bighumidor.csv", "authorized": False},
-    {"key": "bnbtobacco", "name": "BnB Tobacco", "csv": "../static/data/bnbtobacco.csv", "authorized": True},
-    {"key": "bonitasmokeshop", "name": "Bonita Smoke Shop", "csv": "../static/data/bonitasmokeshop.csv", "authorized": False},
-    {"key": "buitragocigars", "name": "Buitrago Cigars", "csv": "../static/data/buitragocigars.csv", "authorized": False},
-    {"key": "casademontecristo", "name": "Casa de Montecristo", "csv": "../static/data/casademontecristo.csv", "authorized": False},
-    {"key": "cccrafter", "name": "CC Crafter", "csv": "../static/data/cccrafter.csv", "authorized": False},
-    {"key": "cdmcigars", "name": "CDM Cigars", "csv": "../static/data/cdmcigars.csv", "authorized": False},
-    {"key": "cheaplittlecigars", "name": "Cheap Little Cigars", "csv": "../static/data/cheaplittlecigars.csv", "authorized": False},
-    {"key": "ci", "name": "Cigars International", "csv": "../static/data/ci.csv", "authorized": True},
-    {"key": "cigar", "name": "Cigar.com", "csv": "../static/data/cigar.csv", "authorized": False},
-    {"key": "cigarboxpa", "name": "Cigar Box PA", "csv": "../static/data/cigarboxpa.csv", "authorized": False},
-    {"key": "cigarcellarofmiami", "name": "Cigar Cellar of Miami", "csv": "../static/data/cigarcellarofmiami.csv", "authorized": False},
-    {"key": "cigarcountry", "name": "Cigar Country", "csv": "../static/data/cigarcountry.csv", "authorized": False},
-    {"key": "cigarhustler", "name": "Cigar Hustler", "csv": "../static/data/cigarhustler.csv", "authorized": False},
-    {"key": "cigarking", "name": "Cigar King", "csv": "../static/data/cigarking.csv", "authorized": False},    
-    {"key": "cigaroasis", "name": "Cigar Oasis", "csv": "../static/data/cigaroasis.csv", "authorized": False},
-    {"key": "cigarpage", "name": "Cigar Page", "csv": "../static/data/cigarpage.csv", "authorized": False},
-    {"key": "cigarpairingparlor", "name": "The Cigar Pairing Parlor LLC", "csv": "../static/data/cigarpairingparlor.csv", "authorized": False},
-    {"key": "cigarplace", "name": "Cigar Place", "csv": "../static/data/cigarplace.csv", "authorized": False},
-    {"key": "cigarsdirect", "name": "Cigars Direct", "csv": "../static/data/cigarsdirect.csv", "authorized": False},
-    {"key": "cigora", "name": "Cigora", "csv": "../static/data/cigora.csv", "authorized": True},
-    {"key": "corona", "name": "Corona Cigar", "csv": "../static/data/corona.csv", "authorized": False},
-    {"key": "cubancrafters", "name": "Cuban Crafters", "csv": "../static/data/cubancrafters.csv", "authorized": False},
-    {"key": "cuencacigars", "name": "Cuenca Cigars", "csv": "../static/data/cuencacigars.csv", "authorized": False},
-    {"key": "escobarcigars", "name": "Escobar Cigars", "csv": "../static/data/escobarcigars.csv", "authorized": False},
-    {"key": "famous", "name": "Famous Smoke Shop", "csv": "../static/data/famous.csv", "authorized": True},
-    {"key": "foxcigar", "name": "Fox Cigar", "csv": "../static/data/foxcigar.csv", "authorized": False},
-    {"key": "gothamcigars", "name": "Gotham Cigars", "csv": "../static/data/gothamcigars.csv", "authorized": True},
-    {"key": "hilands", "name": "Hiland's Cigars", "csv": "../static/data/hilands.csv", "authorized": False},
-    {"key": "holts", "name": "Holt's Cigar Company", "csv": "../static/data/holts.csv", "authorized": False},
-    {"key": "jr", "name": "JR Cigar", "csv": "../static/data/jr.csv", "authorized": False},
-    {"key": "lmcigars", "name": "LM Cigars", "csv": "../static/data/lmcigars.csv", "authorized": False},
-    {"key": "mikescigars", "name": "Mike's Cigars", "csv": "../static/data/mikescigars.csv", "authorized": False},
-    {"key": "momscigars", "name": "Mom's Cigars", "csv": "../static/data/momscigars.csv", "authorized": False},
-    {"key": "neptune", "name": "Neptune Cigar", "csv": "../static/data/neptune.csv", "authorized": False},
-    {"key": "niceashcigars", "name": "Nice Ash Cigars", "csv": "../static/data/niceashcigars.csv", "authorized": False},
-    {"key": "nickscigarworld", "name": "Nick's Cigar World", "csv": "../static/data/nickscigarworld.csv", "authorized": False},
-    {"key": "oldhavana", "name": "Old Havana Cigar Co.", "csv": "../static/data/oldhavana.csv", "authorized": False},
-    {"key": "pipesandcigars", "name": "Pipes and Cigars", "csv": "../static/data/pipesandcigars.csv", "authorized": False},
-    {"key": "planetcigars", "name": "Planet Cigars", "csv": "../static/data/planetcigars.csv", "authorized": False},
-    {"key": "santamonicacigars", "name": "Santa Monica Cigars", "csv": "../static/data/santamonicacigars.csv", "authorized": False},
-    {"key": "secretocigarbar", "name": "Secreto Cigar Bar", "csv": "../static/data/secretocigarbar.csv", "authorized": False},
-    {"key": "smallbatchcigar", "name": "Small Batch Cigar", "csv": "../static/data/smallbatchcigar.csv", "authorized": False},
-    {"key": "smokeinn", "name": "Smoke Inn", "csv": "../static/data/smokeinn.csv", "authorized": False},
-    {"key": "tampasweethearts", "name": "Tampa Sweethearts", "csv": "../static/data/tampasweethearts.csv", "authorized": False},
-    {"key": "thecigarshop", "name": "The Cigar Shop", "csv": "../static/data/thecigarshop.csv", "authorized": False},
-    {"key": "thecigarstore", "name": "The Cigar Store", "csv": "../static/data/thecigarstore.csv", "authorized": False},
-    {"key": "thompson", "name": "Thompson Cigar", "csv": "../static/data/thompson.csv", "authorized": True},
-    {"key": "tobaccolocker", "name": "Tobacco Locker", "csv": "../static/data/tobaccolocker.csv", "authorized": False},
-    {"key": "twoguys", "name": "Two Guys Smoke Shop", "csv": "../static/data/twoguys.csv", "authorized": False},
-    {"key": "watchcity", "name": "Watch City Cigar", "csv": "../static/data/watchcity.csv", "authorized": False},
-    {"key": "windycitycigars", "name": "Windy City Cigars", "csv": "../static/data/windycitycigars.csv", "authorized": False},
-    {"key": "baysidecigars", "name": "Bayside Cigars", "csv": "../static/data/baysidecigars.csv", "authorized": False},
-    {"key": "cigarboxinc", "name": "Cigar Box Inc", "csv": "../static/data/cigarboxinc.csv", "authorized": False},
-    {"key": "cigarprimestore", "name": "Cigar Prime Store", "csv": "../static/data/cigarprimestore.csv", "authorized": False},
-    {"key": "karmacigar", "name": "Karma Cigar Bar", "csv": "../static/data/karmacigar.csv", "authorized": False},
-    {"key": "mailcubancigars", "name": "Mail Cuban Cigars", "csv": "../static/data/mailcubancigars.csv", "authorized": False},
-    {"key": "pyramidcigars", "name": "Pyramid Cigars", "csv": "../static/data/pyramidcigars.csv", "authorized": False},
-    {"key": "thecigarshouse", "name": "The Cigars House", "csv": "../static/data/thecigarshouse.csv", "authorized": False},
-    {"key": "tobacconistofgreenwich", "name": "Tobacconist of Greenwich", "csv": "../static/data/tobacconistofgreenwich.csv", "authorized": False},
+    {"key": "abcfws", "name": "ABC Fine Wine & Spirits", "csv": f"{CSV_PATH_PREFIX}/abcfws.csv", "authorized": False},
+    {"key": "absolutecigars", "name": "Absolute Cigars", "csv": f"{CSV_PATH_PREFIX}/absolutecigars.csv", "authorized": False},
+    {"key": "atlantic", "name": "Atlantic Cigar", "csv": f"{CSV_PATH_PREFIX}/atlantic.csv", "authorized": False},
+    {"key": "bestcigar", "name": "Best Cigar Prices", "csv": f"{CSV_PATH_PREFIX}/bestcigar.csv", "authorized": False},
+    {"key": "bighumidor", "name": "Big Humidor", "csv": f"{CSV_PATH_PREFIX}/bighumidor.csv", "authorized": False},
+    {"key": "bnbtobacco", "name": "BnB Tobacco", "csv": f"{CSV_PATH_PREFIX}/bnbtobacco.csv", "authorized": True},
+    {"key": "bonitasmokeshop", "name": "Bonita Smoke Shop", "csv": f"{CSV_PATH_PREFIX}/bonitasmokeshop.csv", "authorized": False},
+    {"key": "buitragocigars", "name": "Buitrago Cigars", "csv": f"{CSV_PATH_PREFIX}/buitragocigars.csv", "authorized": False},
+    {"key": "casademontecristo", "name": "Casa de Montecristo", "csv": f"{CSV_PATH_PREFIX}/casademontecristo.csv", "authorized": False},
+    {"key": "cccrafter", "name": "CC Crafter", "csv": f"{CSV_PATH_PREFIX}/cccrafter.csv", "authorized": False},
+    {"key": "cdmcigars", "name": "CDM Cigars", "csv": f"{CSV_PATH_PREFIX}/cdmcigars.csv", "authorized": False},
+    {"key": "cheaplittlecigars", "name": "Cheap Little Cigars", "csv": f"{CSV_PATH_PREFIX}/cheaplittlecigars.csv", "authorized": False},
+    {"key": "ci", "name": "Cigars International", "csv": f"{CSV_PATH_PREFIX}/ci.csv", "authorized": True},
+    {"key": "cigar", "name": "Cigar.com", "csv": f"{CSV_PATH_PREFIX}/cigar.csv", "authorized": False},
+    {"key": "cigarboxpa", "name": "Cigar Box PA", "csv": f"{CSV_PATH_PREFIX}/cigarboxpa.csv", "authorized": False},
+    {"key": "cigarcellarofmiami", "name": "Cigar Cellar of Miami", "csv": f"{CSV_PATH_PREFIX}/cigarcellarofmiami.csv", "authorized": False},
+    {"key": "cigarcountry", "name": "Cigar Country", "csv": f"{CSV_PATH_PREFIX}/cigarcountry.csv", "authorized": False},
+    {"key": "cigarhustler", "name": "Cigar Hustler", "csv": f"{CSV_PATH_PREFIX}/cigarhustler.csv", "authorized": False},
+    {"key": "cigarking", "name": "Cigar King", "csv": f"{CSV_PATH_PREFIX}/cigarking.csv", "authorized": False},    
+    {"key": "cigaroasis", "name": "Cigar Oasis", "csv": f"{CSV_PATH_PREFIX}/cigaroasis.csv", "authorized": False},
+    {"key": "cigarpage", "name": "Cigar Page", "csv": f"{CSV_PATH_PREFIX}/cigarpage.csv", "authorized": False},
+    {"key": "cigarpairingparlor", "name": "The Cigar Pairing Parlor LLC", "csv": f"{CSV_PATH_PREFIX}/cigarpairingparlor.csv", "authorized": False},
+    {"key": "cigarplace", "name": "Cigar Place", "csv": f"{CSV_PATH_PREFIX}/cigarplace.csv", "authorized": False},
+    {"key": "cigarsdirect", "name": "Cigars Direct", "csv": f"{CSV_PATH_PREFIX}/cigarsdirect.csv", "authorized": False},
+    {"key": "cigora", "name": "Cigora", "csv": f"{CSV_PATH_PREFIX}/cigora.csv", "authorized": True},
+    {"key": "corona", "name": "Corona Cigar", "csv": f"{CSV_PATH_PREFIX}/corona.csv", "authorized": False},
+    {"key": "cubancrafters", "name": "Cuban Crafters", "csv": f"{CSV_PATH_PREFIX}/cubancrafters.csv", "authorized": False},
+    {"key": "cuencacigars", "name": "Cuenca Cigars", "csv": f"{CSV_PATH_PREFIX}/cuencacigars.csv", "authorized": False},
+    {"key": "escobarcigars", "name": "Escobar Cigars", "csv": f"{CSV_PATH_PREFIX}/escobarcigars.csv", "authorized": False},
+    {"key": "famous", "name": "Famous Smoke Shop", "csv": f"{CSV_PATH_PREFIX}/famous.csv", "authorized": True},
+    {"key": "foxcigar", "name": "Fox Cigar", "csv": f"{CSV_PATH_PREFIX}/foxcigar.csv", "authorized": False},
+    {"key": "gothamcigars", "name": "Gotham Cigars", "csv": f"{CSV_PATH_PREFIX}/gothamcigars.csv", "authorized": True},
+    {"key": "hilands", "name": "Hiland's Cigars", "csv": f"{CSV_PATH_PREFIX}/hilands.csv", "authorized": False},
+    {"key": "holts", "name": "Holt's Cigar Company", "csv": f"{CSV_PATH_PREFIX}/holts.csv", "authorized": False},
+    {"key": "jr", "name": "JR Cigar", "csv": f"{CSV_PATH_PREFIX}/jr.csv", "authorized": False},
+    {"key": "lmcigars", "name": "LM Cigars", "csv": f"{CSV_PATH_PREFIX}/lmcigars.csv", "authorized": False},
+    {"key": "mikescigars", "name": "Mike's Cigars", "csv": f"{CSV_PATH_PREFIX}/mikescigars.csv", "authorized": False},
+    {"key": "momscigars", "name": "Mom's Cigars", "csv": f"{CSV_PATH_PREFIX}/momscigars.csv", "authorized": False},
+    {"key": "neptune", "name": "Neptune Cigar", "csv": f"{CSV_PATH_PREFIX}/neptune.csv", "authorized": False},
+    {"key": "niceashcigars", "name": "Nice Ash Cigars", "csv": f"{CSV_PATH_PREFIX}/niceashcigars.csv", "authorized": False},
+    {"key": "nickscigarworld", "name": "Nick's Cigar World", "csv": f"{CSV_PATH_PREFIX}/nickscigarworld.csv", "authorized": False},
+    {"key": "oldhavana", "name": "Old Havana Cigar Co.", "csv": f"{CSV_PATH_PREFIX}/oldhavana.csv", "authorized": False},
+    {"key": "pipesandcigars", "name": "Pipes and Cigars", "csv": f"{CSV_PATH_PREFIX}/pipesandcigars.csv", "authorized": False},
+    {"key": "planetcigars", "name": "Planet Cigars", "csv": f"{CSV_PATH_PREFIX}/planetcigars.csv", "authorized": False},
+    {"key": "santamonicacigars", "name": "Santa Monica Cigars", "csv": f"{CSV_PATH_PREFIX}/santamonicacigars.csv", "authorized": False},
+    {"key": "secretocigarbar", "name": "Secreto Cigar Bar", "csv": f"{CSV_PATH_PREFIX}/secretocigarbar.csv", "authorized": False},
+    {"key": "smallbatchcigar", "name": "Small Batch Cigar", "csv": f"{CSV_PATH_PREFIX}/smallbatchcigar.csv", "authorized": False},
+    {"key": "smokeinn", "name": "Smoke Inn", "csv": f"{CSV_PATH_PREFIX}/smokeinn.csv", "authorized": False},
+    {"key": "tampasweethearts", "name": "Tampa Sweethearts", "csv": f"{CSV_PATH_PREFIX}/tampasweethearts.csv", "authorized": False},
+    {"key": "thecigarshop", "name": "The Cigar Shop", "csv": f"{CSV_PATH_PREFIX}/thecigarshop.csv", "authorized": False},
+    {"key": "thecigarstore", "name": "The Cigar Store", "csv": f"{CSV_PATH_PREFIX}/thecigarstore.csv", "authorized": False},
+    {"key": "thompson", "name": "Thompson Cigar", "csv": f"{CSV_PATH_PREFIX}/thompson.csv", "authorized": True},
+    {"key": "tobaccolocker", "name": "Tobacco Locker", "csv": f"{CSV_PATH_PREFIX}/tobaccolocker.csv", "authorized": False},
+    {"key": "twoguys", "name": "Two Guys Smoke Shop", "csv": f"{CSV_PATH_PREFIX}/twoguys.csv", "authorized": False},
+    {"key": "watchcity", "name": "Watch City Cigar", "csv": f"{CSV_PATH_PREFIX}/watchcity.csv", "authorized": False},
+    {"key": "windycitycigars", "name": "Windy City Cigars", "csv": f"{CSV_PATH_PREFIX}/windycitycigars.csv", "authorized": False},
+    {"key": "baysidecigars", "name": "Bayside Cigars", "csv": f"{CSV_PATH_PREFIX}/baysidecigars.csv", "authorized": False},
+    {"key": "cigarboxinc", "name": "Cigar Box Inc", "csv": f"{CSV_PATH_PREFIX}/cigarboxinc.csv", "authorized": False},
+    {"key": "cigarprimestore", "name": "Cigar Prime Store", "csv": f"{CSV_PATH_PREFIX}/cigarprimestore.csv", "authorized": False},
+    {"key": "karmacigar", "name": "Karma Cigar Bar", "csv": f"{CSV_PATH_PREFIX}/karmacigar.csv", "authorized": False},
+    {"key": "mailcubancigars", "name": "Mail Cuban Cigars", "csv": f"{CSV_PATH_PREFIX}/mailcubancigars.csv", "authorized": False},
+    {"key": "pyramidcigars", "name": "Pyramid Cigars", "csv": f"{CSV_PATH_PREFIX}/pyramidcigars.csv", "authorized": False},
+    {"key": "thecigarshouse", "name": "The Cigars House", "csv": f"{CSV_PATH_PREFIX}/thecigarshouse.csv", "authorized": False},
+    {"key": "tobacconistofgreenwich", "name": "Tobacconist of Greenwich", "csv": f"{CSV_PATH_PREFIX}/tobacconistofgreenwich.csv", "authorized": False},
+    {"key": "iheartcigars", "name": "iHeart Cigars", "csv": f"{CSV_PATH_PREFIX}/iheartcigars.csv", "authorized": False},
 ]
 
 # Enhanced CSV loader with wrapper and vitola support
 class Product:
-    def __init__(self, retailer_key, retailer_name, title, url, brand, line, wrapper, vitola, size, box_qty, price, in_stock=True):
+    def __init__(self, retailer_key, retailer_name, title, url, brand, line, wrapper, vitola, size, box_qty, price, in_stock=True, current_promotions_applied=''):
         self.retailer_key = retailer_key
         self.retailer_name = retailer_name
         self.title = title
@@ -453,6 +409,7 @@ class Product:
         self.box_qty = int(box_qty) if box_qty else 25
         self.price_cents = int(float(price) * 100) if price else 0
         self.in_stock = str(in_stock).lower() not in ('false', '0', 'no', '')
+        self.current_promotions_applied = current_promotions_applied
 
 def load_csv(csv_path, retailer_key, retailer_name):
     """Load products from a CSV file with enhanced format"""
@@ -479,7 +436,8 @@ def load_csv(csv_path, retailer_key, retailer_name):
                         size=row.get('size', ''),
                         box_qty=row.get('box_qty', 25),
                         price=row.get('price', 0),
-                        in_stock=row.get('in_stock', True)
+                        in_stock=row.get('in_stock', True),
+                        current_promotions_applied=row.get('current_promotions_applied', '')
                     )
                     if product.brand and product.line and product.size:
                         items.append(product)
@@ -500,12 +458,12 @@ def load_all_products():
 
 def load_master_wrapper_aliases():
     """Load wrapper aliases from master_cigars.csv for lookup"""
-    # Try multiple possible paths for the master file
+    # Try multiple possible paths for the master file using dynamic path resolution
     possible_paths = [
         Path("data/master_cigars.csv"),
-        Path("../data/master_cigars.csv"),
+        Path("../data/master_cigars.csv") if os.path.exists("../data") else Path("data/master_cigars.csv"),
         Path("./master_cigars.csv"),
-        Path("static/data/master_cigars.csv")
+        Path(f"{STATIC_PATH}/data/master_cigars.csv")
     ]
     
     master_file = None
@@ -664,7 +622,7 @@ def build_options_tree():
 # Routes
 @app.get("/", response_class=HTMLResponse)
 def home():
-    return FileResponse("../static/index.html")
+    return FileResponse(f"{STATIC_PATH}/index.html")
 
 @app.get("/health")
 def health():
@@ -765,17 +723,6 @@ def compare(
         shipping_cents = shipping_cents or 0
         tax_cents = tax_cents or 0
         delivered_cents = base_cents + shipping_cents + tax_cents
-
-        # Calculate price context vs median (10% thresholds)
-        price_context = None
-        if median_price:
-            diff_percent = ((delivered_cents - median_price) / median_price) * 100
-            if diff_percent <= -10:
-                price_context = "Value"
-            elif diff_percent >= 10:
-                price_context = "Premium"
-            else:
-                price_context = "Market"
         
         # Track in-stock prices for determining cheapest
         if product.in_stock:
@@ -790,6 +737,34 @@ def compare(
         retailer_info = next((r for r in RETAILERS if r["key"] == product.retailer_key), None)
         is_authorized = retailer_info.get("authorized", False) if retailer_info else False
 
+        # Calculate final delivered price with promos (BEFORE the result dictionary)
+        if product.current_promotions_applied:
+            promo_parts = product.current_promotions_applied.split('|')
+            promo_price_text = promo_parts[0]  # "$139.80 [25% off]"
+            promo_code = promo_parts[1] if len(promo_parts) > 1 else None
+            
+            # Extract the discounted price
+            promo_price_match = promo_price_text.split(' [')[0].replace('$', '')
+            try:
+                promo_price_cents = int(float(promo_price_match) * 100)
+                final_delivered_cents = promo_price_cents + shipping_cents + tax_cents
+            except:
+                final_delivered_cents = delivered_cents
+        else:
+            final_delivered_cents = delivered_cents
+            promo_code = None
+
+          # Calculate price context vs median (10% thresholds)
+        price_context = None
+        if median_price:
+            diff_percent = ((final_delivered_cents - median_price) / median_price) * 100
+            if diff_percent <= -10:
+                price_context = "Value"
+            elif diff_percent >= 10:
+                price_context = "Premium"
+            else:
+                price_context = "Market"
+
         # Build result entry
         result = {
             "retailer": product.retailer_name,
@@ -802,14 +777,15 @@ def compare(
             "shipping": f"${shipping_cents/100:.2f}",
             "tax": f"${tax_cents/100:.2f}",
             "delivered": f"${delivered_cents/100:.2f}",
-            "promo": None,
-            "promo_code": None,
-            "delivered_after_promo": f"${delivered_cents/100:.2f}",
+            "promo": product.current_promotions_applied.split('|')[0] if product.current_promotions_applied else None,
+            "promo_code": promo_code,
+            "delivered_after_promo": f"${final_delivered_cents/100:.2f}",
             "url": product.url,
             "oos": not product.in_stock,
             "cheapest": False,  # Will be set below
             "authorized": is_authorized,
             "price_context": price_context,
+            "current_promotions_applied": product.current_promotions_applied,
         }
         results.append(result)
     
@@ -920,6 +896,23 @@ def compare_all(
         retailer_info = next((r for r in RETAILERS if r["key"] == product.retailer_key), None)
         is_authorized = retailer_info.get("authorized", False) if retailer_info else False
 
+        # Calculate final delivered price with promos (BEFORE the result dictionary)
+        if product.current_promotions_applied:
+            promo_parts = product.current_promotions_applied.split('|')
+            promo_price_text = promo_parts[0]  # "$139.80 [25% off]"
+            promo_code = promo_parts[1] if len(promo_parts) > 1 else None
+            
+            # Extract the discounted price
+            promo_price_match = promo_price_text.split(' [')[0].replace('$', '')
+            try:
+                promo_price_cents = int(float(promo_price_match) * 100)
+                final_delivered_cents = promo_price_cents + shipping_cents + tax_cents
+            except:
+                final_delivered_cents = delivered_cents
+        else:
+            final_delivered_cents = delivered_cents
+            promo_code = None
+
         result = {
             "retailer": product.retailer_name,
             "product": product_name,
@@ -931,14 +924,15 @@ def compare_all(
             "shipping": f"${shipping_cents/100:.2f}",
             "tax": f"${tax_cents/100:.2f}",
             "delivered": f"${delivered_cents/100:.2f}",
-            "promo": None,
-            "promo_code": None,
-            "delivered_after_promo": f"${delivered_cents/100:.2f}",
+            "promo": product.current_promotions_applied.split('|')[0] if product.current_promotions_applied else None,
+            "promo_code": promo_code,
+            "delivered_after_promo": f"${final_delivered_cents/100:.2f}",
             "url": product.url,
             "oos": not product.in_stock,
             "cheapest": False,
             "authorized": is_authorized,
             "price_context": price_context,
+            "current_promotions_applied": product.current_promotions_applied,
         }
         results.append(result)
 
@@ -965,58 +959,35 @@ def compare_all(
 # Legal page routes
 @app.get("/about.html")
 async def about():
-    return FileResponse("../static/about.html")
+    return FileResponse(f"{STATIC_PATH}/about.html")
 
 @app.get("/privacy-policy.html") 
 async def privacy_policy():
-    return FileResponse("../static/privacy-policy.html")
+    return FileResponse(f"{STATIC_PATH}/privacy-policy.html")
 
 @app.get("/terms-of-service.html")
 async def terms_of_service():
-    return FileResponse("../static/terms-of-service.html")
+    return FileResponse(f"{STATIC_PATH}/terms-of-service.html")
 
 @app.get("/contact.html")
 async def contact():
-    return FileResponse("../static/contact.html")
+    return FileResponse(f"{STATIC_PATH}/contact.html")
 
 @app.get("/request-box-pricing.html")
 async def request_box_pricing():
-    return FileResponse("../static/request-box-pricing.html")
+    return FileResponse(f"{STATIC_PATH}/request-box-pricing.html")
+
+@app.get("/report-data-issue.html")
+async def report_data_issue():
+    return FileResponse(f"{STATIC_PATH}/report-data-issue.html")
 
 @app.post("/api/box-pricing-request")
 async def submit_box_pricing_request(request: BoxPricingRequest):
     try:
-        # Format the request nicely for email
-        email_body = f"""
-NEW BOX PRICING REQUEST
-
-Customer Details:
-- Name: {request.name}
-- Email: {request.email}
-- ZIP Code: {request.zip}
-
-Cigar Details:
-- Brand: {request.brand}
-- Line: {request.line}
-- Wrapper: {request.wrapper or 'Any wrapper'}
-- Vitola: {request.vitola or 'Any vitola'}  
-- Box Size: {request.boxSize or 'Any size'}
-
-Additional Notes:
-{request.notes or 'None provided'}
-
----
-Reply to customer: {request.email}
-        """
+        # Format the email content
+        subject = f"Box Pricing Request: {request.brand} {request.line}"
         
-        # Send email notification
-        email_sent = email_service.send_notification(
-            subject=f"Box Request: {request.brand} {request.line}",
-            body=email_body,
-            form_type="Box Pricing Request"
-        )
-        
-        # Also log for backup (Railway logs)
+        # Log the complete request details
         submission_time = datetime.now().strftime('%Y-%m-%d at %H:%M:%S')
         full_request = f"""
 ========== NEW BOX PRICING REQUEST ==========
@@ -1035,50 +1006,79 @@ CUSTOMER INFO:
 ADDITIONAL NOTES:
 {request.notes or 'None'}
 
-Email Sent: {'Yes' if email_sent else 'Failed'}
 Submitted: {submission_time}
 ============================================
 """
         logger.info(full_request)
         
-        return {
-            "status": "success", 
-            "message": "Your box pricing request has been submitted successfully! We'll email you with pricing options soon."
-        }
+        return {"status": "success", "message": "Your box pricing request has been submitted successfully!"}
         
     except Exception as e:
         logger.error(f"Error processing box pricing request: {e}")
-        return {
-            "status": "error", 
-            "message": "There was an error submitting your request. Please try again or email us directly."
-        }
-    
+        return {"status": "error", "message": "There was an error submitting your request. Please try again."}
+
+@app.post("/api/data-issue-report")
+async def submit_data_issue_report(request: DataIssueReport):
+    try:
+        # Log the complete issue report
+        submission_time = datetime.now().strftime('%Y-%m-%d at %H:%M:%S')
+        full_report = f"""
+========== NEW DATA ISSUE REPORT ==========
+SEARCH CONTEXT: {request.search_context}
+RETAILER: {request.retailer}
+ISSUE TYPE: {request.issue_type}
+
+PROBLEM DESCRIPTION:
+{request.problem_description}
+
+RECOMMENDED SOLUTION:
+{request.recommended_solution}
+
+REPORTER INFO:
+- Name: {request.name}
+- Email: {request.email}
+
+TECHNICAL INFO:
+- URL: {request.current_url}
+- Timestamp: {request.timestamp}
+
+Submitted: {submission_time}
+==========================================
+"""
+        logger.info(full_report)
+        
+        return {"status": "success", "message": "Your data issue report has been submitted successfully! We'll review it and make corrections as needed."}
+        
+    except Exception as e:
+        logger.error(f"Error processing data issue report: {e}")
+        return {"status": "error", "message": "There was an error submitting your report. Please try again."}
+
 @app.get("/cigars/{brand}/{line}", response_class=HTMLResponse)
 async def cigar_landing_page(brand: str, line: str):
-    template_path = Path("../static/cigar-template.html")
+    """
+    SEO-friendly landing page for specific cigar brands/lines
+    URL format: /cigars/padron/1964-anniversary-series
+    """
+    # Read the template
+    template_path = Path(f"{STATIC_PATH}/cigar-template.html")
     
     if not template_path.exists():
+        # Fallback if template doesn't exist yet
         return HTMLResponse(content="<h1>Page not found</h1>", status_code=404)
     
     with open(template_path, 'r', encoding='utf-8') as f:
         template = f.read()
-
-    # Display text: "My Father", "The Judge"
+    
+    # Replace placeholders with actual values
+    # Convert URL-friendly format back to display format
     brand_display = brand.replace('-', ' ').title()
     line_display = line.replace('-', ' ').title()
-
-    # Slugs for canonical/JSON-LD
-    brand_slug = brand.lower()
-    line_slug = line.lower()
     
-    html = (template
-        .replace('{{BRAND}}', brand_display)
-        .replace('{{LINE}}', line_display)
-        .replace('{{BRAND_SLUG}}', brand_slug)
-        .replace('{{LINE_SLUG}}', line_slug)
-    )
+    html = template.replace('{{BRAND}}', brand_display)
+    html = html.replace('{{LINE}}', line_display)
     
     return HTMLResponse(content=html)
+
 
 # Helper function to generate URL-friendly slugs
 def create_slug(text: str) -> str:
@@ -1149,11 +1149,11 @@ async def sitemap():
     
     return Response(content=xml_content, media_type="application/xml")
 
-# @app.post("/admin/trigger-feed-update")
-# async def trigger_feed_update():
-#    """Manual trigger for testing (remove in production or add auth)"""
-#    run_feed_processor()
-#    return {"status": "Feed processor triggered"}
+@app.post("/admin/trigger-feed-update")
+async def trigger_feed_update():
+    """Manual trigger for testing (remove in production or add auth)"""
+    run_feed_processor()
+    return {"status": "Feed processor triggered"}
 
 if __name__ == "__main__":
     import uvicorn
