@@ -1138,10 +1138,7 @@
             : '<span class="auth-badge marketplace">Marketplace</span>';
           
           return '<tr>' +
-            '<td><a href="/go?retailer=' + encodeURIComponent(result.retailer)
-            + '&cid=' + encodeURIComponent(result.product.replace(/\s+/g, '-').toLowerCase())
-            + '&url=' + encodeURIComponent(result.url)
-            + '" target="_blank" rel="noopener">' + result.retailer + '</a></td>' +
+            '<td><a href="' + result.url + '" target="_blank">' + result.retailer + '</a></td>' +
             '<td class="hide-tablet"><div class="marketplace-cell">' + dealerBadge + 
             (result.authorized ? '' : '<div class="risk-text">Buy at own risk</div>') +
             '</div></td>' +
@@ -1207,12 +1204,9 @@
             (result.vitola ? '<span class="vitola-badge">' + result.vitola + '</span>' : '') +
             '</div>' : '') +
             '</div>' +
-            '<a href="/go?retailer=' + encodeURIComponent(result.retailer)
-            + '&cid=' + encodeURIComponent(result.product.replace(/\s+/g, '-').toLowerCase())
-            + '&url=' + encodeURIComponent(result.url)
-            + '" class="card-button" target="_blank" rel="noopener">'
-            + '<img src="/static/logo.png" alt="Scout" style="width: 45px; height: 45px;">' +
-            + '</a>' +
+            '<a href="' + result.url + '" class="card-button" target="_blank" rel="noopener">' +
+            '<img src="/static/logo.png" alt="Scout" style="width: 45px; height: 45px;">' +
+            '</a>' +
             '</div>';
         }).join('');
         
