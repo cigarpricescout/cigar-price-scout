@@ -685,21 +685,25 @@ def compare(
 
         conn = get_analytics_conn()
         cur = conn.cursor()
-        cur.execute("""
+        cur.execute(
+            """
             INSERT INTO search_events
             (brand, line, wrapper, vitola, size, zip_prefix, cid, ip_hash, user_agent)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            brand,
-            line,
-            wrapper,
-            vitola,
-            size,
-            zip_prefix,
-            None,  # cid can be filled later if you pick a canonical match
-            ip_hash,
-            ua,
-        ))
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                brand,
+                line,
+                wrapper,
+                vitola,
+                size,
+                zip_prefix,
+                None,  # cid can be filled later if you pick a canonical match
+                ip_hash,
+                ua,
+            ),
+        )
+
         conn.commit()
         conn.close()
     except Exception as e:
@@ -1267,12 +1271,16 @@ def go(retailer: str, cid: str, url: str, request: Request = None):
 
         conn = get_analytics_conn()
         cur = conn.cursor()
-        cur.execute("""
+        cur.execute(
+            """
             INSERT INTO click_events (retailer, cid, target_url, ip_hash, user_agent)
-            VALUES (?, ?, ?, ?, ?)
-        """, (retailer, cid, url, ip_hash, ua))
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            (retailer, cid, url, ip_hash, ua),
+        )
         conn.commit()
         conn.close()
+
     except Exception as e:
         print(f"[analytics] Click log failed: {e}")
 
