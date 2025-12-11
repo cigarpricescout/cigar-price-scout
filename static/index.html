@@ -1206,13 +1206,11 @@
             (result.wrapper ? '<span class="wrapper-badge">' + result.wrapper + '</span>' : '') +
             (result.vitola ? '<span class="vitola-badge">' + result.vitola + '</span>' : '') +
             '</div>' : '') +
-            + '</div>' +
             '<a href="/go?retailer=' + encodeURIComponent(result.retailer)
             + '&cid=' + encodeURIComponent(result.product.replace(/\s+/g, '-').toLowerCase())
             + '&url=' + encodeURIComponent(result.url)
-            + '" class="card-button" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:12px;">'
+            + '" class="card-button" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;">'
             + '<img src="/static/logo.png" alt="Scout" style="width:32px;height:32px;object-fit:contain;">'
-            + '<span>Go to retailer</span>'
             + '</a>'
             + '</div>';
         }).join('');
