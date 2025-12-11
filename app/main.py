@@ -308,6 +308,28 @@ else:
 app = FastAPI()
 app.mount("/static", StaticFiles(directory=STATIC_PATH), name="static")
 
+def send_notification_email(subject: str, body: str, to_email: str = "info@cigarpricescout.com"):
+    """Send notification email - logs for now, can be enhanced with SMTP later"""
+    try:
+        # For now, just log the email (since you have forwarding set up)
+        logger.info(f"EMAIL NOTIFICATION:")
+        logger.info(f"To: {to_email}")
+        logger.info(f"Subject: {subject}")
+        logger.info(f"Body: {body}")
+        logger.info(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        
+        # TODO: Add actual SMTP sending here when ready
+        # Example:
+        # server = smtplib.SMTP('smtp.gmail.com', 587)
+        # server.starttls()
+        # server.login(smtp_user, smtp_password)
+        # server.send_message(msg)
+        
+        return True
+    except Exception as e:
+        logger.error(f"Email notification failed: {e}")
+        return False
+
 def init_analytics_tables():
     """Create analytics tables in Postgres if they don't exist."""
     conn = get_analytics_conn()
@@ -1075,12 +1097,43 @@ Submitted: {submission_time}
 ============================================
 """
         logger.info(full_request)
-        
+        send_notification_email(subject, full_request, "info@cigarpricescout.com")
         return {"status": "success", "message": "Your box pricing request has been submitted successfully!"}
         
     except Exception as e:
         logger.error(f"Error processing box pricing request: {e}")
         return {"status": "error", "message": "There was an error submitting your request. Please try again."}
+
+@app.post("/api/contact")
+async def submit_contact_form(request: Request):
+    try:
+        data = await request.json()
+        
+        subject = f"Contact Form: {data.get('subject', 'General Inquiry')}"
+        
+        full_message = f"""
+========== NEW CONTACT FORM SUBMISSION ==========
+SUBJECT: {data.get('subject', 'Not specified')}
+
+FROM:
+- Name: {data.get('name', 'Not provided')}
+- Email: {data.get('email', 'Not provided')}
+
+MESSAGE:
+{data.get('message', 'No message provided')}
+
+Submitted: {datetime.now().strftime('%Y-%m-%d at %H:%M:%S')}
+================================================
+"""
+        
+        logger.info(full_message)
+        send_notification_email(subject, full_message, "info@cigarpricescout.com")
+        
+        return {"status": "success", "message": "Your message has been sent successfully!"}
+        
+    except Exception as e:
+        logger.error(f"Error processing contact form: {e}")
+        return {"status": "error", "message": "There was an error sending your message. Please try again."}
 
 @app.post("/api/data-issue-report")
 async def submit_data_issue_report(request: DataIssueReport):
@@ -1111,7 +1164,7 @@ Submitted: {submission_time}
 ==========================================
 """
         logger.info(full_report)
-        
+        send_notification_email(subject, full_report, "info@cigarpricescout.com")
         return {"status": "success", "message": "Your data issue report has been submitted successfully! We'll review it and make corrections as needed."}
         
     except Exception as e:

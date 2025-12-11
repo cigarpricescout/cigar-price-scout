@@ -99,6 +99,31 @@
         .submit-btn:hover{
             filter:brightness(0.95);
         }
+
+        .submit-btn:disabled{
+            opacity:0.6;
+            cursor:not-allowed;
+        }
+        
+        .success-message{
+            background:#d1fae5;
+            color:#065f46;
+            padding:16px;
+            border-radius:8px;
+            margin:20px 0;
+            text-align:center;
+            font-weight:600;
+        }
+        
+        .error-message{
+            background:#fee2e2;
+            color:#dc2626;
+            padding:16px;
+            border-radius:8px;
+            margin:20px 0;
+            text-align:center;
+            font-weight:600;
+        }
         
         .contact-info{
             background:#f8fafc;
@@ -191,22 +216,59 @@
     </div>
 
     <script>
-        document.getElementById('contactForm').addEventListener('submit', function(e) {
+        document.getElementById('contactForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             
-            const name = document.getElementById('name').value;
-            const email = document.getElementById('email').value;
-            const subject = document.getElementById('subject').value;
-            const message = document.getElementById('message').value;
+            const submitBtn = document.querySelector('.submit-btn');
+            const contactForm = document.querySelector('.contact-form');
             
-            // Create mailto link with form data
-            const mailtoLink = `mailto:mikeyjoneill@gmail.com?subject=Cigar Price Scout: ${subject}&body=Name: ${name}%0D%0AEmail: ${email}%0D%0ASubject: ${subject}%0D%0A%0D%0AMessage:%0D%0A${encodeURIComponent(message)}`;
+            // Clear any existing messages
+            const existingMessage = document.querySelector('.success-message, .error-message');
+            if (existingMessage) {
+                existingMessage.remove();
+            }
             
-            // Open default email client
-            window.location.href = mailtoLink;
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Sending...';
             
-            // Show success message
-            alert('Your email client should open with the message pre-filled. Please send the email to complete your inquiry.');
+            try {
+                const formData = {
+                    name: document.getElementById('name').value,
+                    email: document.getElementById('email').value,
+                    subject: document.getElementById('subject').value,
+                    message: document.getElementById('message').value
+                };
+                
+                const response = await fetch('/api/contact', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(formData)
+                });
+                
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    const successDiv = document.createElement('div');
+                    successDiv.className = 'success-message';
+                    successDiv.textContent = 'Message sent successfully! We\'ll respond within 24-48 hours.';
+                    contactForm.appendChild(successDiv);
+                    document.getElementById('contactForm').reset();
+                } else {
+                    const errorDiv = document.createElement('div');
+                    errorDiv.className = 'error-message';
+                    errorDiv.textContent = 'Error sending message. Please try again.';
+                    contactForm.appendChild(errorDiv);
+                }
+                
+            } catch (error) {
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'error-message';
+                errorDiv.textContent = 'Error sending message. Please try again.';
+                contactForm.appendChild(errorDiv);
+            }
+            
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Send Message';
         });
     </script>
 </body>
