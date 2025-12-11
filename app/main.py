@@ -312,18 +312,25 @@ app.mount("/static", StaticFiles(directory=STATIC_PATH), name="static")
 def send_notification_email(subject: str, body: str, to_email: str = "info@cigarpricescout.com"):
     """Send notification email via Namecheap Private Email SMTP"""
     try:
-        logger.info(f"Sending email to {to_email}: {subject}")
+        logger.info(f"Attempting to send email to {to_email}: {subject}")
         
-        # Create email message
+        # Test SMTP connection settings
+        logger.info("Connecting to mail.privateemail.com...")
+        server = smtplib.SMTP('mail.privateemail.com', 587)
+        
+        logger.info("Starting TLS...")
+        server.starttls()
+        
+        logger.info("Attempting login...")
+        server.login('info@cigarpricescout.com', 'YOUR_PASSWORD_HERE')
+        
+        logger.info("Creating message...")
         msg = MIMEText(body)
         msg['Subject'] = subject
-        msg['From'] = "info@cigarpricescout.com"  # Send FROM your business email
-        msg['To'] = to_email  # Send TO your business email (same address)
+        msg['From'] = "info@cigarpricescout.com"
+        msg['To'] = to_email
         
-        # Send via Namecheap Private Email SMTP
-        server = smtplib.SMTP('mail.privateemail.com', 587)
-        server.starttls()
-        server.login('info@cigarpricescout.com', 'slaya001')
+        logger.info("Sending message...")
         server.send_message(msg)
         server.quit()
         
@@ -331,7 +338,7 @@ def send_notification_email(subject: str, body: str, to_email: str = "info@cigar
         return True
         
     except Exception as e:
-        logger.error(f"Email sending failed: {e}")
+        logger.error(f"SMTP Error: {e}")
         return False
 
 def init_analytics_tables():
@@ -714,8 +721,8 @@ def compare(
         cur.execute(
             """
             INSERT INTO search_events
-            (brand, line, wrapper, vitola, size, zip_prefix)
-            VALUES (%s, %s, %s, %s, %s, %s)
+            (brand, line, wrapper, vitola, size, zip_prefix, cid, ip_hash, user_agent)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 brand,
@@ -724,12 +731,17 @@ def compare(
                 vitola,
                 size,
                 zip_prefix,
+                None,       # cid placeholder for now
+                ip_hash,
+                ua,
             ),
         )
+
         conn.commit()
         conn.close()
     except Exception as e:
-        print("[analytics] Search log failed:", e)
+        print(f"[analytics] Search log failed: {e}")
+
     
     # Get state from ZIP for shipping/tax calculations
     state = zip_to_state(zip) if zip else 'OR'
