@@ -13,6 +13,7 @@ import os
 import sqlite3
 import hashlib
 import psycopg2
+from urllib.parse import quote_plus
 
 try:
     from apscheduler.schedulers.background import BackgroundScheduler
@@ -309,25 +310,28 @@ app = FastAPI()
 app.mount("/static", StaticFiles(directory=STATIC_PATH), name="static")
 
 def send_notification_email(subject: str, body: str, to_email: str = "info@cigarpricescout.com"):
-    """Send notification email - logs for now, can be enhanced with SMTP later"""
+    """Send notification email via Namecheap Private Email SMTP"""
     try:
-        # For now, just log the email (since you have forwarding set up)
-        logger.info(f"EMAIL NOTIFICATION:")
-        logger.info(f"To: {to_email}")
-        logger.info(f"Subject: {subject}")
-        logger.info(f"Body: {body}")
-        logger.info(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        logger.info(f"Sending email to {to_email}: {subject}")
         
-        # TODO: Add actual SMTP sending here when ready
-        # Example:
-        # server = smtplib.SMTP('smtp.gmail.com', 587)
-        # server.starttls()
-        # server.login(smtp_user, smtp_password)
-        # server.send_message(msg)
+        # Create email message
+        msg = MIMEText(body)
+        msg['Subject'] = subject
+        msg['From'] = "info@cigarpricescout.com"  # Send FROM your business email
+        msg['To'] = to_email  # Send TO your business email (same address)
         
+        # Send via Namecheap Private Email SMTP
+        server = smtplib.SMTP('mail.privateemail.com', 587)
+        server.starttls()
+        server.login('info@cigarpricescout.com', 'slaya001')
+        server.send_message(msg)
+        server.quit()
+        
+        logger.info(f"Email sent successfully to {to_email}")
         return True
+        
     except Exception as e:
-        logger.error(f"Email notification failed: {e}")
+        logger.error(f"Email sending failed: {e}")
         return False
 
 def init_analytics_tables():
@@ -852,7 +856,8 @@ def compare(
             else:
                 price_context = "Market"
 
-        # Build result entry
+                tracking_url = f"/go?retailer={product.retailer_key}&cid={product.cid}&url={quote_plus(product.url)}"
+
         result = {
             "retailer": product.retailer_name,
             "product": product_name,
@@ -867,7 +872,8 @@ def compare(
             "promo": product.current_promotions_applied.split('|')[0] if product.current_promotions_applied else None,
             "promo_code": promo_code,
             "delivered_after_promo": f"${final_delivered_cents/100:.2f}",
-            "url": product.url,
+            "retailer_url": product.url,   # raw URL
+            "click_url": tracking_url,      # tracking URL via /go
             "oos": not product.in_stock,
             "cheapest": False,  # Will be set below
             "authorized": is_authorized,
@@ -1000,6 +1006,8 @@ def compare_all(
             final_delivered_cents = delivered_cents
             promo_code = None
 
+        tracking_url = f"/go?retailer={product.retailer_key}&cid={product.cid}&url={quote_plus(product.url)}"
+
         result = {
             "retailer": product.retailer_name,
             "product": product_name,
@@ -1128,7 +1136,6 @@ Submitted: {datetime.now().strftime('%Y-%m-%d at %H:%M:%S')}
         
         logger.info(full_message)
         send_notification_email(subject, full_message, "info@cigarpricescout.com")
-        
         return {"status": "success", "message": "Your message has been sent successfully!"}
         
     except Exception as e:
@@ -1164,6 +1171,7 @@ Submitted: {submission_time}
 ==========================================
 """
         logger.info(full_report)
+        subject = f"Data Issue Report: {data.get('issue_type', 'General Issue')}"
         send_notification_email(subject, full_report, "info@cigarpricescout.com")
         return {"status": "success", "message": "Your data issue report has been submitted successfully! We'll review it and make corrections as needed."}
         
@@ -1338,6 +1346,39 @@ def go(retailer: str, cid: str, url: str, request: Request = None):
         print(f"[analytics] Click log failed: {e}")
 
     return RedirectResponse(url, status_code=302)
+
+@app.get("/click")
+def log_click(retailer: str, cid: str, request: Request):
+    """
+    Logs when a user clicks out to a retailer's website.
+    """
+    try:
+        # Get IP without storing the real address
+        client_ip = request.client.host
+        ip_hash = hashlib.sha256(client_ip.encode()).hexdigest()
+
+        # Get user agent
+        user_agent = request.headers.get("User-Agent", "unknown")
+
+        # Connect to analytics DB
+        conn = get_analytics_conn()
+        cur = conn.cursor()
+
+        # Insert record
+        cur.execute("""
+            INSERT INTO click_events (retailer, cid, ip_hash, user_agent)
+            VALUES (%s, %s, %s, %s);
+        """, (retailer, cid, ip_hash, user_agent))
+
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        return {"status": "ok"}
+
+    except Exception as e:
+        print("CLICK ERROR:", e)
+        return {"status": "error", "detail": str(e)}
 
 @app.post("/admin/trigger-feed-update")
 async def trigger_feed_update():
