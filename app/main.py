@@ -12,6 +12,7 @@ from datetime import datetime
 import os
 import sqlite3
 import hashlib
+import psycopg2
 
 try:
     from apscheduler.schedulers.background import BackgroundScheduler
@@ -287,41 +288,13 @@ def run_awin_processor():
 
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
-ANALYTICS_DB_PATH = DATA_DIR / "historical_prices.db"
-
-# ✅ Make sure the data directory exists (both locally and on Railway)
-DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 def get_analytics_conn():
-    conn = sqlite3.connect(ANALYTICS_DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
-def start_scheduler():
-    """Start the background scheduler"""
-    scheduler = BackgroundScheduler()
-    
-    # CJ feeds at 3:00 AM Pacific
-    scheduler.add_job(
-        run_feed_processor,
-        CronTrigger(hour=3, minute=0, timezone='America/Los_Angeles'),
-        id='cj_feed_processor',
-        name='Process CJ affiliate feeds',
-        replace_existing=True
-    )
-    
-    # Awin BnB Tobacco feed at 3:30 AM Pacific
-    scheduler.add_job(
-        run_awin_processor,
-        CronTrigger(hour=3, minute=30, timezone='America/Los_Angeles'),
-        id='awin_feed_processor',
-        name='Process Awin BnB Tobacco feed',
-        replace_existing=True
-    )
-    
-    scheduler.start()
-    logger.info("âœ“ Scheduler started - CJ feeds at 3 AM, Awin at 3:30 AM Pacific")    
+    """Connect to Postgres using ANALYTICS_DB_URL from Railway."""
+    db_url = os.getenv("ANALYTICS_DB_URL")
+    if not db_url:
+        raise RuntimeError("ANALYTICS_DB_URL is not set")
+    return psycopg2.connect(db_url)  
 
 # Dynamic path resolution for local vs Railway deployment
 import os
@@ -1238,6 +1211,50 @@ async def sitemap():
     return Response(content=xml_content, media_type="application/xml")
 
 # Add this endpoint to your main.py after your other routes (around line 1200)
+
+@app.get("/debug/init_analytics")
+def debug_init_analytics():
+    """
+    One-time helper: create analytics tables (search_events, click_events) in Postgres.
+    You can hit this endpoint once after deploy to ensure tables exist.
+    """
+    conn = get_analytics_conn()
+    cur = conn.cursor()
+
+    # Create search_events table
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS search_events (
+            id SERIAL PRIMARY KEY,
+            ts TIMESTAMPTZ DEFAULT NOW(),
+            brand TEXT,
+            line TEXT,
+            wrapper TEXT,
+            vitola TEXT,
+            size TEXT,
+            zip_prefix TEXT,
+            cid TEXT,
+            ip_hash TEXT,
+            user_agent TEXT
+        )
+    """)
+
+    # Create click_events table
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS click_events (
+            id SERIAL PRIMARY KEY,
+            ts TIMESTAMPTZ DEFAULT NOW(),
+            retailer TEXT,
+            cid TEXT,
+            target_url TEXT,
+            ip_hash TEXT,
+            user_agent TEXT
+        )
+    """)
+
+    conn.commit()
+    conn.close()
+
+    return {"status": "ok", "message": "Analytics tables ensured in Postgres"}
 
 @app.get("/go")
 def go(retailer: str, cid: str, url: str, request: Request = None):
