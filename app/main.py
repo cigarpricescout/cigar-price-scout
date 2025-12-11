@@ -289,10 +289,14 @@ BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 ANALYTICS_DB_PATH = DATA_DIR / "historical_prices.db"
 
+# ✅ Make sure the data directory exists (both locally and on Railway)
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
 def get_analytics_conn():
     conn = sqlite3.connect(ANALYTICS_DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
+
 
 def start_scheduler():
     """Start the background scheduler"""
