@@ -872,10 +872,9 @@ def compare(
             "promo": product.current_promotions_applied.split('|')[0] if product.current_promotions_applied else None,
             "promo_code": promo_code,
             "delivered_after_promo": f"${final_delivered_cents/100:.2f}",
-            "retailer_url": product.url,   # raw URL
-            "click_url": tracking_url,      # tracking URL via /go
+            "url": product.url,
             "oos": not product.in_stock,
-            "cheapest": False,  # Will be set below
+            "cheapest": False,
             "authorized": is_authorized,
             "price_context": price_context,
             "current_promotions_applied": product.current_promotions_applied,
