@@ -310,35 +310,16 @@ app = FastAPI()
 app.mount("/static", StaticFiles(directory=STATIC_PATH), name="static")
 
 def send_notification_email(subject: str, body: str, to_email: str = "info@cigarpricescout.com"):
-    """Send notification email via Namecheap Private Email SMTP"""
+    """Log email notifications - SMTP disabled due to connection issues"""
     try:
-        logger.info(f"Attempting to send email to {to_email}: {subject}")
-        
-        # Test SMTP connection settings
-        logger.info("Connecting to mail.privateemail.com...")
-        server = smtplib.SMTP('mail.privateemail.com', 587)
-        
-        logger.info("Starting TLS...")
-        server.starttls()
-        
-        logger.info("Attempting login...")
-        server.login('info@cigarpricescout.com', 'YOUR_PASSWORD_HERE')
-        
-        logger.info("Creating message...")
-        msg = MIMEText(body)
-        msg['Subject'] = subject
-        msg['From'] = "info@cigarpricescout.com"
-        msg['To'] = to_email
-        
-        logger.info("Sending message...")
-        server.send_message(msg)
-        server.quit()
-        
-        logger.info(f"Email sent successfully to {to_email}")
+        logger.info(f"📧 EMAIL NOTIFICATION:")
+        logger.info(f"To: {to_email}")
+        logger.info(f"Subject: {subject}")
+        logger.info(f"Body: {body}")
+        logger.info(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         return True
-        
     except Exception as e:
-        logger.error(f"SMTP Error: {e}")
+        logger.error(f"Email notification failed: {e}")
         return False
 
 def init_analytics_tables():
