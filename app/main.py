@@ -309,14 +309,15 @@ app = FastAPI()
 app.mount("/static", StaticFiles(directory=STATIC_PATH), name="static")
 
 def init_analytics_tables():
-    """Create analytics tables if they don't exist."""
+    """Create analytics tables if they don't exist (Postgres)."""
     conn = get_analytics_conn()
     cur = conn.cursor()
 
+    # search_events table
     cur.execute("""
         CREATE TABLE IF NOT EXISTS search_events (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            id SERIAL PRIMARY KEY,
+            ts TIMESTAMPTZ DEFAULT NOW(),
             brand TEXT,
             line TEXT,
             wrapper TEXT,
@@ -329,10 +330,11 @@ def init_analytics_tables():
         )
     """)
 
+    # click_events table
     cur.execute("""
         CREATE TABLE IF NOT EXISTS click_events (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            id SERIAL PRIMARY KEY,
+            ts TIMESTAMPTZ DEFAULT NOW(),
             retailer TEXT,
             cid TEXT,
             target_url TEXT,
