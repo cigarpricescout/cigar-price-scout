@@ -714,8 +714,8 @@ def compare(
         cur.execute(
             """
             INSERT INTO search_events
-            (brand, line, wrapper, vitola, size, zip_prefix, cid, ip_hash, user_agent)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            (brand, line, wrapper, vitola, size, zip_prefix)
+            VALUES (%s, %s, %s, %s, %s, %s)
             """,
             (
                 brand,
@@ -724,16 +724,12 @@ def compare(
                 vitola,
                 size,
                 zip_prefix,
-                None,  # cid can be filled later if you pick a canonical match
-                ip_hash,
-                ua,
             ),
         )
-
         conn.commit()
         conn.close()
     except Exception as e:
-        print(f"[analytics] Search log failed: {e}")
+        print("[analytics] Search log failed:", e)
     
     # Get state from ZIP for shipping/tax calculations
     state = zip_to_state(zip) if zip else 'OR'
