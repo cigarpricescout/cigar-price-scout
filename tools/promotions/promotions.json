@@ -2,11 +2,11 @@
   "ci": [],
   "thompson": [
     {
-      "code": "CM35",
-      "discount": 35,
+      "code": "WINTER25",
+      "discount": 25,
       "scope": "sitewide",
-      "end_date": "2025-12-02",
-      "active": false
+      "end_date": "2025-12-14",
+      "active": true
     }
   ],
   "hilands": [ 
@@ -20,11 +20,11 @@
   ],
   "smokeinn": [
      {
-      "code": "FEAST",
+      "code": "SI15",
       "discount": 15,
       "scope": "sitewide",
-      "end_date": "2025-12-05",
-      "active": false
+      "end_date": "2025-12-31",
+      "active": true
     }
   ],
   "neptune": [
