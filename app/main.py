@@ -309,44 +309,69 @@ else:
 app = FastAPI()
 app.mount("/static", StaticFiles(directory=STATIC_PATH), name="static")
 
+import json
+import urllib.request
+import urllib.error
+
 def send_notification_email(subject: str, body: str, to_email: str = None, reply_to: str = None):
     """
-    Sends an email via SMTP using Railway environment variables.
-    Required env vars: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS
-    Optional env var: EMAIL_TO
+    Sends an email via SendGrid Web API (HTTPS). Works reliably on Railway.
+    Required env vars:
+      - SENDGRID_API_KEY
+      - SENDGRID_FROM
+    Optional env var:
+      - EMAIL_TO (default recipient)
     """
     try:
-        host = os.getenv("SMTP_HOST")
-        port = int(os.getenv("SMTP_PORT", "587"))
-        user = os.getenv("SMTP_USER")
-        password = os.getenv("SMTP_PASS")
+        api_key = os.getenv("SENDGRID_API_KEY")
+        from_email = os.getenv("SENDGRID_FROM")
         default_to = os.getenv("EMAIL_TO", "info@cigarpricescout.com")
         to_email = to_email or default_to
 
-        if not host or not user or not password:
-            raise RuntimeError("Missing SMTP env vars (SMTP_HOST/SMTP_USER/SMTP_PASS)")
+        if not api_key or not from_email:
+            raise RuntimeError("Missing env vars SENDGRID_API_KEY and/or SENDGRID_FROM")
 
-        msg = MIMEMultipart()
-        msg["From"] = user
-        msg["To"] = to_email
-        msg["Subject"] = subject
+        payload = {
+            "personalizations": [
+                {
+                    "to": [{"email": to_email}],
+                }
+            ],
+            "from": {"email": from_email},
+            "subject": subject,
+            "content": [{"type": "text/plain", "value": body}],
+        }
+
         if reply_to:
-            msg["Reply-To"] = reply_to
+            payload["reply_to"] = {"email": reply_to}
 
-        msg.attach(MIMEText(body, "plain"))
+        data = json.dumps(payload).encode("utf-8")
 
-        with smtplib.SMTP(host, port) as server:
-            server.starttls()
-            server.login(user, password)
-            server.send_message(msg)
+        req = urllib.request.Request(
+            "https://api.sendgrid.com/v3/mail/send",
+            data=data,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
 
-        logger.info(f"Email sent to {to_email}: {subject}")
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            # SendGrid returns 202 Accepted on success
+            if resp.status not in (200, 202):
+                raise RuntimeError(f"SendGrid error status: {resp.status}")
+
+        logger.info(f"✅ SendGrid email accepted for delivery to {to_email}: {subject}")
         return True
 
-    except Exception as e:
-        logger.error(f"Email send failed: {e}")
+    except urllib.error.HTTPError as e:
+        err_body = e.read().decode("utf-8", errors="ignore")
+        logger.error(f"❌ SendGrid HTTPError {e.code}: {err_body}")
         return False
-
+    except Exception as e:
+        logger.error(f"❌ SendGrid send failed: {e}")
+        return False
 
 def init_analytics_tables():
     """Create analytics tables in Postgres if they don't exist."""
