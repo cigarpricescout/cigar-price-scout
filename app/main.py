@@ -309,18 +309,44 @@ else:
 app = FastAPI()
 app.mount("/static", StaticFiles(directory=STATIC_PATH), name="static")
 
-def send_notification_email(subject: str, body: str, to_email: str = "info@cigarpricescout.com"):
-    """Log email notifications - SMTP disabled due to connection issues"""
+def send_notification_email(subject: str, body: str, to_email: str = None, reply_to: str = None):
+    """
+    Sends an email via SMTP using Railway environment variables.
+    Required env vars: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS
+    Optional env var: EMAIL_TO
+    """
     try:
-        logger.info(f"📧 EMAIL NOTIFICATION:")
-        logger.info(f"To: {to_email}")
-        logger.info(f"Subject: {subject}")
-        logger.info(f"Body: {body}")
-        logger.info(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        host = os.getenv("SMTP_HOST")
+        port = int(os.getenv("SMTP_PORT", "587"))
+        user = os.getenv("SMTP_USER")
+        password = os.getenv("SMTP_PASS")
+        default_to = os.getenv("EMAIL_TO", "info@cigarpricescout.com")
+        to_email = to_email or default_to
+
+        if not host or not user or not password:
+            raise RuntimeError("Missing SMTP env vars (SMTP_HOST/SMTP_USER/SMTP_PASS)")
+
+        msg = MIMEMultipart()
+        msg["From"] = user
+        msg["To"] = to_email
+        msg["Subject"] = subject
+        if reply_to:
+            msg["Reply-To"] = reply_to
+
+        msg.attach(MIMEText(body, "plain"))
+
+        with smtplib.SMTP(host, port) as server:
+            server.starttls()
+            server.login(user, password)
+            server.send_message(msg)
+
+        logger.info(f"Email sent to {to_email}: {subject}")
         return True
+
     except Exception as e:
-        logger.error(f"Email notification failed: {e}")
+        logger.error(f"Email send failed: {e}")
         return False
+
 
 def init_analytics_tables():
     """Create analytics tables in Postgres if they don't exist."""
