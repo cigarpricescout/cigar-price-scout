@@ -894,9 +894,10 @@ def compare(
         delivered_cents = base_cents + shipping_cents + tax_cents
         
         # Apply promotions
+        # Apply promotions
         promo_price_cents, promo_code, promo_discount = apply_promotion(base_cents, product.retailer_key)
-        if promo_price_cents:
-            # Recalculate tax on promotional price
+        print(f"DEBUG: {product.retailer_key} - Base: {base_cents}, Promo: {promo_price_cents}, Code: {promo_code}, Discount: {promo_discount}")
+        if promo_price_cents and promo_price_cents != base_cents:
             promo_shipping_cents = estimate_shipping_cents(promo_price_cents, product.retailer_key, state) or 0
             promo_tax_cents = estimate_tax_cents(promo_price_cents + promo_shipping_cents, product.retailer_key, state) or 0
             final_delivered_cents = promo_price_cents + promo_shipping_cents + promo_tax_cents
