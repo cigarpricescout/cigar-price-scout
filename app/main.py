@@ -297,6 +297,44 @@ def get_analytics_conn():
         raise RuntimeError("ANALYTICS_DB_URL is not set")
     return psycopg2.connect(db_url)  
 
+def load_promotions():
+    """Load active promotions from promotions.json"""
+    try:
+        promo_file = Path("promotions.json")
+        if not promo_file.exists():
+            return {}
+        
+        with open(promo_file, 'r') as f:
+            promotions = json.load(f)
+        
+        # Filter to only active promotions
+        active_promos = {}
+        for retailer, promos in promotions.items():
+            active_promos[retailer] = [p for p in promos if p.get('active', False)]
+        
+        return active_promos
+    except Exception as e:
+        logger.error(f"Failed to load promotions: {e}")
+        return {}
+
+def apply_promotion(base_price_cents, retailer_key):
+    """Apply applicable promotion to base price"""
+    promotions = load_promotions()
+    
+    if retailer_key not in promotions or not promotions[retailer_key]:
+        return base_price_cents, None, None
+    
+    # Get the first active promotion (you can enhance this logic)
+    promo = promotions[retailer_key][0]
+    discount_percent = promo['discount']
+    promo_code = promo['code']
+    
+    # Calculate discounted price
+    discount_amount = int(base_price_cents * (discount_percent / 100))
+    promo_price_cents = base_price_cents - discount_amount
+    
+    return promo_price_cents, promo_code, discount_percent
+
 # Dynamic path resolution for local vs Railway deployment
 import os
 if os.path.exists("../static"):
@@ -855,6 +893,16 @@ def compare(
         tax_cents = tax_cents or 0
         delivered_cents = base_cents + shipping_cents + tax_cents
         
+        # Apply promotions
+        promo_price_cents, promo_code, promo_discount = apply_promotion(base_cents, product.retailer_key)
+        if promo_price_cents:
+            # Recalculate tax on promotional price
+            promo_shipping_cents = estimate_shipping_cents(promo_price_cents, product.retailer_key, state) or 0
+            promo_tax_cents = estimate_tax_cents(promo_price_cents + promo_shipping_cents, product.retailer_key, state) or 0
+            final_delivered_cents = promo_price_cents + promo_shipping_cents + promo_tax_cents
+        else:
+            final_delivered_cents = delivered_cents
+
         # Track in-stock prices for determining cheapest
         if product.in_stock:
             in_stock_prices.append(delivered_cents)
@@ -907,7 +955,7 @@ def compare(
             "shipping": f"${shipping_cents/100:.2f}",
             "tax": f"${tax_cents/100:.2f}",
             "delivered": f"${delivered_cents/100:.2f}",
-            "promo": product.current_promotions_applied.split('|')[0] if product.current_promotions_applied else None,
+            "promo": f"{promo_discount:.0f}% off" if promo_discount else None,
             "promo_code": promo_code,
             "delivered_after_promo": f"${final_delivered_cents/100:.2f}",
             "url": product.url,
@@ -1056,7 +1104,7 @@ def compare_all(
             "shipping": f"${shipping_cents/100:.2f}",
             "tax": f"${tax_cents/100:.2f}",
             "delivered": f"${delivered_cents/100:.2f}",
-            "promo": product.current_promotions_applied.split('|')[0] if product.current_promotions_applied else None,
+            "promo": f"{promo_discount:.0f}% off" if promo_discount else None,
             "promo_code": promo_code,
             "delivered_after_promo": f"${final_delivered_cents/100:.2f}",
             "url": product.url,
