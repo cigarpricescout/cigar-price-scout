@@ -337,12 +337,9 @@ def apply_promotion(base_price_cents, retailer_key):
 
 # Dynamic path resolution for local vs Railway deployment
 import os
-if os.path.exists("../static"):
-    STATIC_PATH = "../static"
-    CSV_PATH_PREFIX = f"{STATIC_PATH}/data"
-else:
-    STATIC_PATH = "static"  
-    CSV_PATH_PREFIX = "static/data"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+STATIC_PATH = str(PROJECT_ROOT / "static")
+CSV_PATH_PREFIX = str(PROJECT_ROOT / "static" / "data")
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory=STATIC_PATH), name="static")
@@ -450,7 +447,11 @@ def init_analytics_tables():
 @app.on_event("startup")
 def startup_event():
     """Initialize analytics tables on app startup."""
-    init_analytics_tables()
+    try:
+        init_analytics_tables()
+        logger.info("✓ Analytics tables initialized")
+    except Exception as e:
+        logger.warning(f"⚠ Analytics DB not available (local dev mode): {e}")
     # Later, if you re-enable the scheduler, you can also call start_scheduler() here.
 
 #@app.on_event("startup")
