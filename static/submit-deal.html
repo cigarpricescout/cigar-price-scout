@@ -1,0 +1,531 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Submit a Deal | Cigar Price Scout</title>
+    
+    <meta name="description" content="Found a great cigar deal? Submit it to help fellow cigar enthusiasts save money." />
+    
+    <link rel="icon" type="image/png" href="/static/logo.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap" rel="stylesheet" />
+    
+    <style>
+      :root {
+        --ink: #111;
+        --muted: #4b5563;
+        --rule: #e5e7eb;
+        --accent: #7c5c2e;
+        --value: #059669;
+      }
+
+      body {
+        margin: 0;
+        color: var(--ink);
+        background: #faf7f2;
+        font-family: "Cormorant Garamond", serif;
+        font-size: 18px;
+        line-height: 1.5;
+      }
+      
+      .wrap { max-width: 700px; margin: 0 auto; padding: 0 20px; }
+      
+      .heroheader {
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 8px; padding: 28px 0 10px; text-align: center;
+      }
+      
+      .scout-hat { width: 100px; height: 80px; object-fit: contain; }
+      
+      .brandname {
+        font-family: "Cinzel", serif;
+        font-weight: 700;
+        letter-spacing: .4px;
+        font-size: 28px;
+      }
+      
+      .tag {
+        font-style: italic;
+        color: var(--muted);
+        font-size: 20px;
+        margin-top: 2px;
+      }
+      
+      h1 {
+        font-family: "Cinzel", serif;
+        font-weight: 700;
+        font-size: 28px;
+        text-align: center;
+        margin: 30px 0 10px;
+      }
+      
+      .subtitle {
+        text-align: center;
+        color: var(--muted);
+        font-size: 18px;
+        margin-bottom: 30px;
+      }
+      
+      .form-card {
+        background: #fff;
+        border: 1px solid var(--rule);
+        border-radius: 12px;
+        padding: 30px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+      }
+      
+      .form-section {
+        margin-bottom: 25px;
+        padding-bottom: 25px;
+        border-bottom: 1px solid var(--rule);
+      }
+      
+      .form-section:last-of-type {
+        border-bottom: none;
+        margin-bottom: 0;
+        padding-bottom: 0;
+      }
+      
+      .section-title {
+        font-family: "Cinzel", serif;
+        font-weight: 600;
+        font-size: 18px;
+        margin-bottom: 15px;
+        color: var(--accent);
+      }
+      
+      .form-group {
+        margin-bottom: 18px;
+      }
+      
+      label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 6px;
+        color: var(--ink);
+      }
+      
+      .label-hint {
+        font-weight: 400;
+        font-size: 14px;
+        color: var(--muted);
+      }
+      
+      input[type="text"],
+      input[type="email"],
+      input[type="url"],
+      input[type="number"],
+      input[type="date"],
+      select,
+      textarea {
+        width: 100%;
+        padding: 12px 14px;
+        border: 1px solid var(--rule);
+        border-radius: 8px;
+        font-family: "Cormorant Garamond", serif;
+        font-size: 18px;
+        color: var(--ink);
+        background: #fff;
+        box-sizing: border-box;
+      }
+      
+      input:focus,
+      select:focus,
+      textarea:focus {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px rgba(124, 92, 46, 0.1);
+      }
+      
+      textarea {
+        min-height: 100px;
+        resize: vertical;
+      }
+      
+      .radio-group {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 15px;
+      }
+      
+      .radio-option {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+      }
+      
+      .radio-option input[type="radio"] {
+        width: auto;
+        margin: 0;
+        cursor: pointer;
+      }
+      
+      .conditional-fields {
+        margin-top: 15px;
+        padding: 15px;
+        background: #f9fafb;
+        border-radius: 8px;
+        display: none;
+      }
+      
+      .conditional-fields.visible {
+        display: block;
+      }
+      
+      .row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 15px;
+      }
+      
+      .submit-btn {
+        display: block;
+        width: 100%;
+        padding: 16px;
+        background: var(--accent);
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        font-family: "Cormorant Garamond", serif;
+        font-size: 20px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: filter 0.2s;
+      }
+      
+      .submit-btn:hover {
+        filter: brightness(0.95);
+      }
+      
+      .submit-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      
+      .success-message {
+        background: #d1fae5;
+        border: 1px solid #6ee7b7;
+        color: #065f46;
+        padding: 20px;
+        border-radius: 8px;
+        text-align: center;
+        display: none;
+      }
+      
+      .error-message {
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        color: #dc2626;
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        display: none;
+      }
+      
+      .back-link {
+        display: inline-block;
+        margin-bottom: 20px;
+        color: var(--accent);
+        text-decoration: none;
+        font-weight: 500;
+      }
+      
+      .back-link:hover {
+        text-decoration: underline;
+      }
+      
+      .footer {
+        margin-top: 40px;
+        padding: 20px 0;
+        border-top: 1px solid var(--rule);
+        text-align: center;
+        color: var(--muted);
+        font-size: 16px;
+      }
+      
+      .footer a { color: var(--accent); text-decoration: none; }
+      .footer a:hover { text-decoration: underline; }
+      
+      @media (max-width: 600px) {
+        .row {
+          grid-template-columns: 1fr;
+        }
+        
+        .radio-group {
+          flex-direction: column;
+        }
+        
+        .form-card {
+          padding: 20px;
+        }
+      }
+    </style>
+  </head>
+  
+  <body>
+    <div class="wrap">
+      <header class="heroheader">
+        <a href="/">
+          <img src="/static/logo.png" alt="Cigar Price Scout Logo" class="scout-hat" />
+        </a>
+        <div class="brandname">Cigar Price Scout</div>
+        <p class="tag">Community Deal Submission</p>
+      </header>
+      
+      <main>
+        <a href="/" class="back-link">← Back to Search</a>
+        
+        <h1>Submit a Deal</h1>
+        <p class="subtitle">Found a great cigar deal? Share it with the community!</p>
+        
+        <div id="successMessage" class="success-message">
+          <h3>Thank You!</h3>
+          <p>Your deal has been submitted for review. We'll verify and add it to our site shortly.</p>
+          <p><a href="/">Return to Home</a> | <a href="/deals">View Best Deals</a></p>
+        </div>
+        
+        <div id="errorMessage" class="error-message"></div>
+        
+        <form id="dealForm" class="form-card">
+          <!-- Retailer Section -->
+          <div class="form-section">
+            <div class="section-title">Retailer Information</div>
+            
+            <div class="form-group">
+              <label for="retailer">Retailer Name <span class="label-hint">(required)</span></label>
+              <input type="text" id="retailer" name="retailer" placeholder="e.g., Fox Cigar, Cigar Page, Atlantic Cigar" required>
+            </div>
+          </div>
+          
+          <!-- Deal Type Section -->
+          <div class="form-section">
+            <div class="section-title">Deal Type</div>
+            
+            <div class="form-group">
+              <label>What kind of deal is this? <span class="label-hint">(required)</span></label>
+              <div class="radio-group">
+                <label class="radio-option">
+                  <input type="radio" name="deal_type" value="promo_code" required>
+                  Promo Code
+                </label>
+                <label class="radio-option">
+                  <input type="radio" name="deal_type" value="sale_price">
+                  Sale Price (no code needed)
+                </label>
+                <label class="radio-option">
+                  <input type="radio" name="deal_type" value="bundle">
+                  Bundle Deal
+                </label>
+              </div>
+            </div>
+            
+            <div id="promoCodeField" class="conditional-fields">
+              <div class="form-group">
+                <label for="promo_code">Promo Code</label>
+                <input type="text" id="promo_code" name="promo_code" placeholder="e.g., SAVE20, HOLIDAY15">
+              </div>
+            </div>
+          </div>
+          
+          <!-- Scope Section -->
+          <div class="form-section">
+            <div class="section-title">What Does This Deal Apply To?</div>
+            
+            <div class="form-group">
+              <label>Deal Scope <span class="label-hint">(required)</span></label>
+              <div class="radio-group">
+                <label class="radio-option">
+                  <input type="radio" name="scope" value="site" required>
+                  Site-wide (everything)
+                </label>
+                <label class="radio-option">
+                  <input type="radio" name="scope" value="brand">
+                  Specific Brand
+                </label>
+                <label class="radio-option">
+                  <input type="radio" name="scope" value="line">
+                  Specific Line
+                </label>
+                <label class="radio-option">
+                  <input type="radio" name="scope" value="sku">
+                  Specific Product
+                </label>
+              </div>
+            </div>
+            
+            <div id="scopeFields" class="conditional-fields">
+              <div class="form-group">
+                <label for="brand">Brand</label>
+                <input type="text" id="brand" name="brand" placeholder="e.g., Padron, Arturo Fuente">
+              </div>
+              
+              <div id="lineField" class="form-group" style="display: none;">
+                <label for="line">Line</label>
+                <input type="text" id="line" name="line" placeholder="e.g., 1964 Anniversary, Hemingway">
+              </div>
+              
+              <div id="skuFields" style="display: none;">
+                <div class="row">
+                  <div class="form-group">
+                    <label for="wrapper">Wrapper <span class="label-hint">(optional)</span></label>
+                    <input type="text" id="wrapper" name="wrapper" placeholder="e.g., Maduro, Natural">
+                  </div>
+                  <div class="form-group">
+                    <label for="size">Size <span class="label-hint">(optional)</span></label>
+                    <input type="text" id="size" name="size" placeholder="e.g., 6 x 52, Robusto">
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Discount Section -->
+          <div class="form-section">
+            <div class="section-title">Discount Details</div>
+            
+            <div class="row">
+              <div class="form-group">
+                <label for="discount_percent">Discount Percentage</label>
+                <input type="number" id="discount_percent" name="discount_percent" placeholder="e.g., 15" min="0" max="100">
+              </div>
+              <div class="form-group">
+                <label for="discount_dollars">OR Dollar Amount Off</label>
+                <input type="number" id="discount_dollars" name="discount_dollars" placeholder="e.g., 25" min="0" step="0.01">
+              </div>
+            </div>
+            
+            <div class="form-group">
+              <label for="expiration">Expiration Date <span class="label-hint">(if known)</span></label>
+              <input type="date" id="expiration" name="expiration">
+            </div>
+            
+            <div class="form-group">
+              <label for="deal_url">Link to Deal <span class="label-hint">(optional but helpful)</span></label>
+              <input type="url" id="deal_url" name="deal_url" placeholder="https://...">
+            </div>
+          </div>
+          
+          <!-- Your Info Section -->
+          <div class="form-section">
+            <div class="section-title">Your Information</div>
+            
+            <div class="row">
+              <div class="form-group">
+                <label for="submitter_name">Your Name</label>
+                <input type="text" id="submitter_name" name="submitter_name" placeholder="First name or username" required>
+              </div>
+              <div class="form-group">
+                <label for="submitter_email">Email</label>
+                <input type="email" id="submitter_email" name="submitter_email" placeholder="your@email.com" required>
+              </div>
+            </div>
+            
+            <div class="form-group">
+              <label for="notes">Additional Notes <span class="label-hint">(optional)</span></label>
+              <textarea id="notes" name="notes" placeholder="Any additional details about the deal..."></textarea>
+            </div>
+          </div>
+          
+          <button type="submit" class="submit-btn" id="submitBtn">Submit Deal</button>
+        </form>
+      </main>
+      
+      <footer class="footer">
+        <p>
+          <a href="/">Home</a> | 
+          <a href="/deals">Best Deals</a> |
+          <a href="/about.html">About</a> | 
+          <a href="/contact.html">Contact</a>
+        </p>
+        <p>&copy; 2025 Cigar Price Scout</p>
+      </footer>
+    </div>
+
+    <script>
+      // Show/hide conditional fields based on deal type
+      document.querySelectorAll('input[name="deal_type"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+          const promoField = document.getElementById('promoCodeField');
+          promoField.classList.toggle('visible', this.value === 'promo_code');
+        });
+      });
+      
+      // Show/hide scope fields based on selection
+      document.querySelectorAll('input[name="scope"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+          const scopeFields = document.getElementById('scopeFields');
+          const lineField = document.getElementById('lineField');
+          const skuFields = document.getElementById('skuFields');
+          
+          if (this.value === 'site') {
+            scopeFields.classList.remove('visible');
+          } else {
+            scopeFields.classList.add('visible');
+            lineField.style.display = (this.value === 'line' || this.value === 'sku') ? 'block' : 'none';
+            skuFields.style.display = this.value === 'sku' ? 'block' : 'none';
+          }
+        });
+      });
+      
+      // Form submission
+      document.getElementById('dealForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const submitBtn = document.getElementById('submitBtn');
+        const errorMsg = document.getElementById('errorMessage');
+        const successMsg = document.getElementById('successMessage');
+        
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Submitting...';
+        errorMsg.style.display = 'none';
+        
+        try {
+          const formData = new FormData(this);
+          const data = {
+            retailer: formData.get('retailer'),
+            deal_type: formData.get('deal_type'),
+            scope: formData.get('scope'),
+            brand: formData.get('brand') || null,
+            line: formData.get('line') || null,
+            wrapper: formData.get('wrapper') || null,
+            size: formData.get('size') || null,
+            promo_code: formData.get('promo_code') || null,
+            discount_percent: formData.get('discount_percent') ? parseFloat(formData.get('discount_percent')) : null,
+            discount_dollars: formData.get('discount_dollars') ? parseFloat(formData.get('discount_dollars')) : null,
+            expiration: formData.get('expiration') || null,
+            deal_url: formData.get('deal_url') || null,
+            submitter_name: formData.get('submitter_name'),
+            submitter_email: formData.get('submitter_email'),
+            notes: formData.get('notes') || null
+          };
+          
+          const response = await fetch('/api/submit-deal', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+          });
+          
+          const result = await response.json();
+          
+          if (result.status === 'success') {
+            this.style.display = 'none';
+            successMsg.style.display = 'block';
+            successMsg.scrollIntoView({ behavior: 'smooth' });
+          } else {
+            throw new Error(result.message || 'Submission failed');
+          }
+          
+        } catch (error) {
+          errorMsg.textContent = error.message || 'An error occurred. Please try again.';
+          errorMsg.style.display = 'block';
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Submit Deal';
+        }
+      });
+    </script>
+  </body>
+</html>
+

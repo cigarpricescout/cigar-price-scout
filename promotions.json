@@ -1,0 +1,21 @@
+{
+  "hilands": [
+    {
+      "code": "SCOUT10",
+      "discount": 10,
+      "scope": "site",
+      "active": true,
+      "submitted_by": "John D."
+    }
+  ],
+  "foxcigar": [
+    {
+      "code": "HOLIDAY15",
+      "discount": 15,
+      "scope": "site",
+      "active": true,
+      "submitted_by": null
+    }
+  ]
+}
+

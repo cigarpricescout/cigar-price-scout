@@ -1483,6 +1483,184 @@ async def trigger_feed_update():
     run_feed_processor()
     return {"status": "Feed processor triggered"}
 
+# ============== BEST CIGAR BOX PRICES API ==============
+
+@app.get("/api/best-deals")
+def get_best_deals(limit: int = Query(50, description="Max number of deals to return")):
+    """
+    Return products with the best value (those priced >10% below median).
+    Groups by product and returns the cheapest offer for each.
+    """
+    all_products = load_all_products()
+    
+    # Group products by canonical identifier (brand + line + wrapper + size)
+    product_groups = {}
+    
+    for p in all_products:
+        if not p.in_stock:
+            continue
+            
+        key = f"{p.brand}|{p.line}|{p.wrapper}|{p.size}"
+        if key not in product_groups:
+            product_groups[key] = []
+        product_groups[key].append(p)
+    
+    deals = []
+    
+    for key, products in product_groups.items():
+        if len(products) < 2:
+            continue  # Need multiple retailers to compare
+        
+        # Calculate prices for all offerings
+        prices = []
+        for p in products:
+            base_cents = p.price_cents
+            shipping_cents = estimate_shipping_cents(base_cents, p.retailer_key, None) or 0
+            tax_cents = estimate_tax_cents(base_cents + shipping_cents, p.retailer_key, None) or 0
+            delivered = base_cents + shipping_cents + tax_cents
+            prices.append((delivered, p))
+        
+        # Sort by price
+        prices.sort(key=lambda x: x[0])
+        
+        # Calculate median
+        price_values = [p[0] for p in prices]
+        n = len(price_values)
+        median = price_values[n // 2] if n % 2 == 1 else (price_values[n // 2 - 1] + price_values[n // 2]) / 2
+        
+        # Check if cheapest is >10% below median (Value)
+        cheapest_price, cheapest_product = prices[0]
+        diff_percent = ((cheapest_price - median) / median) * 100
+        
+        if diff_percent <= -10:  # 10% or more below median = Value
+            savings_vs_median = median - cheapest_price
+            savings_percent = abs(diff_percent)
+            
+            deals.append({
+                "brand": cheapest_product.brand,
+                "line": cheapest_product.line,
+                "wrapper": cheapest_product.wrapper,
+                "vitola": cheapest_product.vitola,
+                "size": cheapest_product.size,
+                "box_qty": cheapest_product.box_qty,
+                "retailer": cheapest_product.retailer_name,
+                "retailer_key": cheapest_product.retailer_key,
+                "price": f"${cheapest_price / 100:.2f}",
+                "price_cents": cheapest_price,
+                "median_price": f"${median / 100:.2f}",
+                "savings": f"${savings_vs_median / 100:.2f}",
+                "savings_percent": round(savings_percent, 1),
+                "url": cheapest_product.url,
+                "num_retailers": len(products)
+            })
+    
+    # Sort by price (lowest first)
+    deals.sort(key=lambda x: x["price_cents"])
+    
+    return {
+        "count": len(deals[:limit]),
+        "deals": deals[:limit],
+        "generated_at": datetime.now().isoformat()
+    }
+
+@app.get("/deals", response_class=HTMLResponse)
+@app.get("/best-cigar-box-prices", response_class=HTMLResponse)
+async def best_deals_page():
+    """Serve the Best Cigar Box Prices page"""
+    template_path = Path(f"{STATIC_PATH}/deals.html")
+    if not template_path.exists():
+        return HTMLResponse(content="<h1>Page not found</h1>", status_code=404)
+    
+    with open(template_path, 'r', encoding='utf-8') as f:
+        return HTMLResponse(content=f.read())
+
+# ============== DEAL SUBMISSION API ==============
+
+class DealSubmission(BaseModel):
+    retailer: str
+    deal_type: str  # "promo_code", "sale_price", "bundle"
+    scope: str  # "site", "brand", "line", "sku"
+    brand: Optional[str] = None
+    line: Optional[str] = None
+    wrapper: Optional[str] = None
+    size: Optional[str] = None
+    promo_code: Optional[str] = None
+    discount_percent: Optional[float] = None
+    discount_dollars: Optional[float] = None
+    expiration: Optional[str] = None
+    deal_url: Optional[str] = None
+    submitter_name: str
+    submitter_email: str
+    notes: Optional[str] = None
+
+@app.post("/api/submit-deal")
+async def submit_deal(deal: DealSubmission):
+    """Handle community deal submissions"""
+    try:
+        # Format the deal for email
+        scope_details = ""
+        if deal.scope == "site":
+            scope_details = "Site-wide"
+        elif deal.scope == "brand":
+            scope_details = f"Brand: {deal.brand}"
+        elif deal.scope == "line":
+            scope_details = f"Brand: {deal.brand}, Line: {deal.line}"
+        elif deal.scope == "sku":
+            scope_details = f"{deal.brand} {deal.line} {deal.wrapper or ''} {deal.size or ''}".strip()
+        
+        discount_info = ""
+        if deal.discount_percent:
+            discount_info = f"{deal.discount_percent}% off"
+        elif deal.discount_dollars:
+            discount_info = f"${deal.discount_dollars} off"
+        
+        subject = f"Deal Submission: {deal.retailer} - {scope_details}"
+        
+        body = f"""
+========== NEW DEAL SUBMISSION ==========
+
+RETAILER: {deal.retailer}
+DEAL TYPE: {deal.deal_type}
+SCOPE: {deal.scope}
+
+DETAILS:
+{scope_details}
+
+DISCOUNT: {discount_info}
+PROMO CODE: {deal.promo_code or 'N/A'}
+EXPIRATION: {deal.expiration or 'Not specified'}
+DEAL URL: {deal.deal_url or 'Not provided'}
+
+NOTES:
+{deal.notes or 'None'}
+
+SUBMITTED BY:
+- Name: {deal.submitter_name}
+- Email: {deal.submitter_email}
+
+Submitted: {datetime.now().strftime('%Y-%m-%d at %H:%M:%S')}
+==========================================
+"""
+        
+        logger.info(body)
+        send_notification_email(subject, body, "info@cigarpricescout.com", reply_to=deal.submitter_email)
+        
+        return {"status": "success", "message": "Thank you! Your deal has been submitted for review."}
+        
+    except Exception as e:
+        logger.error(f"Error processing deal submission: {e}")
+        return {"status": "error", "message": "There was an error submitting your deal. Please try again."}
+
+@app.get("/submit-deal", response_class=HTMLResponse)
+async def submit_deal_page():
+    """Serve the Submit a Deal page"""
+    template_path = Path(f"{STATIC_PATH}/submit-deal.html")
+    if not template_path.exists():
+        return HTMLResponse(content="<h1>Page not found</h1>", status_code=404)
+    
+    with open(template_path, 'r', encoding='utf-8') as f:
+        return HTMLResponse(content=f.read())
+
 if __name__ == "__main__":
     import uvicorn
     import os
