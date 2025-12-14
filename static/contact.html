@@ -1,275 +1,173 @@
 <!doctype html>
 <html lang="en">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1">
-    
-    <!-- Canonical URL -->
-    <title>Contact Us - Cigar Price Scout</title>
-    <link rel="canonical" href="https://cigarpricescout.com/contact.html" />
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap" rel="stylesheet">
-    <link rel="icon" type="image/png" href="/static/logo.png">
-    
-    <style>
-        :root{
-            --ink:#111;
-            --muted:#4b5563;
-            --rule:#e5e7eb;
-            --accent:#7c5c2e;
-        }
-        body{
-            margin:0;
-            color:var(--ink);
-            background:#faf7f2;
-            font-family:"Cormorant Garamond", serif;
-            font-size:18px;
-            line-height:1.5;
-        }
-        .wrap{max-width:700px;margin:0 auto;padding:0 20px}
-        
-        .header{
-            text-align:center;
-            padding:40px 0 20px;
-        }
-        .logo{width:80px;height:64px;object-fit:contain;margin-bottom:20px}
-        h1{
-            font-family:"Cinzel", serif;
-            font-weight:700;
-            font-size:32px;
-            margin:0;
-            letter-spacing:0.3px;
-        }
-        .nav{
-            text-align:center;
-            margin:20px 0;
-        }
-        .nav a{
-            color:var(--accent);
-            text-decoration:none;
-            font-weight:600;
-        }
-        .nav a:hover{text-decoration:underline}
-        
-        .contact-form{
-            background:#fff;
-            border-radius:12px;
-            padding:40px;
-            box-shadow:0 1px 3px rgba(0,0,0,0.1);
-            margin:30px 0;
-        }
-        .form-group{
-            margin-bottom:25px;
-        }
-        label{
-            display:block;
-            font-weight:600;
-            margin-bottom:8px;
-            font-family:"Cinzel", serif;
-        }
-        input, textarea, select{
-            width:100%;
-            padding:12px 16px;
-            border:1px solid var(--rule);
-            border-radius:8px;
-            font-family:"Cormorant Garamond", serif;
-            font-size:16px;
-            box-sizing:border-box;
-        }
-        input:focus, textarea:focus, select:focus{
-            outline:none;
-            border-color:var(--accent);
-        }
-        textarea{
-            height:120px;
-            resize:vertical;
-        }
-        .submit-btn{
-            background:var(--accent);
-            color:#fff;
-            border:none;
-            padding:14px 28px;
-            border-radius:8px;
-            font-size:18px;
-            font-weight:600;
-            cursor:pointer;
-            font-family:"Cormorant Garamond", serif;
-        }
-        .submit-btn:hover{
-            filter:brightness(0.95);
-        }
-
-        .submit-btn:disabled{
-            opacity:0.6;
-            cursor:not-allowed;
-        }
-        
-        .success-message{
-            background:#d1fae5;
-            color:#065f46;
-            padding:16px;
-            border-radius:8px;
-            margin:20px 0;
-            text-align:center;
-            font-weight:600;
-        }
-        
-        .error-message{
-            background:#fee2e2;
-            color:#dc2626;
-            padding:16px;
-            border-radius:8px;
-            margin:20px 0;
-            text-align:center;
-            font-weight:600;
-        }
-        
-        .contact-info{
-            background:#f8fafc;
-            border-radius:12px;
-            padding:30px;
-            margin:30px 0;
-        }
-        .contact-info h2{
-            font-family:"Cinzel", serif;
-            font-weight:600;
-            margin-top:0;
-        }
-        
-        .footer{
-            margin-top:40px;
-            padding:20px 0;
-            border-top:1px solid var(--rule);
-            text-align:center;
-            color:var(--muted);
-            font-size:16px;
-        }
-        .footer a{color:var(--accent);text-decoration:none}
-        .footer a:hover{text-decoration:underline}
-    </style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Contact Us - Cigar Price Scout</title>
+  <meta name="description" content="Contact Cigar Price Scout for questions, partnership inquiries, or data issue reports." />
+  <link rel="canonical" href="https://cigarpricescout.com/contact.html" />
+  <link rel="icon" type="image/png" href="/static/logo.png">
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: { 50: '#faf7f2', 500: '#7c5c2e', 600: '#6b4f27' },
+            ink: '#111111',
+            muted: '#4b5563',
+          },
+          fontFamily: {
+            serif: ['Cormorant Garamond', 'Georgia', 'serif'],
+            display: ['Cinzel', 'Georgia', 'serif'],
+          },
+        },
+      },
+    }
+  </script>
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap" rel="stylesheet">
 </head>
 
-<body>
-    <div class="wrap">
-        <div class="header">
-            <img src="/static/logo.png" alt="Cigar Price Scout Logo" class="logo">
-            <h1>Contact Cigar Price Scout</h1>
-        </div>
-        
-        <div class="nav">
-            <a href="/">&larr; Back to Price Comparison</a>
-        </div>
-        
-        <div class="contact-form">
-            <form id="contactForm">
-                <div class="form-group">
-                    <label for="name">Name *</label>
-                    <input type="text" id="name" name="name" required>
-                </div>
-                
-                <div class="form-group">
-                    <label for="email">Email *</label>
-                    <input type="email" id="email" name="email" required>
-                </div>
-                
-                <div class="form-group">
-                    <label for="subject">Subject *</label>
-                    <select id="subject" name="subject" required>
-                        <option value="">Select a topic...</option>
-                        <option value="General Inquiry">General Inquiry</option>
-                        <option value="Retailer Partnership">Retailer Partnership</option>
-                        <option value="Data Issue">Price or Product Data Issue</option>
-                        <option value="Technical Support">Technical Support</option>
-                        <option value="Business Development">Business Development</option>
-                        <option value="Press/Media">Press/Media Inquiry</option>
-                        <option value="Other">Other</option>
-                    </select>
-                </div>
-                
-                <div class="form-group">
-                    <label for="message">Message *</label>
-                    <textarea id="message" name="message" placeholder="Please provide details about your inquiry..." required></textarea>
-                </div>
-                
-                <button type="submit" class="submit-btn">Send Message</button>
-            </form>
-        </div>
-        
-        <div class="contact-info">
-            <h2>Response Time</h2>
-            <p>We typically respond to inquiries within 24-48 hours during business days. For urgent data corrections or technical issues, please indicate "URGENT" in your subject line.</p>
-            
-            <h2>Business Inquiries</h2>
-            <p>For partnership opportunities, affiliate programs, or business development discussions, please select the appropriate subject above and provide details about your organization and proposal.</p>
-        </div>
-        
-        <footer class="footer">
-            <p>
-                <a href="/">Home</a> | 
-                <a href="/about.html">About</a> | 
-                <a href="/privacy-policy.html">Privacy</a> | 
-                <a href="/terms-of-service.html">Terms</a>
-            </p>
-            <p>&copy; 2025 Cigar Price Scout. All rights reserved.</p>
-        </footer>
+<body class="bg-brand-50 font-serif text-ink text-lg leading-relaxed">
+  <div class="max-w-3xl mx-auto px-5">
+    
+    <!-- Header -->
+    <header class="text-center py-10">
+      <img src="/static/logo.png" alt="Cigar Price Scout Logo" class="w-20 h-16 object-contain mx-auto mb-5">
+      <h1 class="font-display font-bold text-3xl tracking-wide">Contact Cigar Price Scout</h1>
+    </header>
+    
+    <!-- Back Link -->
+    <div class="text-center mb-6">
+      <a href="/" class="text-brand-500 font-semibold hover:underline">&larr; Back to Price Comparison</a>
     </div>
+    
+    <!-- Contact Form -->
+    <div class="bg-white rounded-xl p-8 shadow-sm mb-8" id="contactFormContainer">
+      <form id="contactForm">
+        <div class="mb-6">
+          <label for="name" class="block font-display font-semibold mb-2">Name <span class="text-red-500">*</span></label>
+          <input type="text" id="name" name="name" required
+                 class="w-full p-3 border border-gray-200 rounded-xl bg-white font-serif text-lg focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all">
+        </div>
+        
+        <div class="mb-6">
+          <label for="email" class="block font-display font-semibold mb-2">Email <span class="text-red-500">*</span></label>
+          <input type="email" id="email" name="email" required
+                 class="w-full p-3 border border-gray-200 rounded-xl bg-white font-serif text-lg focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all">
+        </div>
+        
+        <div class="mb-6">
+          <label for="subject" class="block font-display font-semibold mb-2">Subject <span class="text-red-500">*</span></label>
+          <select id="subject" name="subject" required
+                  class="w-full p-3 border border-gray-200 rounded-xl bg-white font-serif text-lg focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all">
+            <option value="">Select a topic...</option>
+            <option value="General Inquiry">General Inquiry</option>
+            <option value="Retailer Partnership">Retailer Partnership</option>
+            <option value="Data Issue">Price or Product Data Issue</option>
+            <option value="Technical Support">Technical Support</option>
+            <option value="Business Development">Business Development</option>
+            <option value="Press/Media">Press/Media Inquiry</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        
+        <div class="mb-6">
+          <label for="message" class="block font-display font-semibold mb-2">Message <span class="text-red-500">*</span></label>
+          <textarea id="message" name="message" rows="5" required placeholder="Please provide details about your inquiry..."
+                    class="w-full p-3 border border-gray-200 rounded-xl bg-white font-serif text-lg focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all resize-none"></textarea>
+        </div>
+        
+        <button type="submit" id="submitBtn"
+                class="w-full bg-brand-500 hover:bg-brand-600 text-white font-semibold py-4 px-6 rounded-xl transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
+          Send Message
+        </button>
+      </form>
+      
+      <div id="successMessage" class="hidden bg-emerald-50 border border-emerald-500 text-emerald-700 p-4 rounded-lg mt-6 text-center font-semibold">
+        Message sent successfully! We'll respond within 24-48 hours.
+      </div>
+      
+      <div id="errorMessage" class="hidden bg-red-50 border border-red-500 text-red-700 p-4 rounded-lg mt-6 text-center font-semibold">
+        Error sending message. Please try again.
+      </div>
+    </div>
+    
+    <!-- Contact Info -->
+    <div class="bg-gray-50 rounded-xl p-8 mb-8">
+      <h2 class="font-display font-semibold text-xl text-brand-500 mt-0 mb-4">Response Time</h2>
+      <p class="mb-6">We typically respond to inquiries within 24-48 hours during business days. For urgent data corrections or technical issues, please indicate "URGENT" in your subject line.</p>
+      
+      <h2 class="font-display font-semibold text-xl text-brand-500 mb-4">Business Inquiries</h2>
+      <p class="mb-0">For partnership opportunities, affiliate programs, or business development discussions, please select the appropriate subject above and provide details about your organization and proposal.</p>
+    </div>
+    
+    <!-- Footer -->
+    <footer class="mt-10 py-5 border-t border-gray-200 text-center text-muted text-sm">
+      <p class="space-x-2">
+        <a href="/" class="text-brand-500 hover:underline">Home</a>
+        <span>|</span>
+        <a href="/about.html" class="text-brand-500 hover:underline">About</a>
+        <span>|</span>
+        <a href="/privacy-policy.html" class="text-brand-500 hover:underline">Privacy</a>
+        <span>|</span>
+        <a href="/terms-of-service.html" class="text-brand-500 hover:underline">Terms</a>
+      </p>
+      <p class="mt-2">&copy; 2025 Cigar Price Scout. All rights reserved.</p>
+    </footer>
+  </div>
 
-    <script>
-        document.getElementById('contactForm').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            const submitBtn = document.querySelector('.submit-btn');
-            const contactForm = document.querySelector('.contact-form');
-            
-            // Clear any existing messages
-            const existingMessage = document.querySelector('.success-message, .error-message');
-            if (existingMessage) {
-                existingMessage.remove();
-            }
-            
-            submitBtn.disabled = true;
-            submitBtn.textContent = 'Sending...';
-            
-            try {
-                const formData = {
-                    name: document.getElementById('name').value,
-                    email: document.getElementById('email').value,
-                    subject: document.getElementById('subject').value,
-                    message: document.getElementById('message').value
-                };
-                
-                const response = await fetch('/api/contact', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(formData)
-                });
-                
-                const result = await response.json();
-                
-                if (result.status === 'success') {
-                    const successDiv = document.createElement('div');
-                    successDiv.className = 'success-message';
-                    successDiv.textContent = 'Message sent successfully! We\'ll respond within 24-48 hours.';
-                    contactForm.appendChild(successDiv);
-                    document.getElementById('contactForm').reset();
-                } else {
-                    const errorDiv = document.createElement('div');
-                    errorDiv.className = 'error-message';
-                    errorDiv.textContent = 'Error sending message. Please try again.';
-                    contactForm.appendChild(errorDiv);
-                }
-                
-            } catch (error) {
-                const errorDiv = document.createElement('div');
-                errorDiv.className = 'error-message';
-                errorDiv.textContent = 'Error sending message. Please try again.';
-                contactForm.appendChild(errorDiv);
-            }
-            
-            submitBtn.disabled = false;
-            submitBtn.textContent = 'Send Message';
+  <script>
+    document.getElementById('contactForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      
+      const submitBtn = document.getElementById('submitBtn');
+      const successMessage = document.getElementById('successMessage');
+      const errorMessage = document.getElementById('errorMessage');
+      
+      // Hide any existing messages
+      successMessage.classList.add('hidden');
+      errorMessage.classList.add('hidden');
+      
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Sending...';
+      
+      try {
+        const formData = {
+          name: document.getElementById('name').value,
+          email: document.getElementById('email').value,
+          subject: document.getElementById('subject').value,
+          message: document.getElementById('message').value
+        };
+        
+        const response = await fetch('/api/contact', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formData)
         });
-    </script>
+        
+        const result = await response.json();
+        
+        if (result.status === 'success') {
+          successMessage.classList.remove('hidden');
+          document.getElementById('contactForm').reset();
+        } else {
+          errorMessage.classList.remove('hidden');
+        }
+        
+      } catch (error) {
+        errorMessage.classList.remove('hidden');
+      }
+      
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Send Message';
+    });
+  </script>
 </body>
 </html>

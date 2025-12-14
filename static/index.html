@@ -1,1363 +1,737 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <!-- Google tag (gtag.js) -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-QV9XYRECFK"></script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-      gtag('config', 'G-QV9XYRECFK');
-    </script>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Cigar Price Scout - Find the Best Cigar Deals with Wrapper & Vitola Search</title>
-    
-    <meta name="fo-verify" content="cc05d5b4-848a-4809-b7d9-5c4ae620bb8f" />
-
-    <!--Impact Tag -->
-    <meta name='impact-site-verification' value='8827da88-cb8b-450d-934b-22aff8541f4b'>
-
-    <!-- SEO Meta Tags -->
-    <meta name="description" content="Compare cigar prices across 35+ online retailers. Search by brand, wrapper type, vitola, and size to find the best deals on premium cigars with shipping and tax calculations." />
-    <meta name="keywords" content="cigar prices, cigar box prices, cigar box deals, cigar deals, wrapper types, vitola sizes, Connecticut, Maduro, Habano, cigar comparison, online cigar shopping" />
-    
-    <!-- Open Graph Tags -->
-    <meta property="og:title" content="Cigar Price Scout - Best Cigar Price Comparison" />
-    <meta property="og:description" content="Compare cigar prices across 35+ retailers. Filter by wrapper type, vitola, and size to find your perfect cigar at the best price." />
-    <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://cigarpricescout.com" />
-    <meta property="og:image" content="https://cigarpricescout.com/static/cigar-scout-social.png" />
-    
-    <!-- Twitter Cards -->
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Cigar Price Scout - Find the Best Cigar Deals" />
-    <meta name="twitter:description" content="Compare prices on premium cigars by wrapper type, vitola, and size across 35+ online retailers." />
-    <meta name="twitter:image" content="https://cigarpricescout.com/static/cigar-scout-social.png" />
-    
-    <!-- Canonical URL -->
-    <link rel="canonical" href="https://cigarpricescout.com/" />
-    
-    <!-- Favicon -->
-    <link rel="icon" type="image/png" href="/static/logo.png">
-    <link rel="apple-touch-icon" href="/static/logo.png">
-    
-    <script type="application/ld+json">
-    {
-      "@context": "https://schema.org",
-      "@type": ["WebSite", "WebApplication"],
+<head>
+  <!-- Google Analytics -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-QV9XYRECFK"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-QV9XYRECFK');
+  </script>
+  
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Cigar Price Scout - Find the Best Cigar Deals with Wrapper & Vitola Search</title>
+  
+  <!-- Verification Tags -->
+  <meta name="fo-verify" content="cc05d5b4-848a-4809-b7d9-5c4ae620bb8f" />
+  <meta name='impact-site-verification' value='8827da88-cb8b-450d-934b-22aff8541f4b'>
+  
+  <!-- SEO Meta Tags -->
+  <meta name="description" content="Compare cigar prices across 35+ online retailers. Search by brand, wrapper type, vitola, and size to find the best deals on premium cigars with shipping and tax calculations." />
+  <meta name="keywords" content="cigar prices, cigar box prices, cigar box deals, cigar deals, wrapper types, vitola sizes, Connecticut, Maduro, Habano, cigar comparison, online cigar shopping" />
+  
+  <!-- Open Graph Tags -->
+  <meta property="og:title" content="Cigar Price Scout - Best Cigar Price Comparison" />
+  <meta property="og:description" content="Compare cigar prices across 35+ retailers. Filter by wrapper type, vitola, and size to find your perfect cigar at the best price." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://cigarpricescout.com" />
+  <meta property="og:image" content="https://cigarpricescout.com/static/cigar-scout-social.png" />
+  
+  <!-- Twitter Cards -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Cigar Price Scout - Find the Best Cigar Deals" />
+  <meta name="twitter:description" content="Compare prices on premium cigars by wrapper type, vitola, and size across 35+ online retailers." />
+  <meta name="twitter:image" content="https://cigarpricescout.com/static/cigar-scout-social.png" />
+  
+  <!-- Canonical URL -->
+  <link rel="canonical" href="https://cigarpricescout.com/" />
+  
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="/static/logo.png">
+  <link rel="apple-touch-icon" href="/static/logo.png">
+  
+  <!-- Schema.org -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": ["WebSite", "WebApplication"],
+    "name": "Cigar Price Scout",
+    "alternateName": "CigarPriceScout.com",
+    "url": "https://cigarpricescout.com",
+    "description": "Compare cigar prices across 35+ online retailers. Search by brand, wrapper type, vitola, and size to find the best deals on premium cigars with shipping and tax calculations.",
+    "applicationCategory": "Shopping",
+    "operatingSystem": "Any",
+    "browserRequirements": "Requires JavaScript",
+    "potentialAction": [{
+      "@type": "SearchAction",
+      "target": {
+        "@type": "EntryPoint",
+        "urlTemplate": "https://cigarpricescout.com/compare?brand={brand}&line={line}&wrapper={wrapper}&vitola={vitola}&zip={zip_code}"
+      },
+      "query-input": ["required name=brand", "required name=line", "name=wrapper", "name=vitola", "name=zip_code"]
+    }],
+    "publisher": {
+      "@type": "Organization",
       "name": "Cigar Price Scout",
-      "alternateName": "CigarPriceScout.com",
       "url": "https://cigarpricescout.com",
-      "description": "Compare cigar prices across 35+ online retailers. Search by brand, wrapper type, vitola, and size to find the best deals on premium cigars with shipping and tax calculations.",
-      "applicationCategory": "Shopping",
-      "operatingSystem": "Any",
-      "browserRequirements": "Requires JavaScript",
-      "potentialAction": [
-        {
-          "@type": "SearchAction",
-          "target": {
-            "@type": "EntryPoint",
-            "urlTemplate": "https://cigarpricescout.com/compare?brand={brand}&line={line}&wrapper={wrapper}&vitola={vitola}&zip={zip_code}"
+      "logo": {"@type": "ImageObject", "url": "https://cigarpricescout.com/static/logo.png", "width": 100, "height": 80}
+    }
+  }
+  </script>
+  
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            // Custom brand colors
+            brand: {
+              50: '#faf7f2',
+              100: '#f5efe5',
+              200: '#e8dcc8',
+              300: '#d9c5a5',
+              400: '#c9a97c',
+              500: '#7c5c2e',  // Primary accent (your current --accent)
+              600: '#6b4f27',
+              700: '#5a4220',
+              800: '#493519',
+              900: '#382812',
+            },
+            ink: '#111111',
+            muted: '#4b5563',
           },
-          "query-input": [
-            "required name=brand",
-            "required name=line", 
-            "name=wrapper",
-            "name=vitola",
-            "name=zip_code"
-          ]
-        }
-      ],
-      "publisher": {
-        "@type": "Organization",
-        "name": "Cigar Price Scout",
-        "url": "https://cigarpricescout.com",
-        "logo": {
-          "@type": "ImageObject",
-          "url": "https://cigarpricescout.com/static/logo.png",
-          "width": 100,
-          "height": 80
-        }
-      }
+          fontFamily: {
+            serif: ['Cormorant Garamond', 'Georgia', 'serif'],
+            display: ['Cinzel', 'Georgia', 'serif'],
+          },
+        },
+      },
     }
-    </script>
-    
-    <!-- Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap" rel="stylesheet" />
-    
-    <style>
-      :root{
-        --ink:#111;
-        --muted:#4b5563;
-        --rule:#e5e7eb;
-        --accent:#7c5c2e;
-      }
-
-      body{
-        margin:0;
-        color:var(--ink);
-        background:#faf7f2;
-        font-family:"Cormorant Garamond", serif;
-        font-size:18px;
-        line-height:1.5;
-      }
-      
-      .wrap{max-width:1100px;margin:0 auto;padding:0 20px}
-      
-      .heroheader{
-        display:flex;flex-direction:column;align-items:center;justify-content:center;
-        gap:8px;padding:28px 0 10px;text-align:center;
-      }
-      
-      .scout-hat{width:100px;height:80px;object-fit:contain}
-      
-      .brandname{
-        font-family:"Cinzel", serif;
-        font-weight:700;
-        letter-spacing:.4px;
-        font-size:28px;
-      }
-      
-      .tag{
-        font-style:italic;
-        color:var(--muted);
-        font-size:20px;
-        margin-top:2px;
-      }
-      
-      .last-updated{
-        font-size:14px;
-        color:var(--muted);
-        margin-top:8px;
-        font-style:italic;
-      }
-      
-      .picker{
-        display:grid;
-        grid-template-columns:1fr 1fr 1fr 1fr 100px 80px 110px;
-        gap:6px;
-        margin:18px auto;
-        max-width:100%;
-        overflow:visible;
-      }
-      
-      .picker select,.picker input{
-        padding:12px 14px;
-        border:1px solid var(--rule);
-        border-radius:12px;
-        background:#fff;
-        font-family:"Cormorant Garamond", serif;
-        font-size:18px;
-        color:#000000;
-      }
-
-      #qtyInput {
-       color: #6b7280 !important;
-      background: #f3f4f6 !important;
-      cursor: not-allowed !important;
-      opacity: 0.8 !important;
-    }
-
-      .price-context {
-        font-weight: 700;
-        font-size: 18px;
-      }
-
-      .price-context.value {
-        color: #059669;
-      }
-
-      .price-context.market {
-        color: #6b7280;
-      }
-
-      .price-context.premium {
-        color: #2563eb;
-      }
-
-      .cta{
-        border:none;border-radius:12px;padding:10px 12px;font-weight:700;cursor:pointer;
-        display:flex;align-items:center;justify-content:center;gap:6px;
-        white-space:nowrap;min-width:fit-content;
-      }
-      
-      .cta-primary{background:var(--accent);color:#fff}
-      .cta-primary:hover{filter:brightness(.95)}
-      .cta:disabled{opacity:0.5;cursor:not-allowed}
-      .cta svg{width:18px;height:18px}
-      
-      .chips{display:flex;gap:8px;justify-content:center;margin-top:12px;flex-wrap:wrap}
-      .chip{font-size:14px;padding:6px 10px;border-radius:999px;border:1px solid var(--rule);background:#fff;color:#374151}
-      
-      h2{font-family:"Cinzel", serif;font-weight:700;letter-spacing:.3px;margin:18px 0 8px;font-size:24px;text-align:center}
-      
-      /* Desktop table styles */
-      .price-table-container {
-        width:100%;
-        max-width:100%;
-        overflow-x:auto;
-        margin:0 auto;
-      }
-      
-      table{
-        width:100%;
-        max-width:100%;
-        border-collapse:collapse;background:#fff;border:1px solid var(--rule);
-        border-radius:12px;overflow:hidden;margin-top:20px;
-        box-shadow:0 1px 3px rgba(0,0,0,0.05);
-        table-layout:fixed;
-      }
-      
-      th,td{
-        padding:12px 8px;border-bottom:1px solid var(--rule);text-align:center;
-        font-size:16px;line-height:1.4;
-        word-wrap:break-word;
-        overflow:hidden;
-      }
-      
-      th{
-        background:#fcfbf9;color:var(--ink);font-family:"Cinzel", serif;
-        font-weight:600;font-size:14px;letter-spacing:0.2px;
-      }
-      
-      /* Column widths for better fit */
-      th:nth-child(1), td:nth-child(1) { width: 12%; } /* Retailer */
-      th:nth-child(2), td:nth-child(2) { width: 10%; } /* Dealer Type */
-      th:nth-child(3), td:nth-child(3) { width: 10%; } /* Advertised Price */
-      th:nth-child(4), td:nth-child(4) { width: 12%; } /* Current Promo */
-      th:nth-child(5), td:nth-child(5) { width: 10%; } /* Est. Shipping */
-      th:nth-child(6), td:nth-child(6) { width: 8%; }  /* Est. Tax */
-      th:nth-child(7), td:nth-child(7) { width: 12%; } /* Est. Total */
-      th:nth-child(8), td:nth-child(8) { width: 10%; } /* Stock Status */
-      th:nth-child(9), td:nth-child(9) { width: 10%; } /* Price Context */
-      
-      td{color:var(--ink);background:#fff}
-      
-      .product-details{
-        display:flex;
-        flex-direction:column;
-        gap:8px;
-        line-height:1.5;
-      }
-      
-      .product-name{
-        font-weight:600;
-        font-size:17px;
-        color:var(--ink);
-        margin-bottom:6px;
-      }
-      
-      .product-specs{
-        display:flex;
-        gap:8px;
-        flex-wrap:wrap;
-        font-size:14px;
-        color:var(--muted);
-        align-items:center;
-      }
-      
-      .marketplace-cell{
-        display:flex;
-        flex-direction:column;
-        gap:4px;
-        align-items:center;
-        text-align:center;
-      }
-      
-      .marketplace-warning{
-        font-size:15px;
-        color:#dc2626;
-        font-weight:600;
-        display:flex;
-        align-items:center;
-        gap:6px;
-        justify-content:center;
-      }
-      
-      .risk-text{
-        font-size:12px;
-        color:#dc2626;
-        font-weight:500;
-        text-align:center;
-        line-height:1.2;
-      }
-      
-      .hazard-icon{
-        width:16px;
-        height:16px;
-        fill:#dc2626;
-      }
-      
-      .auth-badge{
-        display:inline-block;
-        padding:6px 10px;
-        border-radius:6px;
-        font-size:13px;
-        font-weight:600;
-        text-transform:uppercase;
-      }
-      
-      .auth-badge.marketplace{
-        background:#fef2f2;
-        color:#dc2626;
-        border:1px solid #fecaca;
-      }
-      
-      .auth-badge.authorized{
-        background:#d1fae5;
-        color:#065f46;
-        border:1px solid #6ee7b7;
-      }
-      
-      .oos{color:#dc2626;font-weight:600;font-size:14px;text-transform:uppercase}
-      .best{color:#059669;font-weight:700;font-size:14px;text-transform:uppercase}
-      
-      td a{color:var(--accent);text-decoration:none;font-weight:600;font-size:19px}
-      td a:hover{text-decoration:underline}
-      
-      .wrapper-badge{
-        display:inline-block;
-        background:#f3f4f6;
-        color:#374151;
-        padding:6px 12px;
-        border-radius:8px;
-        font-size:15px;
-        font-weight:600;
-        margin-right:8px;
-      }
-      
-      .vitola-badge{
-        display:inline-block;
-        background:#e0f2fe;
-        color:#0369a1;
-        padding:6px 12px;
-        border-radius:8px;
-        font-size:15px;
-        font-weight:600;
-      }
-      
-      .price-cell{
-        font-weight:600;
-        font-size:20px;
-      }
-      
-      .total-price{
-        font-weight:700;
-        font-size:21px;
-        color:var(--accent);
-      }
-      
-      .best-total {
-        color: #059669 !important;
-        font-weight: 700 !important;
-      }
-
-      /* Promo styling */
-      .promo-cell {
-        text-align: center;
-      }
-
-      .promo-price {
-        font-weight: 600;
-        color: #059669;
-      }
-
-      .promo-discount {
-        color: #dc2626;
-        font-weight: 700;
-        cursor: help;
-        font-size: 18px;
-      }
-
-      /* Mobile card styles */
-      .mobile-cards {
-        display: none;
-      }
-      
-      .price-card {
-        background: #fff;
-        border: 1px solid var(--rule);
-        border-radius: 12px;
-        margin: 15px 0;
-        padding: 20px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-      }
-      
-      .card-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 15px;
-        padding-bottom: 15px;
-        border-bottom: 1px solid var(--rule);
-      }
-      
-      .card-retailer {
-        font-family: "Cinzel", serif;
-        font-weight: 600;
-        font-size: 18px;
-        color: var(--ink);
-      }
-      
-      .card-total {
-        font-size: 22px;
-        font-weight: 700;
-        color: var(--accent);
-      }
-      
-      .card-breakdown {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 12px;
-        margin: 15px 0;
-      }
-      
-      .card-item {
-        display: flex;
-        justify-content: space-between;
-        padding: 8px 0;
-        border-bottom: 1px solid #f3f4f6;
-      }
-      
-      .card-label {
-        color: var(--muted);
-        font-weight: 500;
-      }
-      
-      .card-value {
-        font-weight: 600;
-        color: var(--ink);
-      }
-      
-      .card-button {
-        display: block;
-        width: calc(100% - 60px);
-        margin: 20px 30px 0 30px;
-        padding: 15px;
-        background: var(--accent);
-        color: white;
-        text-decoration: none;
-        text-align: center;
-        border-radius: 12px;
-        font-weight: 600;
-        font-size: 18px;
-        transition: all 0.3s;
-        box-sizing: border-box;
-      }
-      
-      .card-button:hover {
-        filter: brightness(0.95);
-        color: white;
-        text-decoration: none;
-      }
-      
-      /* Responsive breakpoints */
-      @media(max-width:768px){
-        .picker{
-          grid-template-columns:1fr;
-          gap:12px;
-        }
-        .heroheader{padding:20px 0 8px}
-        .brandname{font-size:24px}
-        .tag{font-size:18px}
-        
-        .hide-tablet {
-          display: none;
-        }
-      }
-      
-      @media(max-width:480px){
-        table {
-          display: none;
-        }
-        
-        .mobile-cards {
-          display: block;
-        }
-        
-        .card-breakdown {
-          grid-template-columns: 1fr;
-        }
-        
-        .price-card {
-          margin: 10px -10px;
-          border-radius: 0;
-          border-left: none;
-          border-right: none;
-        }
-
-        .heroheader {
-          text-align: center;
-        }
+  </script>
   
-        .brandname, .tag {
-          text-align: center;
-        }
-      }
-      
-      .footer{
-        margin-top:40px;
-        padding:20px 0;
-        border-top:1px solid var(--rule);
-        text-align:center;
-        color:var(--muted);
-        font-size:16px;
-      }
-      
-      .footer a{color:var(--accent);text-decoration:none}
-      .footer a:hover{text-decoration:underline}
-    </style>
-  </head>
+  <!-- Alpine.js -->
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   
-  <body>
-    <!-- Age Verification Modal -->
-    <div id="ageModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:1000;align-items:center;justify-content:center;">
-      <div style="background:#fff;padding:40px;border-radius:12px;text-align:center;max-width:400px;margin:20px;">
-        <h2 style="font-family:'Cinzel',serif;margin-bottom:20px;">Age Verification Required</h2>
-        <p style="margin-bottom:30px;font-size:18px;line-height:1.5;">You must be 21 years or older to view cigar pricing information. Please confirm your age to continue.</p>
-        <div style="display:flex;gap:15px;justify-content:center;">
-          <button onclick="confirmAge()" style="background:var(--accent);color:#fff;padding:12px 24px;border:none;border-radius:8px;font-size:16px;cursor:pointer;">I am 21 or older</button>
-          <button onclick="denyAge()" style="background:#dc2626;color:#fff;padding:12px 24px;border:none;border-radius:8px;font-size:16px;cursor:pointer;">I am under 21</button>
-        </div>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap" rel="stylesheet" />
+  
+  <style>
+    [x-cloak] { display: none !important; }
+  </style>
+</head>
+
+<body class="bg-brand-50 font-serif text-ink text-lg leading-relaxed" x-data="cigarScout()" x-init="init()">
+  
+  <!-- Age Verification Modal -->
+  <div x-show="!ageVerified" x-cloak
+       class="fixed inset-0 bg-black/80 z-50 flex items-center justify-center">
+    <div class="bg-white p-10 rounded-xl text-center max-w-md mx-auto shadow-2xl">
+      <h2 class="font-display font-bold text-2xl mb-5">Age Verification Required</h2>
+      <p class="mb-8 text-lg leading-relaxed">
+        You must be 21 years or older to view cigar pricing information. Please confirm your age to continue.
+      </p>
+      <div class="flex gap-4 justify-center">
+        <button @click="confirmAge()" 
+                class="bg-brand-500 hover:bg-brand-600 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200 shadow-md hover:shadow-lg">
+          I am 21 or older
+        </button>
+        <button @click="denyAge()" 
+                class="bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200 shadow-md hover:shadow-lg">
+          I am under 21
+        </button>
       </div>
     </div>
+  </div>
 
-    <div class="wrap">
-      <header class="heroheader">
-        <img src="/static/logo.png" alt="Cigar Price Scout Logo" class="scout-hat" />
-        <h1 class="brandname">Cigar Price Scout</h1>
-        <p class="tag">Search your cigar - we'll scout the lowest prices on full boxes (20+ cigars, or otherwise requested)</p>
-        <div style="font-size:13px;color:var(--muted);margin-top:1.5px;font-style:italic;">
-        </div>
-      </header>
+  <!-- Main Container -->
+  <div class="max-w-6xl mx-auto px-5">
+    
+    <!-- Header -->
+    <header class="flex flex-col items-center justify-center gap-2 py-7 text-center">
+      <img src="/static/logo.png" alt="Cigar Price Scout Logo" class="w-24 h-20 object-contain" />
+      <h1 class="font-display font-bold text-3xl tracking-wide">Cigar Price Scout</h1>
+      <p class="italic text-muted text-xl mt-1">
+        Search your cigar - we'll scout the lowest prices on full boxes (20+ cigars, or otherwise requested)
+      </p>
+    </header>
+    
+    <!-- Main Content -->
+    <main>
+      <!-- Search Form -->
+      <section class="grid grid-cols-1 md:grid-cols-7 gap-2 my-5">
+        <!-- Brand Select -->
+        <select x-model="selection.brand" 
+                @change="onBrandChange()"
+                class="col-span-1 p-3 border border-gray-200 rounded-xl bg-white font-serif text-lg focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400 transition-all">
+          <option value="">Select Brand...</option>
+          <template x-for="brand in options" :key="brand.brand">
+            <option :value="brand.brand" x-text="brand.brand"></option>
+          </template>
+        </select>
+        
+        <!-- Line Select -->
+        <select x-model="selection.line" 
+                @change="onLineChange()"
+                :disabled="!selection.brand"
+                class="col-span-1 p-3 border border-gray-200 rounded-xl bg-white font-serif text-lg focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400 transition-all disabled:bg-gray-100 disabled:cursor-not-allowed">
+          <option value="">Select Line...</option>
+          <template x-for="line in availableLines" :key="line.line">
+            <option :value="line.line" x-text="line.line"></option>
+          </template>
+        </select>
+        
+        <!-- Wrapper Select -->
+        <select x-model="selection.wrapper" 
+                @change="onWrapperChange()"
+                :disabled="!selection.line"
+                class="col-span-1 p-3 border border-gray-200 rounded-xl bg-white font-serif text-lg focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400 transition-all disabled:bg-gray-100 disabled:cursor-not-allowed">
+          <option value="">Any Wrapper...</option>
+          <template x-for="wrapper in availableWrappers" :key="wrapper">
+            <option :value="wrapper" x-text="wrapper"></option>
+          </template>
+        </select>
+        
+        <!-- Vitola Select -->
+        <select x-model="selection.vitola" 
+                @change="onVitolaChange()"
+                :disabled="!selection.wrapper"
+                class="col-span-1 p-3 border border-gray-200 rounded-xl bg-white font-serif text-lg focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400 transition-all disabled:bg-gray-100 disabled:cursor-not-allowed">
+          <option value="">Any Vitola...</option>
+          <template x-for="vitola in availableVitolas" :key="vitola">
+            <option :value="vitola" x-text="vitola"></option>
+          </template>
+        </select>
+        
+        <!-- Box Qty (Read-only) -->
+        <input type="text" 
+               :value="boxQtyDisplay" 
+               readonly 
+               placeholder="Box Qty"
+               class="p-3 border border-gray-200 rounded-xl bg-gray-100 font-serif text-lg text-muted cursor-not-allowed" />
+        
+        <!-- ZIP Input -->
+        <input type="text" 
+               x-model="selection.zip" 
+               placeholder="ZIP"
+               maxlength="5"
+               class="p-3 border border-gray-200 rounded-xl bg-white font-serif text-lg focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400 transition-all" />
+        
+        <!-- Search Button -->
+        <button @click="search()" 
+                :disabled="!canSearch || isSearching"
+                class="flex items-center justify-center gap-2 p-3 bg-brand-500 hover:bg-brand-600 text-white font-bold rounded-xl transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-brand-500">
+          <svg x-show="!isSearching" class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+          </svg>
+          <svg x-show="isSearching" class="w-5 h-5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <circle cx="12" cy="12" r="10" stroke-width="4" class="opacity-25"></circle>
+            <path d="M4 12a8 8 0 018-8" stroke-width="4" class="opacity-75"></path>
+          </svg>
+          <span x-text="isSearching ? 'Searching...' : 'Scout'"></span>
+        </button>
+      </section>
       
-      <main>
-        <section class="picker">
-          <select id="brandSelect" aria-label="Select cigar brand">
-            <option value="">Select Brand...</option>
-          </select>
-          
-          <select id="lineSelect" disabled aria-label="Select cigar line">
-            <option value="">Select Line...</option>
-          </select>
-          
-          <select id="wrapperSelect" disabled aria-label="Select wrapper type">
-            <option value="">Any Wrapper...</option>
-          </select>
-          
-          <select id="vitolaSelect" disabled aria-label="Select vitola">
-            <option value="">Any Vitola...</option>
-          </select>
-
-          <input type="text" id="qtyInput" placeholder="Box Qty" aria-label="Box quantity" readonly style="background:#f9fafb;cursor:not-allowed;" />
-          
-          <input type="text" id="zipInput" placeholder="ZIP" aria-label="ZIP code for shipping calculation" />
-          
-          <button class="cta cta-primary" id="searchBtn" disabled>
-            <svg viewBox="0 0 24 24" fill="currentColor">
-              <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
-            </svg>
-            Scout
-          </button>
-        </section>
-
-        <!-- Authorized Dealer Filter -->
-        <div style="display: flex; justify-content: center; margin: 10px 0;">
-          <div style="display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: #fff; border: 1px solid var(--rule); border-radius: 8px; font-size: 16px;">
-            <input type="checkbox" id="authorizedOnly" style="margin: 0; cursor: pointer;">
-            <label for="authorizedOnly" style="color: var(--ink); cursor: pointer; margin: 0; font-weight: 500;">Show Authorized Dealers Only</label>
-          </div>
+      <!-- Authorized Dealer Filter -->
+      <div class="flex justify-center my-3">
+        <label class="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+          <input type="checkbox" x-model="authorizedOnly" class="w-4 h-4 accent-brand-500 cursor-pointer" />
+          <span class="font-medium">Show Authorized Dealers Only</span>
+        </label>
+      </div>
+      
+      <!-- Action Buttons -->
+      <div class="flex justify-center gap-4 my-5 flex-wrap">
+        <a href="/request-box-pricing.html" 
+           class="inline-block bg-brand-500 hover:bg-brand-600 text-white py-3 px-6 rounded-lg font-semibold text-lg transition-all duration-200 shadow-md hover:shadow-lg hover:-translate-y-0.5">
+          Request a Box to Scout
+        </a>
+        <a href="#" 
+           @click.prevent="reportIssue()"
+           class="inline-block bg-red-600 hover:bg-red-700 text-white py-3 px-6 rounded-lg font-semibold text-lg transition-all duration-200 shadow-md hover:shadow-lg hover:-translate-y-0.5">
+          Report a Data Issue
+        </a>
+      </div>
+      
+      <!-- Filter Chips -->
+      <div class="flex gap-2 justify-center mt-3 flex-wrap" x-show="hasFilters">
+        <template x-for="chip in filterChips" :key="chip">
+          <span class="text-sm px-3 py-1.5 rounded-full border border-gray-200 bg-white text-gray-700" x-text="chip"></span>
+        </template>
+      </div>
+      
+      <!-- Results Section -->
+      <section x-show="showResults" x-cloak class="mt-6">
+        <h2 class="font-display font-bold text-2xl text-center tracking-wide mb-2" x-text="resultsTitle"></h2>
+        
+        <!-- Affiliate Disclosure -->
+        <div class="bg-yellow-50 border border-yellow-200 p-3 my-4 text-yellow-800 text-sm font-bold text-center max-w-3xl mx-auto rounded-lg">
+          <strong>Disclosure:</strong> We earn a commission when you purchase through our affiliate links. This helps support our price comparison service at no extra cost to you.
         </div>
-
-        <!-- Request Box to Scout and Report Data Issue Buttons -->
-        <div style="display: flex; justify-content: center; gap: 15px; margin: 20px 0; flex-wrap: wrap;">
-          <a href="/request-box-pricing.html" style="
-            display: inline-block;
-            background: #7c5c2e;
-            color: #fff;
-            padding: 12px 24px;
-            border-radius: 8px;
-            text-decoration: none;
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 18px;
-            font-weight: 600;
-            transition: all 0.3s;
-            box-shadow: 0 2px 4px rgba(124, 92, 46, 0.3);
-          ">
-            Request a Box to Scout
-          </a>
-          
-          <a href="#" id="reportIssueBtn" style="
-            display: inline-block;
-            background: #dc2626;
-            color: #fff;
-            padding: 12px 24px;
-            border-radius: 8px;
-            text-decoration: none;
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 18px;
-            font-weight: 600;
-            transition: all 0.3s;
-            box-shadow: 0 2px 4px rgba(220, 38, 38, 0.3);
-          ">
-            Report a Data Issue
-          </a>
-        </div>
-
+        
+        
+        <!-- Desktop Table -->
         <style>
-        /* Hover effect for the buttons */
-        a[href="/request-box-pricing.html"]:hover {
-          filter: brightness(0.95);
-          transform: translateY(-1px);
-          box-shadow: 0 4px 8px rgba(124, 92, 46, 0.4);
-        }
-        
-        #reportIssueBtn:hover {
-          filter: brightness(0.95);
-          transform: translateY(-1px);
-          box-shadow: 0 4px 8px rgba(220, 38, 38, 0.4);
-        }
+          /* Table visible by default, cards hidden */
+          .mobile-cards { display: none; }
+          
+          /* Only on small mobile screens, swap to cards */
+          @media (max-width: 480px) {
+            .desktop-table { display: none !important; }
+            .mobile-cards { display: block !important; }
+          }
         </style>
-        
-        <div class="chips" id="filterChips"></div>
-        
-        
-        <section id="results" style="display:none;overflow-x:auto;max-width:100%">
-          <h2 id="resultsTitle">Price Comparison Results</h2>
-          
-          <div id="disclosure" style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 10px; margin: 10px auto; color: #856404; font-size: 14px; font-weight: bold; text-align: center; max-width: 800px;">
-            <strong>Disclosure:</strong> We earn a commission when you purchase through our affiliate links. This helps support our price comparison service at no extra cost to you.
-          </div>
-
-          <!-- Cost Savings Summary -->
-          <div id="savingsSummary" style="background:#f0f9ff;border:1px solid #0284c7;border-radius:8px;padding:16px;margin-bottom:20px;display:none;">
-            <div style="display:flex;justify-content:space-between;align-items:center;">
-              <div>
-                <strong style="color:#0369a1;font-size:18px;">Potential Savings: <span id="savingsAmount"></span></strong>
-                <div style="font-size:14px;color:#0369a1;margin-top:4px;">Cheapest vs Most Expensive</div>
-              </div>
-              <div style="text-align:right;font-size:14px;color:#374151;">
-                <div>Cheapest: <strong id="cheapestPrice"></strong></div>
-                <div>Most Expensive: <strong id="expensivePrice"></strong></div>
-              </div>
-            </div>
-          </div>
-          
-          <!-- Desktop Table -->
-          <div class="price-table-container">
-            <table id="resultsTable">
-              <thead>
-                <tr>
-                  <th>Retailer</th>
-                  <th class="hide-tablet">Dealer Type</th>
-                  <th>Advertised Price</th>
-                  <th>Current Promo</th>
-                  <th>Est. Shipping</th>
-                  <th>Est. Tax</th>
-                  <th style="font-weight: 750;">Est. Total</th>
-                  <th>Stock Status</th>
-                  <th>Price Context<span style="color: #6b7280; font-size: 14px; cursor: help;" title="Based on 10% median price threshold">?</span></th>
+        <div class="desktop-table overflow-x-auto">
+          <table class="w-full border-collapse bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+            <thead>
+              <tr class="bg-gray-50">
+                <th class="p-3 border-b border-gray-200 text-left font-display font-semibold text-sm">Retailer</th>
+                <th class="p-3 border-b border-gray-200 text-center font-display font-semibold text-sm">Dealer Type</th>
+                <th class="p-3 border-b border-gray-200 text-center font-display font-semibold text-sm">Advertised Price</th>
+                <th class="p-3 border-b border-gray-200 text-center font-display font-semibold text-sm">Current Promo</th>
+                <th class="p-3 border-b border-gray-200 text-center font-display font-semibold text-sm">Est. Shipping</th>
+                <th class="p-3 border-b border-gray-200 text-center font-display font-semibold text-sm">Est. Tax</th>
+                <th class="p-3 border-b border-gray-200 text-center font-display font-semibold text-sm font-bold">Est. Total</th>
+                <th class="p-3 border-b border-gray-200 text-center font-display font-semibold text-sm">Stock Status</th>
+                <th class="p-3 border-b border-gray-200 text-center font-display font-semibold text-sm">
+                  Price Context
+                  <span class="text-gray-400 text-xs cursor-help" title="Based on 10% median price threshold">?</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="(result, index) in results" :key="index">
+                <tr class="hover:bg-gray-50 transition-colors">
+                  <!-- Retailer -->
+                  <td class="p-3 border-b border-gray-200">
+                    <a :href="getTrackingUrl(result)" 
+                       target="_blank" 
+                       rel="noopener"
+                       class="text-brand-500 hover:underline font-semibold text-lg"
+                       x-text="result.retailer"></a>
+                  </td>
+                  
+                  <!-- Dealer Type -->
+                  <td class="p-3 border-b border-gray-200 text-center">
+                    <div class="flex flex-col items-center gap-1">
+                      <span x-show="result.authorized" 
+                            class="inline-block px-2 py-1 rounded text-xs font-semibold uppercase bg-emerald-100 text-emerald-700 border border-emerald-300">
+                        Authorized Dealer
+                      </span>
+                      <span x-show="!result.authorized" 
+                            class="inline-block px-2 py-1 rounded text-xs font-semibold uppercase bg-red-50 text-red-600 border border-red-200">
+                        Marketplace
+                      </span>
+                      <span x-show="!result.authorized" class="text-xs text-red-600 font-medium">Buy at own risk</span>
+                    </div>
+                  </td>
+                  
+                  <!-- Advertised Price -->
+                  <td class="p-3 border-b border-gray-200 text-center font-semibold text-lg" x-text="result.base"></td>
+                  
+                  <!-- Current Promo -->
+                  <td class="p-3 border-b border-gray-200 text-center">
+                    <div x-html="formatPromo(result)"></div>
+                  </td>
+                  
+                  <!-- Shipping -->
+                  <td class="p-3 border-b border-gray-200 text-center font-semibold" x-text="result.shipping"></td>
+                  
+                  <!-- Tax -->
+                  <td class="p-3 border-b border-gray-200 text-center font-semibold" x-text="result.tax"></td>
+                  
+                  <!-- Est. Total -->
+                  <td class="p-3 border-b border-gray-200 text-center font-bold text-xl"
+                      :class="result.cheapest ? 'text-emerald-600' : 'text-brand-500'"
+                      x-text="result.delivered_after_promo"></td>
+                  
+                  <!-- Stock Status -->
+                  <td class="p-3 border-b border-gray-200 text-center">
+                    <span x-show="result.oos" class="text-red-600 font-semibold text-sm uppercase">Out of Stock</span>
+                    <span x-show="!result.oos" class="text-emerald-600 font-semibold">In Stock</span>
+                  </td>
+                  
+                  <!-- Price Context -->
+                  <td class="p-3 border-b border-gray-200 text-center font-bold text-lg"
+                      :class="{
+                        'text-emerald-600': result.price_context === 'Value',
+                        'text-gray-500': result.price_context === 'Market',
+                        'text-blue-600': result.price_context === 'Premium'
+                      }"
+                      x-text="result.price_context || ''"></td>
                 </tr>
-              </thead>
-              <tbody>
-                <!-- Results populated by JavaScript -->
-              </tbody>
-            </table>
-          </div>
+              </template>
+            </tbody>
+          </table>
+        </div>
+        
+        <!-- Mobile Cards -->
+        <div class="mobile-cards space-y-4">
+          <template x-for="(result, index) in results" :key="'mobile-' + index">
+            <div class="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+              <!-- Card Header -->
+              <div class="flex justify-between items-center pb-4 mb-4 border-b border-gray-200">
+                <span class="font-display font-semibold text-lg" x-text="result.retailer"></span>
+                <span class="text-2xl font-bold"
+                      :class="result.cheapest ? 'text-emerald-600' : 'text-brand-500'"
+                      x-text="result.delivered_after_promo"></span>
+              </div>
+              
+              <!-- Dealer Badge -->
+              <div class="flex items-center gap-2 mb-4">
+                <span x-show="result.authorized" 
+                      class="inline-block px-2 py-1 rounded text-xs font-semibold uppercase bg-emerald-100 text-emerald-700 border border-emerald-300">
+                  Authorized
+                </span>
+                <span x-show="!result.authorized" 
+                      class="inline-block px-2 py-1 rounded text-xs font-semibold uppercase bg-red-50 text-red-600 border border-red-200">
+                  Marketplace
+                </span>
+                <span x-show="!result.authorized" class="text-xs text-red-600 font-medium">Buy at own risk</span>
+              </div>
+              
+              <!-- Price Breakdown -->
+              <div class="space-y-2">
+                <div class="flex justify-between py-2 border-b border-gray-100">
+                  <span class="text-muted font-medium">Advertised Price:</span>
+                  <span class="font-semibold" x-text="result.base"></span>
+                </div>
+                <div x-show="result.current_promotions_applied" class="flex justify-between py-2 border-b border-gray-100">
+                  <span class="text-muted font-medium">Promo Price:</span>
+                  <span class="font-semibold" x-html="formatPromo(result)"></span>
+                </div>
+                <div class="flex justify-between py-2 border-b border-gray-100">
+                  <span class="text-muted font-medium">Est. Shipping:</span>
+                  <span class="font-semibold" x-text="result.shipping"></span>
+                </div>
+                <div class="flex justify-between py-2 border-b border-gray-100">
+                  <span class="text-muted font-medium">Est. Tax:</span>
+                  <span class="font-semibold" x-text="result.tax"></span>
+                </div>
+                <div class="flex justify-between py-3 border-t-2 border-brand-500 mt-2">
+                  <span class="font-semibold">Est. Total:</span>
+                  <span class="text-xl font-bold"
+                        :class="result.cheapest ? 'text-emerald-600' : 'text-brand-500'"
+                        x-text="result.delivered_after_promo"></span>
+                </div>
+                <div x-show="result.price_context" class="flex justify-between py-2 border-b border-gray-100">
+                  <span class="text-muted font-medium">Price Context:</span>
+                  <span class="font-bold"
+                        :class="{
+                          'text-emerald-600': result.price_context === 'Value',
+                          'text-gray-500': result.price_context === 'Market',
+                          'text-blue-600': result.price_context === 'Premium'
+                        }"
+                        x-text="result.price_context"></span>
+                </div>
+                <div class="flex justify-between py-2">
+                  <span class="text-muted font-medium">Stock Status:</span>
+                  <span x-show="result.oos" class="text-red-600 font-semibold">Out of Stock</span>
+                  <span x-show="!result.oos" class="text-emerald-600 font-semibold">In Stock</span>
+                </div>
+              </div>
+              
+              <!-- Badges -->
+              <div x-show="result.wrapper || result.vitola" class="flex gap-2 mt-4 flex-wrap">
+                <span x-show="result.wrapper" class="px-3 py-1 rounded-lg bg-gray-100 text-gray-700 text-sm font-semibold" x-text="result.wrapper"></span>
+                <span x-show="result.vitola" class="px-3 py-1 rounded-lg bg-sky-100 text-sky-700 text-sm font-semibold" x-text="result.vitola"></span>
+              </div>
+              
+              <!-- Buy Button -->
+              <a :href="getTrackingUrl(result)" 
+                 target="_blank" 
+                 rel="noopener"
+                 class="flex items-center justify-center mt-5 py-4 bg-brand-500 hover:bg-brand-600 rounded-xl transition-all duration-200 shadow-md hover:shadow-lg">
+                <img src="/static/logo.png" alt="Scout" class="w-8 h-8 object-contain" />
+              </a>
+            </div>
+          </template>
+        </div>
+        
+        <!-- No Results -->
+        <div x-show="results.length === 0 && !isSearching" class="text-center py-10">
+          <p class="text-muted text-lg">No matching cigars found. Try adjusting your search criteria.</p>
+        </div>
+      </section>
+    </main>
+    
+    <!-- Footer -->
+    <footer class="mt-10 py-5 border-t border-gray-200 text-center text-muted">
+      <p class="space-x-2">
+        <a href="/best-cigar-box-prices" class="text-brand-500 hover:underline">Best Cigar Box Prices</a>
+        <span>|</span>
+        <a href="/submit-deal" class="text-brand-500 hover:underline">Submit a Deal</a>
+        <span>|</span>
+        <a href="/about.html" class="text-brand-500 hover:underline">About</a>
+        <span>|</span>
+        <a href="/privacy-policy.html" class="text-brand-500 hover:underline">Privacy</a>
+        <span>|</span>
+        <a href="/terms-of-service.html" class="text-brand-500 hover:underline">Terms</a>
+        <span>|</span>
+        <a href="/contact.html" class="text-brand-500 hover:underline">Contact</a>
+      </p>
+      <p class="mt-2">&copy; 2025 Cigar Price Scout. Prices and availability subject to change. Updated daily.</p>
+    </footer>
+  </div>
+
+  <!-- Alpine.js Component -->
+  <script>
+    function cigarScout() {
+      return {
+        // State
+        ageVerified: false,
+        options: [],
+        selection: {
+          brand: '',
+          line: '',
+          wrapper: '',
+          vitola: '',
+          zip: ''
+        },
+        authorizedOnly: false,
+        isSearching: false,
+        showResults: false,
+        results: [],
+        resultsTitle: '',
+        
+        // Computed
+        get availableLines() {
+          if (!this.selection.brand) return [];
+          const brand = this.options.find(b => b.brand === this.selection.brand);
+          return brand ? brand.lines : [];
+        },
+        
+        get availableWrappers() {
+          if (!this.selection.line) return [];
+          const brand = this.options.find(b => b.brand === this.selection.brand);
+          if (!brand) return [];
+          const line = brand.lines.find(l => l.line === this.selection.line);
+          if (!line) return [];
           
-          <!-- Mobile Cards -->
-          <div id="mobileCards" class="mobile-cards">
-            <!-- Mobile cards populated by JavaScript -->
-          </div>
-        </section>
-      </main>
-      
-      <footer class="footer">
-        <p>
-          <a href="/best-cigar-box-prices">Best Cigar Box Prices</a> | 
-          <a href="/submit-deal">Submit a Deal</a> | 
-          <a href="/about.html">About</a> | 
-          <a href="/privacy-policy.html">Privacy</a> | 
-          <a href="/terms-of-service.html">Terms</a> | 
-          <a href="/contact.html">Contact</a>
-        </p>
-        <p>&copy; 2025 Cigar Price Scout. Prices and availability subject to change. Updated daily.</p>
-      </footer>
-    </div>
-
-    <script>
-      let optionsData = null;
-      let currentSelection = { 
-        brand: '', 
-        line: '', 
-        wrapper: '', 
-        vitola: '' 
-      };
-
-      // DOM elements
-      const brandSelect = document.getElementById('brandSelect');
-      const lineSelect = document.getElementById('lineSelect');
-      const wrapperSelect = document.getElementById('wrapperSelect');
-      const vitolaSelect = document.getElementById('vitolaSelect');
-      const zipInput = document.getElementById('zipInput');
-      const searchBtn = document.getElementById('searchBtn');
-      const filterChips = document.getElementById('filterChips');
-      const resultsSection = document.getElementById('results');
-      const resultsTitle = document.getElementById('resultsTitle');
-      const resultsTable = document.getElementById('resultsTable');
-
-      // Age verification
-      let ageVerified = false;
-      
-      function showAgeModal() {
-        if (!ageVerified) {
-          document.getElementById('ageModal').style.display = 'flex';
-        }
-      }
-      
-      function confirmAge() {
-        ageVerified = true;
-        document.getElementById('ageModal').style.display = 'none';
-      }
-      
-      function denyAge() {
-        alert('You must be 21 or older to access this site.');
-        window.location.href = 'https://www.google.com';
-      }
-
-      // Load options from backend
-      async function loadOptions() {
-        try {
-          console.log('Loading options from /options endpoint...');
-          const response = await fetch('/options');
-          
-          if (!response.ok) {
-            throw new Error('HTTP ' + response.status + ': ' + response.statusText);
-          }
-          
-          const data = await response.json();
-          console.log('Raw options data:', data);
-          
-          if (data.brands && Array.isArray(data.brands)) {
-            optionsData = data.brands;
-            populateBrandSelect();
-            console.log('Successfully loaded ' + optionsData.length + ' brands');
-          } else {
-            throw new Error('Invalid data structure - expected brands array');
-          }
-          
-        } catch (error) {
-          console.error('Error loading options:', error);
-          brandSelect.innerHTML = '<option value="">Error loading brands - please refresh</option>';
-        }
-      }
-
-      function populateBrandSelect() {
-        brandSelect.innerHTML = '<option value="">Select Brand...</option>';
-        if (optionsData) {
-          optionsData.forEach(function(brand) {
-            const option = document.createElement('option');
-            option.value = brand.brand;
-            option.textContent = brand.brand;
-            brandSelect.appendChild(option);
-          });
-        }
-      }
-
-      function populateLineSelect() {
-        lineSelect.innerHTML = '<option value="">Select Line...</option>';
-        lineSelect.disabled = !currentSelection.brand;
-        
-        if (currentSelection.brand) {
-          const brand = optionsData.find(function(b) {
-            return b.brand === currentSelection.brand;
-          });
-          if (brand && brand.lines) {
-            brand.lines.forEach(function(line) {
-              const option = document.createElement('option');
-              option.value = line.line;
-              option.textContent = line.line;
-              lineSelect.appendChild(option);
-            });
-          }
-        }
-      }
-
-      function populateWrapperSelect() {
-        wrapperSelect.innerHTML = '<option value="">Any Wrapper...</option>';
-        wrapperSelect.disabled = !currentSelection.line;
-        
-        if (currentSelection.brand && currentSelection.line) {
-          const brand = optionsData.find(function(b) {
-            return b.brand === currentSelection.brand;
-          });
-          const line = brand && brand.lines.find(function(l) {
-            return l.line === currentSelection.line;
-          });
-          
-          if (line && line.wrappers) {
-            const wrapperSet = new Set();
-            line.wrappers.forEach(function(w) {
-              if (w.wrapper) {
-                const displayWrapper = formatWrapperDisplay(w.wrapper, w.wrapper_alias);
-                wrapperSet.add(displayWrapper);
-              }
-            });
-            
-            const wrappers = Array.from(wrapperSet).sort();
-            wrappers.forEach(function(wrapper) {
-              const option = document.createElement('option');
-              option.value = wrapper;
-              option.textContent = wrapper;
-              wrapperSelect.appendChild(option);
-            });
-          }
-        }
-      }
-
-      function populateVitolaSelect() {
-        vitolaSelect.innerHTML = '<option value="">Any Vitola...</option>';
-        vitolaSelect.disabled = !currentSelection.wrapper;
-        
-        if (currentSelection.brand && currentSelection.line && currentSelection.wrapper) {
-          const brand = optionsData.find(function(b) {
-            return b.brand === currentSelection.brand;
-          });
-          const line = brand && brand.lines.find(function(l) {
-            return l.line === currentSelection.line;
-          });
-          
-          if (line && line.wrappers) {
-            const vitolas = [];
-            line.wrappers.forEach(function(w) {
-              // Match against both wrapper and wrapper_alias since dropdown now shows combined format
-              const displayWrapper = formatWrapperDisplay(w.wrapper, w.wrapper_alias);
-              if (displayWrapper === currentSelection.wrapper && w.vitolas) {
-                w.vitolas.forEach(function(v) {
-                  if (v && vitolas.indexOf(v) === -1) {
-                    vitolas.push(v);
-                  }
-                });
-              }
-            });
-            vitolas.sort();
-            vitolas.forEach(function(vitola) {
-              const option = document.createElement('option');
-              option.value = vitola;
-              option.textContent = vitola;
-              vitolaSelect.appendChild(option);
-            });
-          }
-        }
-      }
-
-      function updateFilterChips() {
-        const chips = [];
-        if (currentSelection.brand) chips.push('Brand: ' + currentSelection.brand);
-        if (currentSelection.line) chips.push('Line: ' + currentSelection.line);
-        if (currentSelection.wrapper) chips.push('Wrapper: ' + currentSelection.wrapper);
-        if (currentSelection.vitola) chips.push('Vitola: ' + currentSelection.vitola);
-        
-        filterChips.innerHTML = chips.map(function(chip) {
-          return '<span class="chip">' + chip + '</span>';
-        }).join('');
-      }
-
-      function updateZipInput() {
-        // Enable ZIP input only when ALL selections are made
-        zipInput.disabled = !(currentSelection.brand && currentSelection.line && currentSelection.wrapper && currentSelection.vitola);
-      }
-
-      function updateSearchButton() {
-        const zipValue = zipInput.value.trim();
-        const canSearch = currentSelection.brand && 
-                  currentSelection.line && 
-                  zipValue;
-        searchBtn.disabled = !canSearch;
-      }
-
-      // Event listeners
-      brandSelect.addEventListener('change', function(e) {
-        currentSelection.brand = e.target.value;
-        currentSelection.line = '';
-        currentSelection.wrapper = '';
-        currentSelection.vitola = '';
-        
-        lineSelect.value = '';
-        wrapperSelect.value = '';
-        vitolaSelect.value = '';
-        
-        populateLineSelect();
-        populateWrapperSelect();
-        populateVitolaSelect();
-        updateFilterChips();
-        updateSearchButton();
-        updateZipInput();
-      });
-
-      lineSelect.addEventListener('change', function(e) {
-        currentSelection.line = e.target.value;
-        currentSelection.wrapper = '';
-        currentSelection.vitola = '';
-        
-        wrapperSelect.value = '';
-        vitolaSelect.value = '';
-        
-        populateWrapperSelect();
-        populateVitolaSelect();
-        updateFilterChips();
-        updateSearchButton();
-        updateQuantityDisplay(); // Add this line
-        updateZipInput();
-      });
-
-      wrapperSelect.addEventListener('change', function(e) {
-        currentSelection.wrapper = e.target.value;
-        currentSelection.vitola = '';
-        
-        vitolaSelect.value = '';
-        populateVitolaSelect();
-        updateFilterChips();
-        updateQuantityDisplay();
-        updateSearchButton();
-      });
-
-      vitolaSelect.addEventListener('change', function(e) {
-        currentSelection.vitola = e.target.value;
-        updateFilterChips();
-        updateQuantityDisplay();
-        updateSearchButton(); // Add this line
-        updateZipInput();
-      });
-
-      zipInput.addEventListener('input', function() {
-        updateSearchButton();
-      });
-
-      // Add this new function
-      function updateQuantityDisplay() {
-        const qtyInput = document.getElementById('qtyInput');
-        
-        if (!currentSelection.brand || !currentSelection.line) {
-          qtyInput.value = '';
-          return;
-        }
-        
-        // Find matching products to get quantity
-        const brand = optionsData.find(function(b) {
-          return b.brand === currentSelection.brand;
-        });
-        
-        if (!brand) {
-          qtyInput.value = '';
-          return;
-        }
-        
-        const line = brand.lines.find(function(l) {
-          return l.line === currentSelection.line;
-        });
-        
-        if (!line) {
-          qtyInput.value = '';
-          return;
-        }
-        
-        // Get box quantities from the matching wrapper/vitola combination
-        let boxQtys = new Set();
-
-        line.wrappers.forEach(function(wrapper) {
-          // Filter by wrapper if selected - now handle combined display format
-          const displayWrapper = formatWrapperDisplay(wrapper.wrapper, wrapper.wrapper_alias);
-          const wrapperMatch = !currentSelection.wrapper || !currentSelection.wrapper.trim() || 
-                              displayWrapper === currentSelection.wrapper;
-          
-          if (wrapperMatch) {
-            // Filter by vitola if selected - handle both arrays and sets
-            const vitolaMatch = !currentSelection.vitola || !currentSelection.vitola.trim() || 
-                              (Array.isArray(wrapper.vitolas) ? wrapper.vitolas.includes(currentSelection.vitola) : 
-                                wrapper.vitolas.has && wrapper.vitolas.has(currentSelection.vitola));
-            
-            if (vitolaMatch) {
-              wrapper.box_qtys.forEach(function(qty) {
-                boxQtys.add(Number(qty)); // Ensure it's a number
-              });
+          const wrappers = new Set();
+          line.wrappers.forEach(w => {
+            if (w.wrapper) {
+              wrappers.add(this.formatWrapperDisplay(w.wrapper, w.wrapper_alias));
             }
-          }
-        });
-  
-  const qtys = Array.from(boxQtys).sort((a, b) => a - b);
-  
-  if (qtys.length === 1) {
-    qtyInput.value = 'Box of ' + qtys[0];
-  } else if (qtys.length > 1) {
-    qtyInput.value = 'Box of ' + qtys.join(', '); // Show multiple quantities if they vary
-  } else {
-    qtyInput.value = '';
-  }
-}
-
-      // Initialize form state
-      updateSearchButton();
-      updateZipInput(); // Add this line
-
-      // Schema.org functions for dynamic product markup
-      function generateComparisonSchema(results, searchData) {
-        return {
-          "@context": "https://schema.org",
-          "@type": "ItemList",
-          "name": searchData.brand + " " + searchData.line + " Price Comparison",
-          "description": "Price comparison for " + searchData.brand + " " + searchData.line + " cigars across multiple retailers",
-          "numberOfItems": results.length,
-          "itemListElement": results.map(function(result, index) {
-            return {
-              "@type": "ListItem",
-              "position": index + 1,
-              "item": {
-                "@type": "Offer",
-                "name": result.retailer + " - " + searchData.brand + " " + searchData.line,
-                "price": parseFloat(result.delivered_after_promo.replace(/[$,]/g, '')),
-                "priceCurrency": "USD",
-                "availability": result.oos ? "https://schema.org/OutOfStock" : "https://schema.org/InStock",
-                "seller": {
-                  "@type": "Organization",
-                  "name": result.retailer
-                },
-                "url": result.url,
-                "itemOffered": {
-                  "@type": "Product",
-                  "name": searchData.brand + " " + searchData.line + (searchData.wrapper ? " " + searchData.wrapper : "") + (searchData.vitola ? " " + searchData.vitola : ""),
-                  "brand": searchData.brand
-                }
-              }
-            };
-          })
-        };
-      }
-
-      function injectSchema(schemaObject) {
-        // Remove existing product/comparison schemas
-        var existingSchemas = document.querySelectorAll('script[type="application/ld+json"][data-dynamic]');
-        existingSchemas.forEach(function(script) {
-          script.remove();
-        });
+          });
+          return Array.from(wrappers).sort();
+        },
         
-        // Add new schema
-        var script = document.createElement('script');
-        script.type = 'application/ld+json';
-        script.setAttribute('data-dynamic', 'true');
-        script.textContent = JSON.stringify(schemaObject);
-        document.head.appendChild(script);
-      }
-
-      // Wrapper display enhancement functions
-      function formatWrapperDisplay(wrapper, wrapperAlias) {
-        if (!wrapper) return '';
-        // Handle case where wrapper_alias field doesn't exist in data
-        if (!wrapperAlias || wrapperAlias.trim() === '' || typeof wrapperAlias === 'undefined') return wrapper;
-        if (wrapperAlias.toLowerCase() === wrapper.toLowerCase()) return wrapper;
-        return wrapperAlias + ' (' + wrapper + ')';
-      }
-
-      function extractActualWrapper(displayWrapper) {
-        // Extract actual wrapper name from combined display format
-        // "Natural (Cameroon)" -> "Cameroon"
-        // "Cameroon" -> "Cameroon"
-        if (!displayWrapper) return '';
-        
-        const match = displayWrapper.match(/\(([^)]+)\)$/);
-        if (match) {
-          return match[1]; // Return content inside parentheses
-        }
-        return displayWrapper; // Return as-is if no parentheses
-      }
-
-      function matchesWrapperSearch(cigar, searchTerm) {
-        const searchLower = searchTerm.toLowerCase();
-        const wrapper = (cigar.wrapper || '').toLowerCase();
-        const wrapperAlias = (cigar.wrapper_alias || '').toLowerCase();
-        return wrapper.includes(searchLower) || wrapperAlias.includes(searchLower);
-      }
-
-      searchBtn.addEventListener('click', async function() {
-        if (!currentSelection.brand || !currentSelection.line) return;
-        
-        const params = new URLSearchParams({
-          brand: currentSelection.brand,
-          line: currentSelection.line,
-          zip: zipInput.value || ''
-        });
-        
-        // Extract actual wrapper name from display format before sending to API
-        if (currentSelection.wrapper) {
-          const actualWrapper = extractActualWrapper(currentSelection.wrapper);
-          params.append('wrapper', actualWrapper);
-        }
-        if (currentSelection.vitola) params.append('vitola', currentSelection.vitola);
-        if (document.getElementById('authorizedOnly').checked) {
-          params.append('authorized_only', 'true');
-        }
-        
-        try {
-          searchBtn.disabled = true;
-          searchBtn.textContent = 'Searching...';
+        get availableVitolas() {
+          if (!this.selection.wrapper) return [];
+          const brand = this.options.find(b => b.brand === this.selection.brand);
+          if (!brand) return [];
+          const line = brand.lines.find(l => l.line === this.selection.line);
+          if (!line) return [];
           
-          const response = await fetch('/compare?' + params.toString());
-          if (!response.ok) {
-            throw new Error('HTTP ' + response.status);
-          }
-          
-          const data = await response.json();
-          console.log('API Response', data);
-          
-          // Store results for report issue functionality
-          window.lastSearchResults = data.results || [];
-          
-          displayResults(data);
-        } catch (error) {
-          console.error('Search error:', error);
-          alert('Search failed. Please try again.');
-        } finally {
-          searchBtn.disabled = false;
-          searchBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg> Scout';
-        }
-      });
-
-      function displayResults(data) {
-        if (!data.results || data.results.length === 0) {
-          resultsTitle.textContent = 'No results found';
-          resultsTable.querySelector('tbody').innerHTML = '<tr><td colspan="8">No matching cigars found.</td></tr>';
-          document.getElementById('mobileCards').innerHTML = '<div class="price-card">No matching cigars found.</div>';
-          resultsSection.style.display = 'block';
-          return;
-        }
-
-       // Sort results by price only (in-stock and out-of-stock mixed by price)
-        data.results.sort(function(a, b) {
-          const priceA = parseFloat(a.delivered_after_promo.replace("$", ""));
-          const priceB = parseFloat(b.delivered_after_promo.replace("$", ""));
-          return priceA - priceB;
-        });
-        
-        // Update title
-        let titleParts = [data.brand, data.line];
-        if (data.wrapper) titleParts.push(data.wrapper);
-        if (data.vitola) titleParts.push(data.vitola);
-
-        // Add specific box quantity from the first result
-        let boxQtyText = '';
-        if (data.results.length > 0) {
-          const boxQty = data.results[0].box_qty;
-          boxQtyText = `, Box of ${boxQty}`;
-        }
-
-        resultsTitle.textContent = titleParts.join(', ') + boxQtyText + ' - Price Comparison';
-
-        
-        // Build desktop table
-        const tbody = resultsTable.querySelector('tbody');
-        tbody.innerHTML = data.results.map(function(result) {
-          const dealerBadge = result.authorized 
-            ? '<span class="auth-badge authorized">Authorized Dealer</span>' 
-            : '<span class="auth-badge marketplace">Marketplace</span>';
-          
-          return '<tr>' +
-            '<td><a href="/go?retailer=' + encodeURIComponent(result.retailer)
-            + '&cid=' + encodeURIComponent(result.product.replace(/\s+/g, '-').toLowerCase())
-            + '&url=' + encodeURIComponent(result.url)
-            + '" target="_blank" rel="noopener">' + result.retailer + '</a></td>' +
-            '<td class="hide-tablet"><div class="marketplace-cell">' + dealerBadge + 
-            (result.authorized ? '' : '<div class="risk-text">Buy at own risk</div>') +
-            '</div></td>' +
-            '<td class="price-cell">' + result.base + '</td>' +
-            '<td class="promo-cell">' + formatPromoPrice(result.current_promotions_applied, result.promo_submitted_by) + '</td>' +
-            '<td class="price-cell">' + result.shipping + '</td>' +
-            '<td class="price-cell">' + result.tax + '</td>' +
-            '<td class="price-cell total-price ' + (result.cheapest ? 'best-total' : '') + '">' + result.delivered_after_promo + '</td>' +
-            '<td class="price-cell">' + (result.oos ? '<span class="oos">Out of Stock</span>' : '<span style="color: #059669; font-weight: 600;">In Stock</span>') + '</td>' +
-            '<td class="price-context ' + (result.price_context ? result.price_context.toLowerCase() : '') + '">' + (result.price_context || '') + '</td>' +
-            '</tr>';
-        }).join('');
-        
-        // Build mobile cards
-        const mobileContainer = document.getElementById('mobileCards');
-        mobileContainer.innerHTML = data.results.map(function(result) {
-          const dealerBadge = result.authorized 
-          ? '<span class="auth-badge authorized">Authorized</span>' 
-          : '<span class="auth-badge marketplace">Marketplace</span>';
-  
-          return '<div class="price-card ' + (result.cheapest ? 'best-deal' : '') + '">' +
-            '<div class="card-header">' +
-            '<div class="card-retailer" style="color: var(--ink); text-decoration: none;">' + result.retailer + '</div>' +
-            '</div>' +
-            '<div style="margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">' + 
-            dealerBadge +
-            (result.authorized ? '' : '<span style="font-size: 13px; color: #dc2626; font-weight: 500;">Buy at own risk</span>') +
-            '</div>' +
-            '<div class="card-breakdown">' +
-            '<div class="card-item">' +
-            '<span class="card-label">Advertised Price:</span>' +
-            '<span class="card-value">' + result.base + '</span>' +
-            '</div>' +
-            (result.current_promotions_applied ? 
-            '<div class="card-item">' +
-            '<span class="card-label">Promo Price:</span>' +
-            '<span class="card-value">' + formatPromoPrice(result.current_promotions_applied, result.promo_submitted_by) + '</span>' +
-            '</div>' : '') +
-            '<div class="card-item">' +
-            '<span class="card-label">Est. Shipping:</span>' +
-            '<span class="card-value">' + result.shipping + '</span>' +
-            '</div>' +
-            '<div class="card-item">' +
-            '<span class="card-label">Est. Tax:</span>' +
-            '<span class="card-value">' + result.tax + '</span>' +
-            '</div>' +
-            '<div class="card-item" style="border-top: 2px solid var(--accent); padding-top: 12px; margin-top: 8px;">' +
-            '<span class="card-label" style="font-weight: 600;">Est. Total:</span>' +
-            '<span class="card-value" style="font-size: 20px; font-weight: 700; color: ' + (result.cheapest ? '#059669' : 'var(--accent)') + ';">' + result.delivered_after_promo + '</span>' +
-            '</div>' +
-            (result.price_context ? 
-            '<div class="card-item">' +
-            '<span class="card-label">Price Context:</span>' +
-            '<span class="card-value price-context ' + result.price_context.toLowerCase() + '">' + result.price_context + '</span>' +
-            '</div>' : '') +
-            '<div class="card-item">' +
-            '<span class="card-label">Stock Status:</span>' +
-            '<span class="card-value">' + (result.oos ? '<span style="color: #dc2626; font-weight: 600;">Out of Stock</span>' : '<span style="color: #059669; font-weight: 600;">In Stock</span>') + '</span>' +
-            '</div>' +
-            (result.wrapper || result.vitola ? 
-            '<div style="margin: 15px 0;">' +
-            (result.wrapper ? '<span class="wrapper-badge">' + result.wrapper + '</span>' : '') +
-            (result.vitola ? '<span class="vitola-badge">' + result.vitola + '</span>' : '') +
-            '</div>' : '') +
-            '</div>' +
-            '<a href="/go?retailer=' + encodeURIComponent(result.retailer)
-            + '&cid=' + encodeURIComponent(result.product.replace(/\s+/g, '-').toLowerCase())
-            + '&url=' + encodeURIComponent(result.url)
-            + '" class="card-button" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;">'
-            + '<img src="/static/logo.png" alt="Scout" style="width:32px;height:32px;object-fit:contain;">'
-            + '</a>'
-            + '</div>';
-        }).join('');
-        
-        // Calculate savings
-        if (data.results.length > 1) {
-          const inStockResults = data.results.filter(function(r) { return !r.oos; });
-          if (inStockResults.length > 1) {
-            const prices = inStockResults.map(function(r) { 
-              return parseFloat(r.delivered_after_promo.replace(',','')); 
-            });
-            const cheapest = Math.min.apply(Math, prices);
-            const mostExpensive = Math.max.apply(Math, prices);
-            const savings = mostExpensive - cheapest;
-            
-            if (savings > 0) {
-              document.getElementById('cheapestPrice').textContent = '$' + cheapest.toFixed(2);
-              document.getElementById('expensivePrice').textContent = '$' + mostExpensive.toFixed(2);
-              document.getElementById('savingsAmount').textContent = '$' + savings.toFixed(2);
-              document.getElementById('savingsSummary').style.display = 'block';
+          const vitolas = new Set();
+          line.wrappers.forEach(w => {
+            const displayWrapper = this.formatWrapperDisplay(w.wrapper, w.wrapper_alias);
+            if (displayWrapper === this.selection.wrapper && w.vitolas) {
+              w.vitolas.forEach(v => vitolas.add(v));
             }
+          });
+          return Array.from(vitolas).sort();
+        },
+        
+        get boxQtyDisplay() {
+          if (!this.selection.brand || !this.selection.line) return '';
+          
+          const brand = this.options.find(b => b.brand === this.selection.brand);
+          if (!brand) return '';
+          const line = brand.lines.find(l => l.line === this.selection.line);
+          if (!line) return '';
+          
+          const qtys = new Set();
+          line.wrappers.forEach(w => {
+            const displayWrapper = this.formatWrapperDisplay(w.wrapper, w.wrapper_alias);
+            const wrapperMatch = !this.selection.wrapper || displayWrapper === this.selection.wrapper;
+            const vitolaMatch = !this.selection.vitola || (w.vitolas && w.vitolas.includes(this.selection.vitola));
+            
+            if (wrapperMatch && vitolaMatch && w.box_qtys) {
+              w.box_qtys.forEach(qty => qtys.add(Number(qty)));
+            }
+          });
+          
+          const sorted = Array.from(qtys).sort((a, b) => a - b);
+          if (sorted.length === 1) return `Box of ${sorted[0]}`;
+          if (sorted.length > 1) return `Box of ${sorted.join(', ')}`;
+          return '';
+        },
+        
+        get canSearch() {
+          return this.selection.brand && this.selection.line && this.selection.zip;
+        },
+        
+        get hasFilters() {
+          return this.filterChips.length > 0;
+        },
+        
+        get filterChips() {
+          const chips = [];
+          if (this.selection.brand) chips.push(`Brand: ${this.selection.brand}`);
+          if (this.selection.line) chips.push(`Line: ${this.selection.line}`);
+          if (this.selection.wrapper) chips.push(`Wrapper: ${this.selection.wrapper}`);
+          if (this.selection.vitola) chips.push(`Vitola: ${this.selection.vitola}`);
+          return chips;
+        },
+        
+        // Methods
+        async init() {
+          try {
+            const response = await fetch('/options');
+            const data = await response.json();
+            this.options = data.brands || [];
+            console.log(`Loaded ${this.options.length} brands`);
+          } catch (error) {
+            console.error('Failed to load options:', error);
           }
-        }
+        },
         
-        // Generate and inject comparison schema
-        var comparisonSchema = generateComparisonSchema(data.results, {
-          brand: data.brand,
-          line: data.line,
-          wrapper: data.wrapper,
-          vitola: data.vitola
-        });
-        injectSchema(comparisonSchema);
+        confirmAge() {
+          this.ageVerified = true;
+        },
         
-        resultsSection.style.display = 'block';
-        resultsSection.scrollIntoView({ behavior: 'smooth' });
-      }
-
-      function formatPromoPrice(promoText, submittedBy) {
-        if (!promoText || promoText === '') {
-          return '<span style="color: #6b7280;">—</span>';
-        }
+        denyAge() {
+          alert('You must be 21 or older to access this site.');
+          window.location.href = 'https://www.google.com';
+        },
         
-        const parts = promoText.split('|');
-        const displayText = parts[0]; // "$139.80 [25% off]"
-        const code = parts[1] || '';
+        onBrandChange() {
+          this.selection.line = '';
+          this.selection.wrapper = '';
+          this.selection.vitola = '';
+        },
         
-        const discountMatch = displayText.match(/\[([^\]]+)\]/);
+        onLineChange() {
+          this.selection.wrapper = '';
+          this.selection.vitola = '';
+        },
         
-        if (discountMatch) {
-          const discount = discountMatch[1]; // "25% off"
+        onWrapperChange() {
+          this.selection.vitola = '';
+        },
+        
+        onVitolaChange() {
+          // Could trigger auto-search or other actions
+        },
+        
+        formatWrapperDisplay(wrapper, alias) {
+          if (!wrapper) return '';
+          if (!alias || alias.trim() === '' || alias.toLowerCase() === wrapper.toLowerCase()) return wrapper;
+          return `${alias} (${wrapper})`;
+        },
+        
+        extractActualWrapper(displayWrapper) {
+          if (!displayWrapper) return '';
+          const match = displayWrapper.match(/\(([^)]+)\)$/);
+          return match ? match[1] : displayWrapper;
+        },
+        
+        async search() {
+          if (!this.canSearch) return;
+          
+          this.isSearching = true;
+          this.showResults = false;
+          
+          try {
+            const params = new URLSearchParams({
+              brand: this.selection.brand,
+              line: this.selection.line,
+              zip: this.selection.zip
+            });
+            
+            if (this.selection.wrapper) {
+              params.append('wrapper', this.extractActualWrapper(this.selection.wrapper));
+            }
+            if (this.selection.vitola) {
+              params.append('vitola', this.selection.vitola);
+            }
+            if (this.authorizedOnly) {
+              params.append('authorized_only', 'true');
+            }
+            
+            const response = await fetch(`/compare?${params.toString()}`);
+            const data = await response.json();
+            
+            // Sort by price
+            this.results = (data.results || []).sort((a, b) => {
+              return parseFloat(a.delivered_after_promo.replace('$', '')) - 
+                     parseFloat(b.delivered_after_promo.replace('$', ''));
+            });
+            
+            // Build title
+            let titleParts = [data.brand, data.line];
+            if (data.wrapper) titleParts.push(data.wrapper);
+            if (data.vitola) titleParts.push(data.vitola);
+            if (this.results.length > 0) {
+              titleParts.push(`Box of ${this.results[0].box_qty}`);
+            }
+            this.resultsTitle = `${titleParts.join(', ')} - Price Comparison`;
+            
+            
+            this.showResults = true;
+            
+            // Scroll to results
+            this.$nextTick(() => {
+              document.querySelector('[x-show="showResults"]')?.scrollIntoView({ behavior: 'smooth' });
+            });
+            
+          } catch (error) {
+            console.error('Search failed:', error);
+            alert('Search failed. Please try again.');
+          } finally {
+            this.isSearching = false;
+          }
+        },
+        
+        
+        formatPromo(result) {
+          if (!result.current_promotions_applied) {
+            return '<span class="text-gray-400">—</span>';
+          }
+          
+          const parts = result.current_promotions_applied.split('|');
+          const displayText = parts[0];
           const code = parts[1] || '';
-          const creditTooltip = submittedBy ? ` title="Deal found by ${submittedBy}"` : '';
+          const discountMatch = displayText.match(/\[([^\]]+)\]/);
           
-          return `<div style="font-size: 18px;"${creditTooltip}>
-            <div class="promo-discount" style="cursor: ${submittedBy ? 'help' : 'default'};">${discount}</div>
-            ${code ? `<div style="font-size: 14px; color: #374151;">Code: ${code}</div>` : ''}
-            ${submittedBy ? `<div style="font-size: 12px; color: #059669; font-style: italic;">Found by ${submittedBy}</div>` : ''}
-          </div>`;
+          if (discountMatch) {
+            const discount = discountMatch[1];
+            let html = `<div class="text-red-600 font-bold">${discount}</div>`;
+            if (code) html += `<div class="text-sm text-gray-600">Code: ${code}</div>`;
+            return html;
+          }
+          
+          return '<span class="text-gray-400">—</span>';
+        },
+        
+        getTrackingUrl(result) {
+          const cid = result.product.replace(/\s+/g, '-').toLowerCase();
+          return `/go?retailer=${encodeURIComponent(result.retailer)}&cid=${encodeURIComponent(cid)}&url=${encodeURIComponent(result.url)}`;
+        },
+        
+        reportIssue() {
+          const searchContext = this.buildSearchContext();
+          sessionStorage.setItem('reportIssueContext', JSON.stringify({
+            searchContext,
+            currentUrl: window.location.href,
+            timestamp: new Date().toISOString(),
+            currentResults: this.results
+          }));
+          window.location.href = '/report-data-issue.html';
+        },
+        
+        buildSearchContext() {
+          if (!this.selection.brand || !this.selection.line) {
+            return 'General website feedback (no specific search active)';
+          }
+          
+          let context = `${this.selection.brand} ${this.selection.line}`;
+          if (this.selection.wrapper) context += ` (${this.selection.wrapper} wrapper)`;
+          if (this.selection.vitola) context += ` ${this.selection.vitola}`;
+          if (this.selection.zip) context += ` - ZIP: ${this.selection.zip}`;
+          if (this.authorizedOnly) context += ' (Authorized dealers only)';
+          
+          return context;
         }
-        
-        return '<span style="color: #6b7280;">—</span>';
-      }
-
-      // Report Data Issue functionality
-      document.getElementById('reportIssueBtn').addEventListener('click', function(e) {
-        e.preventDefault();
-        
-        // Capture current search context
-        const searchContext = buildSearchContext();
-        const currentUrl = window.location.href;
-        const timestamp = new Date().toISOString();
-        
-        // Store context in sessionStorage to pass to form
-        sessionStorage.setItem('reportIssueContext', JSON.stringify({
-          searchContext: searchContext,
-          currentUrl: currentUrl,
-          timestamp: timestamp,
-          currentResults: window.lastSearchResults || null
-        }));
-        
-        // Navigate to report form
-        window.location.href = '/report-data-issue.html';
-      });
-      
-      function buildSearchContext() {
-        let context = '';
-        
-        if (currentSelection.brand && currentSelection.line) {
-          context = `${currentSelection.brand} ${currentSelection.line}`;
-          
-          if (currentSelection.wrapper) {
-            context += ` (${currentSelection.wrapper} wrapper)`;
-          }
-          
-          if (currentSelection.vitola) {
-            context += ` ${currentSelection.vitola}`;
-          }
-          
-          const zipValue = zipInput.value.trim();
-          if (zipValue) {
-            context += ` - ZIP: ${zipValue}`;
-          }
-          
-          const authorizedOnly = document.getElementById('authorizedOnly').checked;
-          if (authorizedOnly) {
-            context += ' (Authorized dealers only)';
-          }
-        } else {
-          context = 'General website feedback (no specific search active)';
-        }
-        
-        return context;
-      }
-
-      // Initialize
-      window.addEventListener('load', function() {
-        loadOptions();
-        showAgeModal();
-        updateZipInput(); // Add this line
-      });
-    </script>
-  </body>
+      };
+    }
+  </script>
+</body>
 </html>
