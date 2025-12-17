@@ -177,7 +177,7 @@ class AffiliateDataMerger:
             writer.writeheader()
             writer.writerows(data)
         
-        print(f"✅ Wrote {len(data)} rows to {filepath}")
+        print(f"[OK] Wrote {len(data)} rows to {filepath}")
     
     def update_all_affiliates(self) -> Dict:
         """Update all affiliate retailers"""
@@ -192,7 +192,7 @@ class AffiliateDataMerger:
 
 
 def main():
-    print("🔄 Starting Affiliate Feed Update")
+    print("Starting Affiliate Feed Update")
     print(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print()
     
@@ -200,7 +200,7 @@ def main():
     
     # Check credentials
     if not updater.cj_token or updater.cj_token == 'your_token_here':
-        print("❌ ERROR: CJ_PERSONAL_ACCESS_TOKEN not configured")
+        print("ERROR: CJ_PERSONAL_ACCESS_TOKEN not configured")
         print()
         print("Setup Instructions:")
         print("1. Go to: https://developers.cj.com/")
@@ -218,14 +218,14 @@ def main():
     # Summary
     print()
     print("=" * 60)
-    print("📊 AFFILIATE UPDATE SUMMARY")
+    print("AFFILIATE UPDATE SUMMARY")
     print("=" * 60)
     
     success_count = sum(1 for r in results.values() if r.get('success'))
     total_count = len(results)
     
     for retailer, result in results.items():
-        status = "✅" if result.get('success') else "❌"
+        status = "[OK]" if result.get('success') else "[FAIL]"
         products = result.get('products_updated', 0)
         error = result.get('error', '')
         

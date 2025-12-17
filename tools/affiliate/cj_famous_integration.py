@@ -172,7 +172,7 @@ class CJFamousSmokeIntegrator:
             print("4. You might need to apply to their program first")
             return False
      
-    def check_for_product_data(self):  # <-- ADD THIS NEW METHOD HERE
+    def check_for_product_data(self):
         """Check if Famous Smoke Shop has detailed product data available"""
         # Try GraphQL Product Search API
         graphql_url = "https://commissions.api.cj.com/query"
@@ -200,6 +200,128 @@ class CJFamousSmokeIntegrator:
         response = requests.post(graphql_url, json=query, headers=headers)
         print(f"GraphQL Response: {response.status_code}")
         print(response.text[:500])
+    
+    def get_famous_products(self, advertiser_id: str = None, search_keywords: List[str] = None, max_results: int = 1000) -> List[Dict]:
+        """
+        Fetch products from Famous Smoke Shop using CJ Product Catalog API
+        Returns list of product dictionaries with affiliate links
+        """
+        if not advertiser_id:
+            advertiser_id = self.famous_advertiser_id or '6240744'
+        
+        print(f"Attempting to fetch product catalog for advertiser {advertiser_id}")
+        
+        # Try REST API Product Catalog endpoint
+        product_url = f"https://product-search.api.cj.com/v2/product-search"
+        
+        params = {
+            'website-id': self.website_id,
+            'advertiser-ids': advertiser_id,
+            'keywords': 'cigar cigars',
+            'records-per-page': min(max_results, 1000)
+        }
+        
+        try:
+            response = requests.get(
+                product_url,
+                params=params,
+                headers=self.get_headers(),
+                timeout=30
+            )
+            
+            print(f"Product API Response Status: {response.status_code}")
+            
+            if response.status_code == 200:
+                # Parse XML response
+                root = ET.fromstring(response.text)
+                products_elem = root.findall('.//product')
+                
+                print(f"Found {len(products_elem)} products in catalog")
+                
+                if len(products_elem) == 0:
+                    print("No products in catalog - Famous Smoke may not provide product feed")
+                    print("Response sample:", response.text[:500])
+                    return []
+                
+                products = []
+                for product_elem in products_elem:
+                    # Extract product data
+                    name = self._get_xml_text(product_elem, 'name')
+                    price = self._get_xml_text(product_elem, 'price')
+                    buy_url = self._get_xml_text(product_elem, 'buy-url')
+                    in_stock = self._get_xml_text(product_elem, 'in-stock', 'true')
+                    
+                    if name and buy_url:
+                        product = {
+                            'name': name,
+                            'link': buy_url,  # Already an affiliate link!
+                            'brand': self._extract_brand(name),
+                            'line': self._extract_line(name),
+                            'price': float(price) if price else 0.0,
+                            'in_stock': in_stock.lower() == 'true',
+                            'retailer': 'famous',
+                            'source': 'cj_product_catalog'
+                        }
+                        products.append(product)
+                
+                print(f"Extracted {len(products)} valid products")
+                return products[:max_results]
+                
+            elif response.status_code == 404:
+                print("Product Catalog API not available for this advertiser")
+                print("Famous Smoke may not provide a product feed through CJ")
+                return []
+            else:
+                print(f"API Error: {response.status_code}")
+                print(f"Response: {response.text[:500]}")
+                return []
+                
+        except Exception as e:
+            print(f"Error fetching product catalog: {e}")
+            return []
+    
+    def _get_xml_text(self, element, tag: str, default: str = '') -> str:
+        """Safely extract text from XML element"""
+        child = element.find(tag)
+        return child.text if child is not None and child.text else default
+    
+    def _extract_url_from_html(self, html_code: str) -> str:
+        """Extract URL from HTML anchor tag"""
+        if not html_code:
+            return ''
+        
+        # Look for href in the HTML
+        import re
+        match = re.search(r'href=["\']([^"\']+)["\']', html_code)
+        if match:
+            return match.group(1)
+        return ''
+    
+    def _extract_brand(self, product_name: str) -> str:
+        """Extract brand from product name"""
+        # Common cigar brands
+        brands = ['Arturo Fuente', 'Padron', 'Oliva', 'Cohiba', 'Romeo y Julieta', 
+                  'Montecristo', 'Ashton', 'Drew Estate', 'Liga Privada', 'Acid']
+        
+        name_lower = product_name.lower()
+        for brand in brands:
+            if brand.lower() in name_lower:
+                return brand
+        
+        # Default: first word is brand
+        return product_name.split()[0] if product_name else ''
+    
+    def _extract_line(self, product_name: str) -> str:
+        """Extract line from product name"""
+        # Skip common words
+        skip_words = ['cigars', 'cigar', 'box', 'pack', 'single']
+        
+        words = product_name.split()
+        if len(words) > 1:
+            # Return second word if first is brand
+            return ' '.join([w for w in words[1:3] if w.lower() not in skip_words])
+        
+        return product_name
 
 def main():
     """

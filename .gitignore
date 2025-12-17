@@ -22,6 +22,10 @@ build/
 # Database
 *.db-journal
 
+# Environment variables (contains secrets!)
+.env
+.env.local
+
 # IDE
 .vscode/
 .idea/

@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 from cj_famous_integration import CJFamousSmokeIntegrator
 
-# Load environment variables
-load_dotenv()
+# Load environment variables from project root
+project_root = Path(__file__).resolve().parent.parent.parent
+load_dotenv(project_root / '.env')
 
 def test_cj_connection():
     personal_access_token = os.getenv('CJ_PERSONAL_ACCESS_TOKEN')

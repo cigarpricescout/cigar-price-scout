@@ -31,6 +31,11 @@ jobs:
           pip install pandas beautifulsoup4 requests lxml aiosqlite
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
       
+      - name: Configure git
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+      
       - name: Run pricing automation
         run: |
           cd automation
@@ -39,20 +44,21 @@ jobs:
           # Pass any needed environment variables
           PYTHONUNBUFFERED: 1
       
-      - name: Commit and push changes
+      - name: Commit and push changes (if needed)
         run: |
-          git config user.name "GitHub Actions Bot"
-          git config user.email "actions@github.com"
+          # Check if there are any uncommitted changes
+          if ! git diff --quiet || ! git diff --cached --quiet; then
+            echo "Found uncommitted changes, committing now..."
+            git add -A
+            git commit -m "Automated price update - $(date +'%Y-%m-%d %H:%M')" || echo "Commit may have already been done by script"
+          fi
           
-          # Add all changed CSV files
-          git add static/data/*.csv data/*.csv data/historical_prices.db automation/logs/*.log
-          
-          # Only commit if there are changes
-          if git diff --staged --quiet; then
-            echo "No changes to commit"
-          else
-            git commit -m "Automated price update - $(date +'%Y-%m-%d %H:%M')"
+          # Push any new commits (whether from script or from above)
+          if [ $(git rev-list HEAD...origin/main --count) -gt 0 ]; then
+            echo "Pushing commits..."
             git push
+          else
+            echo "No new commits to push"
           fi
       
       - name: Summary
