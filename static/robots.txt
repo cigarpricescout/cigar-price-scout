@@ -1,9 +1,17 @@
 User-agent: *
-# Block API and utility endpoints that aren’t real pages
+# Block API and utility endpoints that aren't real pages
 Disallow: /api/
 Disallow: /options
 Disallow: /compare
+Disallow: /compare-all
 Disallow: /admin/
+Disallow: /health
+
+# Block backup files and temporary files
+Disallow: *BACKUP*.html
+Disallow: *backup*.html
+Disallow: *.backup.*
+Disallow: *.bak
 
 # Allow everything else (homepage, static pages, cigar pages, etc.)
 Allow: /

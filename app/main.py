@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Query, Form, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, FileResponse, Response, RedirectResponse
+from fastapi.responses import HTMLResponse, FileResponse, Response, RedirectResponse, PlainTextResponse
 from pathlib import Path
 import csv
 from typing import Optional
@@ -343,6 +343,11 @@ CSV_PATH_PREFIX = str(PROJECT_ROOT / "static" / "data")
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory=STATIC_PATH), name="static")
+
+# Custom 404 handler
+@app.exception_handler(404)
+async def custom_404_handler(request, exc):
+    return FileResponse(f"{STATIC_PATH}/404.html", status_code=404)
 
 import json
 import urllib.request
@@ -1162,6 +1167,77 @@ async def request_box_pricing():
 @app.get("/report-data-issue.html")
 async def report_data_issue():
     return FileResponse(f"{STATIC_PATH}/report-data-issue.html")
+
+@app.get("/deals.html")
+async def deals_page():
+    return FileResponse(f"{STATIC_PATH}/deals.html")
+
+@app.get("/submit-deal.html")
+async def submit_deal_page():
+    return FileResponse(f"{STATIC_PATH}/submit-deal.html")
+
+# SEO: Sitemap.xml
+@app.get("/sitemap.xml", response_class=PlainTextResponse)
+async def sitemap():
+    from datetime import datetime
+    
+    base_url = "https://cigarpricescout.com"
+    today = datetime.now().strftime("%Y-%m-%d")
+    
+    # Static pages with high priority
+    static_pages = [
+        {"url": "/", "priority": "1.0", "changefreq": "daily"},
+        {"url": "/about.html", "priority": "0.8", "changefreq": "monthly"},
+        {"url": "/contact.html", "priority": "0.7", "changefreq": "monthly"},
+        {"url": "/privacy-policy.html", "priority": "0.5", "changefreq": "yearly"},
+        {"url": "/terms-of-service.html", "priority": "0.5", "changefreq": "yearly"},
+        {"url": "/request-box-pricing.html", "priority": "0.7", "changefreq": "monthly"},
+        {"url": "/report-data-issue.html", "priority": "0.6", "changefreq": "monthly"},
+        {"url": "/deals.html", "priority": "0.9", "changefreq": "daily"},
+        {"url": "/submit-deal.html", "priority": "0.6", "changefreq": "monthly"},
+    ]
+    
+    sitemap_xml = '<?xml version="1.0" encoding="UTF-8"?>\n'
+    sitemap_xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+    
+    # Add static pages
+    for page in static_pages:
+        sitemap_xml += f'  <url>\n'
+        sitemap_xml += f'    <loc>{base_url}{page["url"]}</loc>\n'
+        sitemap_xml += f'    <lastmod>{today}</lastmod>\n'
+        sitemap_xml += f'    <changefreq>{page["changefreq"]}</changefreq>\n'
+        sitemap_xml += f'    <priority>{page["priority"]}</priority>\n'
+        sitemap_xml += f'  </url>\n'
+    
+    # Add dynamic cigar pages (if we have them)
+    try:
+        all_products = load_all_products()
+        # Get unique brand/line combinations
+        cigar_pages = set()
+        for p in all_products:
+            brand_slug = p.brand.lower().replace(' ', '-').replace('&', 'and')
+            line_slug = p.line.lower().replace(' ', '-').replace('&', 'and')
+            cigar_pages.add((brand_slug, line_slug, p.brand, p.line))
+        
+        # Limit to top 500 to keep sitemap reasonable
+        for brand_slug, line_slug, brand, line in list(cigar_pages)[:500]:
+            sitemap_xml += f'  <url>\n'
+            sitemap_xml += f'    <loc>{base_url}/cigars/{brand_slug}/{line_slug}</loc>\n'
+            sitemap_xml += f'    <lastmod>{today}</lastmod>\n'
+            sitemap_xml += f'    <changefreq>weekly</changefreq>\n'
+            sitemap_xml += f'    <priority>0.8</priority>\n'
+            sitemap_xml += f'  </url>\n'
+    except Exception as e:
+        print(f"[sitemap] Error adding cigar pages: {e}")
+    
+    sitemap_xml += '</urlset>'
+    
+    return sitemap_xml
+
+# SEO: robots.txt (serve from file, but ensure it exists)
+@app.get("/robots.txt", response_class=PlainTextResponse)
+async def robots():
+    return FileResponse(f"{STATIC_PATH}/robots.txt")
 
 @app.post("/api/box-pricing-request")
 async def submit_box_pricing_request(request: BoxPricingRequest):

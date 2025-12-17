@@ -1,1 +1,33 @@
 .venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# Backup files
+*BACKUP*.html
+*backup*.html
+*.backup.*
+*.bak
+
+# Logs
+*.log
+
+# Database
+*.db-journal
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
