@@ -1192,8 +1192,6 @@ def compare_all(
             final_delivered_cents = delivered_cents
             promo_code = None
 
-        tracking_url = f"/go?retailer={product.retailer_key}&cid={product.cid}&url={quote_plus(product.url)}"
-
         result = {
             "retailer": product.retailer_name,
             "product": product_name,
