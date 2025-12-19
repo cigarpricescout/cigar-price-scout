@@ -1,12 +1,12 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8" />
+  <head>
+    <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>{{BRAND}} {{LINE}} Prices - Compare Deals | Cigar Price Scout</title>
+    <title>{{BRAND}} {{LINE}} Prices - Compare Deals | Cigar Price Scout</title>
   <meta name="description" content="Compare {{BRAND}} {{LINE}} cigar box prices across 35+ online retailers. Find the best deals with shipping and tax calculations when you visit cigarpricescout.com." />
   <link rel="canonical" href="https://cigarpricescout.com/cigars/{{BRAND_SLUG}}/{{LINE_SLUG}}" />
-  <link rel="icon" type="image/png" href="/static/logo.png">
+    <link rel="icon" type="image/png" href="/static/logo.png">
   
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -29,45 +29,45 @@
   </script>
   
   <!-- Google Fonts -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap" rel="stylesheet" />
-  
-  <style>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap" rel="stylesheet" />
+    
+    <style>
     [x-cloak] { display: none !important; }
     /* Mobile cards hidden by default, table visible */
     .mobile-cards { display: none; }
     @media (max-width: 480px) {
       .desktop-table { display: none !important; }
       .mobile-cards { display: block !important; }
-    }
-  </style>
-  
-  <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "Product",
-    "name": "{{BRAND}} {{LINE}}",
-    "url": "https://cigarpricescout.com/cigars/{{BRAND_SLUG}}/{{LINE_SLUG}}",
+      }
+    </style>
+
+      <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Product",
+        "name": "{{BRAND}} {{LINE}}",
+        "url": "https://cigarpricescout.com/cigars/{{BRAND_SLUG}}/{{LINE_SLUG}}",
     "brand": { "@type": "Brand", "name": "{{BRAND}}" },
-    "description": "Compare {{BRAND}} {{LINE}} cigar prices across 35+ online retailers",
-    "offers": {
-      "@type": "AggregateOffer",
-      "priceCurrency": "USD",
-      "lowPrice": "0",
-      "highPrice": "1000",
-      "offerCount": "35"
-    }
-  }
+        "description": "Compare {{BRAND}} {{LINE}} cigar prices across 35+ online retailers",
+        "offers": {
+          "@type": "AggregateOffer",
+          "priceCurrency": "USD",
+          "lowPrice": "0",
+          "highPrice": "1000",
+          "offerCount": "35"
+        }
+      }
   </script>
-  
-  <meta property="og:title" content="{{BRAND}} {{LINE}} Prices - Compare Deals | Cigar Price Scout" />
-  <meta property="og:description" content="Compare {{BRAND}} {{LINE}} cigar prices across 35+ online retailers." />
-  <meta property="og:url" content="https://cigarpricescout.com/cigars/{{BRAND_SLUG}}/{{LINE_SLUG}}" />
-  <meta property="og:type" content="product" />
-  <meta property="og:image" content="https://cigarpricescout.com/static/logo.png" />
-  <meta name="twitter:card" content="summary_large_image" />
-</head>
+
+    <meta property="og:title" content="{{BRAND}} {{LINE}} Prices - Compare Deals | Cigar Price Scout" />
+    <meta property="og:description" content="Compare {{BRAND}} {{LINE}} cigar prices across 35+ online retailers." />
+    <meta property="og:url" content="https://cigarpricescout.com/cigars/{{BRAND_SLUG}}/{{LINE_SLUG}}" />
+    <meta property="og:type" content="product" />
+    <meta property="og:image" content="https://cigarpricescout.com/static/logo.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+   </head>
 
 <body class="bg-brand-50 font-serif text-ink text-lg leading-relaxed">
   
@@ -75,10 +75,10 @@
   <div class="text-center text-sm text-muted my-3">
     <a href="/" class="text-brand-500 hover:underline">Home</a> &gt; 
     <span>{{BRAND}}</span> &gt; 
-    <span>{{LINE}}</span>
-  </div>
+      <span>{{LINE}}</span>
+    </div>
   
-  <!-- Age Verification Modal -->
+    <!-- Age Verification Modal -->
   <div id="ageModal" class="hidden fixed inset-0 bg-black/80 z-50 items-center justify-center">
     <div class="bg-white p-10 rounded-xl text-center max-w-md mx-auto shadow-2xl">
       <h2 class="font-display font-bold text-2xl mb-5">Age Verification Required</h2>
@@ -97,66 +97,66 @@
       <img src="/static/logo.png" alt="Cigar Price Scout Logo" class="w-24 h-20 object-contain" />
       <h1 class="font-display font-bold text-3xl tracking-wide">Cigar Price Scout</h1>
       <p class="italic text-muted text-xl">{{BRAND}} {{LINE}} - Price Comparison</p>
-    </header>
-    
+      </header>
+      
     <!-- CTA Button -->
     <div class="text-center mb-4">
       <a href="/" class="inline-block bg-brand-500 hover:bg-brand-600 text-white font-bold py-3 px-6 rounded-xl transition-all shadow-md hover:shadow-lg">
         Scout Other Cigar Boxes
       </a>
-    </div>
-    
-    <p class="text-center text-muted font-semibold mt-6 mb-4">
-      Want shipping, tax, and promo calculations? Run a full comparison on our homepage.
-    </p>
+      </div>
 
-    <main>
-      <section id="results">
+    <p class="text-center text-muted font-semibold mt-6 mb-4">
+        Want shipping, tax, and promo calculations? Run a full comparison on our homepage.
+      </p>
+
+      <main>
+        <section id="results">
         <h2 id="resultsTitle" class="font-display font-bold text-2xl text-center tracking-wide my-4">
-          {{BRAND}} {{LINE}} – Advertised Box Prices
-        </h2>
-        
+            {{BRAND}} {{LINE}} – Advertised Box Prices
+          </h2>
+
         <p id="resultsSummary" class="text-center text-muted text-base mt-1 mb-6">
-          Loading cigar details…
-        </p>
-        
+              Loading cigar details…
+          </p>
+
         <!-- Filters -->
         <div class="flex gap-3 justify-center my-5 flex-wrap">
           <select id="wrapperFilter" class="p-3 border border-gray-200 rounded-xl bg-white font-serif text-base focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500">
-            <option value="">All Wrappers</option>
-          </select>
+              <option value="">All Wrappers</option>
+            </select>
           <select id="vitolaFilter" class="p-3 border border-gray-200 rounded-xl bg-white font-serif text-base focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500">
-            <option value="">All Vitolas</option>
-          </select>
+              <option value="">All Vitolas</option>
+            </select>
           <button onclick="clearFilters()" class="px-5 py-3 border border-brand-500 rounded-xl bg-white text-brand-500 font-semibold hover:bg-brand-50 transition-all">
             Clear Filters
           </button>
-        </div>
+          </div>
 
-        <!-- Desktop Table -->
+          <!-- Desktop Table -->
         <div class="desktop-table overflow-x-auto">
           <table id="resultsTable" class="w-full border-collapse bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
-            <thead>
+              <thead>
               <tr class="bg-gray-50">
                 <th class="p-4 border-b border-gray-200 text-center font-display font-semibold">Retailer</th>
                 <th class="p-4 border-b border-gray-200 text-left font-display font-semibold">Product Details</th>
                 <th class="p-4 border-b border-gray-200 text-center font-display font-semibold">Advertised Price</th>
                 <th class="p-4 border-b border-gray-200 text-center font-display font-semibold">Stock Status</th>
-              </tr>
-            </thead>
-            <tbody>
+                </tr>
+              </thead>
+              <tbody>
               <tr><td colspan="4" class="p-4 text-center text-muted">Loading...</td></tr>
-            </tbody>
-          </table>
-        </div>
-        
-        <!-- Mobile Cards -->
+              </tbody>
+            </table>
+          </div>
+          
+          <!-- Mobile Cards -->
         <div id="mobileCards" class="mobile-cards space-y-4">
-          <!-- Mobile cards populated by JavaScript -->
-        </div>
-      </section>
-    </main>
-    
+            <!-- Mobile cards populated by JavaScript -->
+          </div>
+        </section>
+      </main>
+      
     <!-- Footer -->
     <footer class="mt-10 py-5 border-t border-gray-200 text-center text-muted text-sm">
       <p class="space-x-2">
@@ -167,199 +167,199 @@
         <a href="/terms-of-service.html" class="text-brand-500 hover:underline">Terms</a>
         <span>|</span>
         <a href="/contact.html" class="text-brand-500 hover:underline">Contact</a>
-      </p>
+        </p>
       <p class="mt-2">&copy; 2025 Cigar Price Scout</p>
-    </footer>
-  </div>
+      </footer>
+    </div>
 
-  <script>
-    let allResults = [];
-    
+    <script>
+      let allResults = [];
+      
     // Extract brand and line from URL path
-    const pathParts = window.location.pathname.split('/');
-    const brandSlug = pathParts[2] || '';
-    const lineSlug = pathParts[3] || '';
-    
-    function toTitleCase(str) {
-      return str.replace(/-/g, ' ')
-               .split(' ')
-               .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-               .join(' ');
-    }
-    
-    const brand = toTitleCase(brandSlug);
-    const line = toTitleCase(lineSlug);
-    
-    async function loadPrices() {
-      try {
-        const params = new URLSearchParams({ brand, line });
-        const response = await fetch('/compare-all?' + params.toString());
-        const data = await response.json();
-        displayResults(data);
-      } catch (error) {
-        console.error('Error loading prices:', error);
+      const pathParts = window.location.pathname.split('/');
+      const brandSlug = pathParts[2] || '';
+      const lineSlug = pathParts[3] || '';
+      
+      function toTitleCase(str) {
+        return str.replace(/-/g, ' ')
+                 .split(' ')
+                 .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                 .join(' ');
+      }
+      
+      const brand = toTitleCase(brandSlug);
+      const line = toTitleCase(lineSlug);
+      
+      async function loadPrices() {
+        try {
+          const params = new URLSearchParams({ brand, line });
+          const response = await fetch('/compare-all?' + params.toString());
+          const data = await response.json();
+          displayResults(data);
+        } catch (error) {
+          console.error('Error loading prices:', error);
         document.querySelector('#resultsTable tbody').innerHTML = '<tr><td colspan="4" class="p-4 text-center">Error loading prices. Please try again.</td></tr>';
         document.getElementById('mobileCards').innerHTML = '<div class="bg-white border border-gray-200 rounded-xl p-5">Error loading prices. Please try again.</div>';
+        }
       }
-    }
-    
-    function displayResults(data) {
-      const titleEl = document.getElementById('resultsTitle');
-      const metaDesc = document.querySelector('meta[name="description"]');
+      
+      function displayResults(data) {
+        const titleEl = document.getElementById('resultsTitle');
+        const metaDesc = document.querySelector('meta[name="description"]');
 
-      if (!data.results || data.results.length === 0) {
+        if (!data.results || data.results.length === 0) {
         if (titleEl) titleEl.textContent = 'No results found';
         document.querySelector('#resultsTable tbody').innerHTML = '<tr><td colspan="4" class="p-4 text-center">No matching cigars found.</td></tr>';
         document.getElementById('mobileCards').innerHTML = '<div class="bg-white border border-gray-200 rounded-xl p-5 text-center">No matching cigars found.</div>';
-        return;
-      }
+            return;
+        }
 
       data.results.sort((a, b) => parseFloat(a.delivered_after_promo.replace("$", "")) - parseFloat(b.delivered_after_promo.replace("$", "")));
-      allResults = data.results;
+        allResults = data.results;
 
-      const wrappers = new Set();
-      const vitolas = new Set();
-      data.results.forEach(r => {
-        if (r.wrapper) wrappers.add(r.wrapper);
-        if (r.vitola) vitolas.add(r.vitola);
-      });
+        const wrappers = new Set();
+        const vitolas = new Set();
+        data.results.forEach(r => {
+            if (r.wrapper) wrappers.add(r.wrapper);
+            if (r.vitola) vitolas.add(r.vitola);
+        });
 
       // Update summary
-      const summaryEl = document.getElementById('resultsSummary');
-      if (summaryEl) {
-        const wrapperList = Array.from(wrappers).sort().join(', ');
-        const vitolaList = Array.from(vitolas).sort().join(', ');
-        let summary = `We found ${data.results.length} ${data.brand} ${data.line} box listings`;
-        if (wrapperList) summary += ` in wrappers such as ${wrapperList}`;
-        if (vitolaList) summary += ` and vitolas like ${vitolaList}`;
+        const summaryEl = document.getElementById('resultsSummary');
+        if (summaryEl) {
+            const wrapperList = Array.from(wrappers).sort().join(', ');
+            const vitolaList = Array.from(vitolas).sort().join(', ');
+            let summary = `We found ${data.results.length} ${data.brand} ${data.line} box listings`;
+            if (wrapperList) summary += ` in wrappers such as ${wrapperList}`;
+            if (vitolaList) summary += ` and vitolas like ${vitolaList}`;
         summary += `. Use the filters below to explore wrappers and vitolas.`;
-        summaryEl.textContent = summary;
-      }
+            summaryEl.textContent = summary;
+        }
 
       if (titleEl) titleEl.textContent = `${data.brand} ${data.line} – Advertised Box Prices`;
 
-      populateFilters(data.results);
-      renderTable(data.results);
-      renderMobileCards(data.results);
+        populateFilters(data.results);
+        renderTable(data.results);
+        renderMobileCards(data.results);
     }
-    
-    function populateFilters(results) {
-      const wrappers = new Set();
-      const vitolas = new Set();
-      results.forEach(r => {
-        if (r.wrapper) wrappers.add(r.wrapper);
-        if (r.vitola) vitolas.add(r.vitola);
-      });
       
-      const wrapperFilter = document.getElementById('wrapperFilter');
-      const vitolaFilter = document.getElementById('vitolaFilter');
-      
+      function populateFilters(results) {
+        const wrappers = new Set();
+        const vitolas = new Set();
+        results.forEach(r => {
+          if (r.wrapper) wrappers.add(r.wrapper);
+          if (r.vitola) vitolas.add(r.vitola);
+        });
+        
+        const wrapperFilter = document.getElementById('wrapperFilter');
+        const vitolaFilter = document.getElementById('vitolaFilter');
+        
       wrapperFilter.innerHTML = '<option value="">All Wrappers</option>' + Array.from(wrappers).sort().map(w => `<option value="${w}">${w}</option>`).join('');
       vitolaFilter.innerHTML = '<option value="">All Vitolas</option>' + Array.from(vitolas).sort().map(v => `<option value="${v}">${v}</option>`).join('');
-      
-      wrapperFilter.addEventListener('change', applyFilters);
-      vitolaFilter.addEventListener('change', applyFilters);
-    }
-    
-    function applyFilters() {
-      const wrapperVal = document.getElementById('wrapperFilter').value;
-      const vitolaVal = document.getElementById('vitolaFilter').value;
-      
-      const filtered = allResults.filter(r => {
-        if (wrapperVal && r.wrapper !== wrapperVal) return false;
-        if (vitolaVal && r.vitola !== vitolaVal) return false;
-        return true;
-      });
-      
-      renderTable(filtered);
-      renderMobileCards(filtered);
-    }
-    
-    function clearFilters() {
-      document.getElementById('wrapperFilter').value = '';
-      document.getElementById('vitolaFilter').value = '';
-      renderTable(allResults);
-      renderMobileCards(allResults);
-    }
-    
-    function renderTable(results) {
-      const tbody = document.querySelector('#resultsTable tbody');
-      
-      if (results.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-muted">No results match your filters.</td></tr>';
-        return;
+        
+        wrapperFilter.addEventListener('change', applyFilters);
+        vitolaFilter.addEventListener('change', applyFilters);
       }
       
+      function applyFilters() {
+        const wrapperVal = document.getElementById('wrapperFilter').value;
+        const vitolaVal = document.getElementById('vitolaFilter').value;
+        
+        const filtered = allResults.filter(r => {
+          if (wrapperVal && r.wrapper !== wrapperVal) return false;
+          if (vitolaVal && r.vitola !== vitolaVal) return false;
+          return true;
+        });
+        
+        renderTable(filtered);
+        renderMobileCards(filtered);
+      }
+      
+      function clearFilters() {
+        document.getElementById('wrapperFilter').value = '';
+        document.getElementById('vitolaFilter').value = '';
+        renderTable(allResults);
+        renderMobileCards(allResults);
+      }
+      
+      function renderTable(results) {
+        const tbody = document.querySelector('#resultsTable tbody');
+        
+        if (results.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-muted">No results match your filters.</td></tr>';
+          return;
+        }
+        
       tbody.innerHTML = results.map(result => `
         <tr class="hover:bg-gray-50 transition-colors">
           <td class="p-4 border-b border-gray-200 text-center">
             <a href="${result.url}" target="_blank" class="text-brand-500 hover:underline font-semibold text-lg">${result.retailer}</a>
           </td>
           <td class="p-4 border-b border-gray-200 text-left text-sm text-muted">
-            ${result.wrapper ? `<div>Wrapper: ${result.wrapper}</div>` : ''}
-            ${result.vitola ? `<div>Vitola: ${result.vitola}</div>` : ''}
-            <div>Box of ${result.box_qty}</div>
-          </td>
+                ${result.wrapper ? `<div>Wrapper: ${result.wrapper}</div>` : ''}
+                ${result.vitola ? `<div>Vitola: ${result.vitola}</div>` : ''}
+                <div>Box of ${result.box_qty}</div>
+            </td>
           <td class="p-4 border-b border-gray-200 text-center font-semibold text-xl">${result.base}</td>
           <td class="p-4 border-b border-gray-200 text-center">
-            ${result.oos 
+              ${result.oos 
               ? '<span class="text-red-600 font-semibold text-sm uppercase">Out of Stock</span>' 
               : '<span class="text-emerald-600 font-semibold">In Stock</span>'}
-          </td>
+            </td>
         </tr>
       `).join('');
-    }
-
-    function renderMobileCards(results) {
-      const mobileContainer = document.getElementById('mobileCards');
-      
-      if (results.length === 0) {
-        mobileContainer.innerHTML = '<div class="bg-white border border-gray-200 rounded-xl p-5 text-center text-muted">No results match your filters.</div>';
-        return;
       }
-      
+
+      function renderMobileCards(results) {
+        const mobileContainer = document.getElementById('mobileCards');
+        
+        if (results.length === 0) {
+        mobileContainer.innerHTML = '<div class="bg-white border border-gray-200 rounded-xl p-5 text-center text-muted">No results match your filters.</div>';
+          return;
+        }
+        
       mobileContainer.innerHTML = results.map(result => `
         <div class="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
           <div class="flex justify-between items-center pb-4 mb-4 border-b border-gray-200">
             <span class="font-display font-semibold text-lg">${result.retailer}</span>
             <span class="text-2xl font-bold text-brand-500">${result.base}</span>
-          </div>
+            </div>
           <div class="space-y-2 mb-4">
             ${result.wrapper ? `<div class="flex justify-between"><span class="text-muted">Wrapper:</span><span class="font-semibold">${result.wrapper}</span></div>` : ''}
             ${result.vitola ? `<div class="flex justify-between"><span class="text-muted">Vitola:</span><span class="font-semibold">${result.vitola}</span></div>` : ''}
             <div class="flex justify-between"><span class="text-muted">Box Size:</span><span class="font-semibold">${result.box_qty}</span></div>
             <div class="flex justify-between"><span class="text-muted">Stock:</span><span class="font-semibold">${result.oos ? '<span class="text-red-600">Out of Stock</span>' : '<span class="text-emerald-600">In Stock</span>'}</span></div>
-          </div>
+              </div>
           <a href="${result.url}" class="flex items-center justify-center py-4 bg-brand-500 hover:bg-brand-600 text-white rounded-xl font-semibold transition-all" target="_blank" rel="noopener">
-            View at ${result.retailer}
-          </a>
+              View at ${result.retailer}
+            </a>
         </div>
       `).join('');
-    }
-
-    // Age verification
-    let ageVerified = false;
-    
-    function showAgeModal() {
-      if (!ageVerified) {
-        document.getElementById('ageModal').style.display = 'flex';
       }
-    }
-    
-    function confirmAge() {
-      ageVerified = true;
-      document.getElementById('ageModal').style.display = 'none';
-    }
-    
-    function denyAge() {
-      alert('You must be 21 or older to access this site.');
-      window.location.href = 'https://www.google.com';
-    }
-    
-    window.addEventListener('load', function() {
-      showAgeModal();
-      loadPrices();
-    });
-  </script>
-</body>
+
+      // Age verification
+      let ageVerified = false;
+      
+      function showAgeModal() {
+        if (!ageVerified) {
+          document.getElementById('ageModal').style.display = 'flex';
+        }
+      }
+      
+      function confirmAge() {
+        ageVerified = true;
+        document.getElementById('ageModal').style.display = 'none';
+      }
+      
+      function denyAge() {
+        alert('You must be 21 or older to access this site.');
+        window.location.href = 'https://www.google.com';
+      }
+      
+      window.addEventListener('load', function() {
+        showAgeModal();
+        loadPrices();
+      });
+    </script>
+  </body>
 </html>
