@@ -41,6 +41,45 @@
       .desktop-table { display: none !important; }
       .mobile-cards { display: block !important; }
       }
+    
+    /* SEO Content Styling */
+    .seo-content {
+      line-height: 1.8;
+    }
+    .seo-content h2 {
+      font-size: 1.75rem;
+      font-weight: 600;
+      margin-top: 2rem;
+      margin-bottom: 1rem;
+      color: #7c5c2e;
+    }
+    .seo-content h3 {
+      font-size: 1.35rem;
+      font-weight: 600;
+      margin-top: 1.5rem;
+      margin-bottom: 0.75rem;
+      color: #6b4f27;
+    }
+    .seo-content p {
+      margin-bottom: 1rem;
+      color: #4b5563;
+    }
+    .faq-item {
+      background: #fafafa;
+      border-left: 3px solid #7c5c2e;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      border-radius: 0.5rem;
+    }
+    .faq-question {
+      font-weight: 600;
+      color: #111111;
+      margin-bottom: 0.5rem;
+    }
+    .faq-answer {
+      color: #4b5563;
+      line-height: 1.6;
+    }
     </style>
 
       <script type="application/ld+json">
@@ -96,7 +135,6 @@
     <header class="flex flex-col items-center justify-center gap-2 py-7 text-center">
       <img src="/static/logo.png" alt="Cigar Price Scout Logo" class="w-24 h-20 object-contain" />
       <h1 class="font-display font-bold text-3xl tracking-wide">Cigar Price Scout</h1>
-      <p class="italic text-muted text-xl">{{BRAND}} {{LINE}} - Price Comparison</p>
       </header>
       
     <!-- CTA Button -->
@@ -115,10 +153,6 @@
         <h2 id="resultsTitle" class="font-display font-bold text-2xl text-center tracking-wide my-4">
             {{BRAND}} {{LINE}} – Advertised Box Prices
           </h2>
-
-        <p id="resultsSummary" class="text-center text-muted text-base mt-1 mb-6">
-              Loading cigar details…
-          </p>
 
         <!-- Filters -->
         <div class="flex gap-3 justify-center my-5 flex-wrap">
@@ -154,6 +188,58 @@
         <div id="mobileCards" class="mobile-cards space-y-4">
             <!-- Mobile cards populated by JavaScript -->
           </div>
+        </section>
+
+        <!-- SEO Content Section -->
+        <div class="text-center my-8">
+          <button 
+            id="seo-toggle-btn" 
+            onclick="toggleSEO()"
+            class="bg-brand-500 hover:bg-brand-600 text-white font-semibold py-3 px-8 rounded-xl transition-all shadow-md hover:shadow-lg"
+          >
+            Learn More About This Cigar
+          </button>
+        </div>
+
+        <section id="seo-content" style="display: none;" class="seo-content my-8 bg-white rounded-xl p-8 shadow-sm border border-gray-100">
+          
+          <!-- About Section -->
+          <h2 class="font-display">About {{BRAND}} {{LINE}}</h2>
+          <p>{{SEO_DESCRIPTION}}</p>
+          
+          <!-- FAQ Section -->
+          <h3 class="font-display">Frequently Asked Questions</h3>
+          
+          <div class="faq-item">
+            <div class="faq-question">What makes {{BRAND}} {{LINE}} special?</div>
+            <div class="faq-answer">{{FAQ_ANSWER_1}}</div>
+          </div>
+
+          <div class="faq-item">
+            <div class="faq-question">What wrappers are available?</div>
+            <div class="faq-answer">{{FAQ_ANSWER_2}}</div>
+          </div>
+
+          <div class="faq-item">
+            <div class="faq-question">What vitolas are available?</div>
+            <div class="faq-answer">{{FAQ_ANSWER_3}}</div>
+          </div>
+
+          <div class="faq-item">
+            <div class="faq-question">How should I store {{BRAND}} {{LINE}} cigars?</div>
+            <div class="faq-answer">Store at 65-70°F with 65-70% humidity in a quality humidor. Proper storage ensures optimal flavor and aging potential.</div>
+          </div>
+
+          <div class="faq-item">
+            <div class="faq-question">Where can I find the best price?</div>
+            <div class="faq-answer">Use our price comparison table above to find the best deals across 20+ authorized retailers. Don't forget to factor in shipping costs and current promotions.</div>
+          </div>
+
+          <!-- Last Updated -->
+          <div class="text-center mt-8 pt-6 border-t border-gray-200">
+            <p class="text-sm text-muted">Price data last updated: {{LAST_UPDATED}} | Prices shown are advertised box prices before shipping and tax</p>
+          </div>
+
         </section>
       </main>
       
@@ -360,6 +446,20 @@
         showAgeModal();
         loadPrices();
       });
+
+      // SEO Content Toggle
+      function toggleSEO() {
+        const content = document.getElementById('seo-content');
+        const button = document.getElementById('seo-toggle-btn');
+        
+        if (content.style.display === 'none') {
+          content.style.display = 'block';
+          button.textContent = 'Show Less';
+        } else {
+          content.style.display = 'none';
+          button.textContent = 'Learn More About This Cigar';
+        }
+      }
     </script>
   </body>
 </html>

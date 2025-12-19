@@ -674,6 +674,100 @@ def get_wrapper_alias(wrapper, brand=None, line=None, wrapper_aliases=None):
         pass
     return alias
 
+def load_seo_content():
+    """Load SEO content from CSV file"""
+    seo_data = {}
+    seo_file = Path(PROJECT_ROOT / "data" / "seo_content_top_cigars.csv")
+    
+    if not seo_file.exists():
+        print(f"SEO content file not found: {seo_file}")
+        return seo_data
+    
+    try:
+        with open(seo_file, 'r', newline='', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                brand = row.get('Brand', '').strip()
+                line = row.get('Line', '').strip()
+                if brand and line:
+                    key = f"{brand.lower()}|{line.lower()}"
+                    seo_data[key] = {
+                        'description': row.get('description', ''),
+                        'tasting_notes': row.get('tasting_notes', ''),
+                        'best_for': row.get('best_for', ''),
+                        'rating_average': row.get('rating_average', ''),
+                        'review_count': row.get('review_count', '')
+                    }
+        print(f"Loaded SEO content for {len(seo_data)} cigars")
+    except Exception as e:
+        print(f"Error loading SEO content: {e}")
+    
+    return seo_data
+
+def has_quality_seo_data(brand, line, seo_data):
+    """Check if cigar has quality SEO data (not generic fallback)"""
+    key = f"{brand.lower()}|{line.lower()}"
+    data = seo_data.get(key, {})
+    
+    # Check if description exists and is substantial (>50 characters)
+    description = data.get('description', '').strip()
+    if len(description) > 50:
+        return True
+    
+    return False
+
+def generate_faq_answers(brand, line, seo_data):
+    """Generate cigar-specific FAQ answers from SEO data"""
+    key = f"{brand.lower()}|{line.lower()}"
+    data = seo_data.get(key, {})
+    
+    # FAQ 1: What makes this cigar special?
+    faq_1 = data.get('description', f"The {brand} {line} is a premium handmade cigar known for its quality construction and consistent performance.")
+    
+    # FAQ 2: What wrappers are available?
+    # Try to extract wrapper info from products database
+    all_products = load_all_products()
+    wrappers = set()
+    vitolas = set()
+    for p in all_products:
+        if p.brand.lower() == brand.lower() and p.line.lower() == line.lower():
+            if p.wrapper:
+                wrappers.add(p.wrapper)
+            if p.vitola:
+                vitolas.add(p.vitola)
+    
+    if wrappers:
+        wrapper_list = sorted(list(wrappers))
+        if len(wrapper_list) == 1:
+            faq_2 = f"The {brand} {line} is available in {wrapper_list[0]} wrapper."
+        else:
+            faq_2 = f"The {brand} {line} is available in multiple wrappers including {', '.join(wrapper_list[:-1])}, and {wrapper_list[-1]}."
+    else:
+        faq_2 = f"The {brand} {line} is available in various wrapper options. Check our comparison table above for specific wrapper availability."
+    
+    # FAQ 3: What vitolas are available?
+    if vitolas:
+        vitola_list = sorted(list(vitolas))[:5]  # Limit to 5 to avoid super long text
+        if len(vitola_list) == 1:
+            faq_3 = f"Available vitola: {vitola_list[0]}."
+        else:
+            faq_3 = f"Popular vitolas include {', '.join(vitola_list[:-1])}, and {vitola_list[-1]}."
+            if len(vitolas) > 5:
+                faq_3 += " See the comparison table above for all available sizes."
+    else:
+        faq_3 = f"The {brand} {line} is available in multiple vitola sizes to suit different smoking preferences."
+    
+    # Add tasting notes and best_for info if available
+    tasting_notes = data.get('tasting_notes', '')
+    if tasting_notes:
+        faq_1 += f" Flavor profile includes notes of {tasting_notes}."
+    
+    best_for = data.get('best_for', '')
+    if best_for:
+        faq_1 += f" Best for {best_for}."
+    
+    return faq_1, faq_2, faq_3
+
 def build_options_tree():
     """Build the brand -> line -> wrapper -> vitola/size tree for dropdowns with wrapper alias support"""
     products = load_all_products()
@@ -1365,13 +1459,53 @@ async def cigar_landing_page(brand: str, line: str):
     with open(template_path, 'r', encoding='utf-8') as f:
         template = f.read()
     
-    # Replace placeholders with actual values
     # Convert URL-friendly format back to display format
     brand_display = brand.replace('-', ' ').title()
     line_display = line.replace('-', ' ').title()
     
+    # Load SEO content
+    seo_data = load_seo_content()
+    
+    # Check if this cigar has quality SEO data
+    has_seo = has_quality_seo_data(brand_display, line_display, seo_data)
+    
+    # Replace basic placeholders
     html = template.replace('{{BRAND}}', brand_display)
     html = html.replace('{{LINE}}', line_display)
+    html = html.replace('{{BRAND_SLUG}}', brand)
+    html = html.replace('{{LINE_SLUG}}', line)
+    
+    if has_seo:
+        # Generate FAQ answers
+        faq_1, faq_2, faq_3 = generate_faq_answers(brand_display, line_display, seo_data)
+        
+        # Get SEO description
+        key = f"{brand_display.lower()}|{line_display.lower()}"
+        cigar_data = seo_data.get(key, {})
+        
+        # Build comprehensive SEO description
+        seo_description = cigar_data.get('description', '')
+        tasting_notes = cigar_data.get('tasting_notes', '')
+        if tasting_notes:
+            seo_description += f" Features rich flavors of {tasting_notes}."
+        
+        # Get last updated timestamp
+        last_updated = datetime.now().strftime('%B %d, %Y')
+        
+        # Replace SEO placeholders
+        html = html.replace('{{SEO_DESCRIPTION}}', seo_description)
+        html = html.replace('{{FAQ_ANSWER_1}}', faq_1)
+        html = html.replace('{{FAQ_ANSWER_2}}', faq_2)
+        html = html.replace('{{FAQ_ANSWER_3}}', faq_3)
+        html = html.replace('{{LAST_UPDATED}}', last_updated)
+    else:
+        # Hide the entire SEO section by removing it from HTML
+        # Find and remove the button and content section
+        import re
+        # Remove the "Learn More" button div
+        html = re.sub(r'<div class="text-center my-8">.*?Learn More About This Cigar.*?</button>\s*</div>', '', html, flags=re.DOTALL)
+        # Remove the SEO content section
+        html = re.sub(r'<section id="seo-content".*?</section>', '', html, flags=re.DOTALL)
     
     return HTMLResponse(content=html)
 
