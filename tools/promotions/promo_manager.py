@@ -89,7 +89,14 @@ def calculate_best_promo(retailer_key, product_row, today=None):
     best_promo = candidates[0][2]
     
     # Calculate discounted price
-    original_price = float(product_row.get('price', 0))
+    try:
+        price_value = product_row.get('price', 0)
+        if price_value is None or price_value == '':
+            return ""  # Skip products without prices
+        original_price = float(price_value)
+    except (ValueError, TypeError):
+        return ""  # Skip products with invalid prices
+    
     discount_percent = best_promo.get('discount', 0)
     discounted_price = original_price * (1 - discount_percent / 100.0)
     
