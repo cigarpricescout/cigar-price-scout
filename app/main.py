@@ -3,6 +3,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse, Response, RedirectResponse, PlainTextResponse
 from pathlib import Path
 import csv
+import re
 from typing import Optional
 from pydantic import BaseModel
 import smtplib
@@ -1176,10 +1177,17 @@ def compare_all(
         is_authorized = retailer_info.get("authorized", False) if retailer_info else False
 
         # Calculate final delivered price with promos (BEFORE the result dictionary)
+        promo_discount = None
+        promo_code = None
         if product.current_promotions_applied:
             promo_parts = product.current_promotions_applied.split('|')
             promo_price_text = promo_parts[0]  # "$139.80 [25% off]"
             promo_code = promo_parts[1] if len(promo_parts) > 1 else None
+            
+            # Extract the discount percentage if present
+            pct_match = re.search(r'\[(\d+)%', promo_price_text)
+            if pct_match:
+                promo_discount = int(pct_match.group(1))
             
             # Extract the discounted price
             promo_price_match = promo_price_text.split(' [')[0].replace('$', '')
@@ -1190,7 +1198,6 @@ def compare_all(
                 final_delivered_cents = delivered_cents
         else:
             final_delivered_cents = delivered_cents
-            promo_code = None
 
         result = {
             "retailer": product.retailer_name,
@@ -1203,7 +1210,7 @@ def compare_all(
             "shipping": f"${shipping_cents/100:.2f}",
             "tax": f"${tax_cents/100:.2f}",
             "delivered": f"${delivered_cents/100:.2f}",
-            "promo": f"{promo_discount:.0f}% off" if promo_discount else None,
+            "promo": f"{promo_discount}% off" if promo_discount else None,
             "promo_code": promo_code,
             "delivered_after_promo": f"${final_delivered_cents/100:.2f}",
             "url": product.url,
