@@ -300,7 +300,8 @@
             return;
         }
 
-      data.results.sort((a, b) => parseFloat(a.delivered_after_promo.replace("$", "")) - parseFloat(b.delivered_after_promo.replace("$", "")));
+      // Sort by base (advertised) price since shipping/tax aren't shown on individual cigar pages
+      data.results.sort((a, b) => parseFloat(a.base.replace("$", "")) - parseFloat(b.base.replace("$", "")));
         allResults = data.results;
 
         const wrappers = new Set();
