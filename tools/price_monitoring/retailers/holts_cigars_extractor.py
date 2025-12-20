@@ -124,32 +124,81 @@ class HoltsCigarsExtractor:
         
         best_match = None
         best_match_score = 0
+        best_match_details = {}
         
         # Score each row for match quality
         for row in table_rows:
             row_text = row.get_text().lower()
             match_score = 0
+            vitola_matched = False
+            size_matched = False
             
-            # Check for vitola name match
-            if target_vitola in row_text:
-                match_score += 2
+            # Normalize vitola name for better matching
+            # Remove spaces from target vitola for comparison
+            target_vitola_normalized = target_vitola.replace(' ', '')
+            
+            # Check for vitola name match (must be present in first cell for product name)
+            # Look in first table cell specifically for product name
+            first_cell = row.find(['td', 'th'])
+            if first_cell:
+                first_cell_text = first_cell.get_text().lower()
+                # Remove spaces and parenthetical content for comparison
+                first_cell_normalized = re.sub(r'\s+', '', first_cell_text)
+                first_cell_normalized = re.sub(r'\([^)]*\)', '', first_cell_normalized)
                 
-            # Check for size match (handle variations: 4.5x55, 4.5 x 55, 4.5" x 55)
-            size_variants = [
-                target_size,
-                target_size.replace('x', ' x '),
-                target_size.replace('x', '" x '),
-                target_size.replace('x', ' X ')
-            ]
+                # Check for exact match after normalization
+                if target_vitola_normalized in first_cell_normalized:
+                    match_score += 5  # High score for vitola match in product name cell
+                    vitola_matched = True
+                # Also check if the original target_vitola (with spaces) is in the original text
+                elif target_vitola in first_cell_text:
+                    match_score += 5
+                    vitola_matched = True
             
-            for size_variant in size_variants:
-                if size_variant in row_text:
+            # Fallback: check entire row text for vitola
+            if not vitola_matched:
+                row_text_normalized = re.sub(r'\s+', '', row_text)
+                row_text_normalized = re.sub(r'\([^)]*\)', '', row_text_normalized)
+                if target_vitola_normalized in row_text_normalized or target_vitola in row_text:
                     match_score += 2
-                    break
+                    vitola_matched = True
+                
+            # Extract size from row and check for match with tolerance
+            # Size format in HTML: "- X.X x XX" or "- X.XX x XX"
+            size_pattern = r'-\s*(\d+\.?\d*)\s*x\s*(\d+)'
+            size_match_in_row = re.search(size_pattern, row_text)
+            
+            if size_match_in_row:
+                found_length = float(size_match_in_row.group(1))
+                found_ring = int(size_match_in_row.group(2))
+                
+                # Parse target size
+                target_parts = target_size.split('x')
+                if len(target_parts) == 2:
+                    try:
+                        target_length = float(target_parts[0])
+                        target_ring = int(target_parts[1])
+                        
+                        # Check for exact match first
+                        if abs(found_length - target_length) < 0.01 and found_ring == target_ring:
+                            match_score += 5  # High score for exact size match
+                            size_matched = True
+                        # Check for close match (within 0.3 inches length tolerance)
+                        elif abs(found_length - target_length) <= 0.3 and found_ring == target_ring:
+                            match_score += 3  # Medium score for close size match
+                            size_matched = True
+                    except (ValueError, IndexError):
+                        pass
+            
+            # CRITICAL: Both vitola AND size must match for a valid match
+            if not (vitola_matched and size_matched):
+                continue  # Skip this row entirely if both don't match
             
             # Check for box quantity indicators (we want box prices, not singles)
-            if any(term in row_text for term in ['box of', 'box', '25', '20', '10']):
-                match_score += 1
+            if any(term in row_text for term in ['box of', 'box']):
+                match_score += 2
+            elif 'single' in row_text:
+                match_score -= 3  # Penalize single cigars
                 
             # Check that row contains pricing (must have dollar signs)
             price_count = len(re.findall(r'\$\d+', row_text))
@@ -159,13 +208,17 @@ class HoltsCigarsExtractor:
                 match_score += 1
                 
             # Update best match if this row scores higher
-            if match_score > best_match_score and match_score >= 3:  # Minimum threshold
+            if match_score > best_match_score:
                 best_match = row
                 best_match_score = match_score
+                best_match_details = {
+                    'vitola_matched': vitola_matched,
+                    'size_matched': size_matched,
+                    'score': match_score
+                }
                 
         # Extract data from the best matching row
-        if best_match:
-            print(f"[HOLT'S] Best match found with score {best_match_score}")
+        if best_match and best_match_score >= 5:  # Require minimum score of 5
             return self._extract_row_data(best_match, target_vitola, target_size)
         
         print(f"[HOLT'S] No suitable match found for {target_vitola} {target_size}")
@@ -188,7 +241,6 @@ class HoltsCigarsExtractor:
         """Extract pricing and stock data from a table row element"""
         
         row_text = row_element.get_text()
-        print(f"[DEBUG] Extracting from row: {row_text[:100]}...")
         
         # Extract all prices from the row
         price_matches = re.findall(r'\$(\d+(?:\.\d{2})?)', row_text)
@@ -211,7 +263,6 @@ class HoltsCigarsExtractor:
             return None
         
         prices.sort()  # Sort ascending
-        print(f"[DEBUG] Found prices: {prices}")
         
         # Determine MSRP vs Sale price logic
         if len(prices) == 1:
@@ -238,8 +289,6 @@ class HoltsCigarsExtractor:
         
         # Check stock status
         in_stock = self._check_stock_status(row_element)
-        
-        print(f"[DEBUG] Extracted - Sale: ${sale_price}, MSRP: ${msrp_price}, Box: {box_qty}, Stock: {in_stock}")
         
         return {
             'price': sale_price,
