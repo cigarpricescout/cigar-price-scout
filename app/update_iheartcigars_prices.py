@@ -86,14 +86,14 @@ def _extract_price_production(soup):
     if len(sorted_prices) == 1:
         current_price = sorted_prices[0]
         
-    elif len(sorted_prices) == 2:
+    elif len(sorted_prices) >= 2:
+        # Always use the lowest price (active/sale price)
         current_price = min(sorted_prices)
         potential_retail = max(sorted_prices)
         
-        if potential_retail > current_price * 1.1:  # Real sale (10%+ difference)
+        # If there's a difference, the higher price is likely the retail/MSRP
+        if potential_retail > current_price:
             retail_price = potential_retail
-        else:
-            current_price = max(sorted_prices)
     
     return {
         'current_price': current_price,
