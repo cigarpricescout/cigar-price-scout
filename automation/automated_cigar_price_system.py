@@ -268,6 +268,7 @@ class AutomatedCigarPriceSystem:
                 retailer_name_map = {
                     'absolute_cigars': 'absolutecigars',
                     'atlantic': 'atlantic',
+                    'bighumidor': 'bighumidor',
                     'bnbtobacco': 'bnbtobacco', 
                     'cccrafter': 'cccrafter',
                     'cigarplace': 'cigarplace',
@@ -276,6 +277,7 @@ class AutomatedCigarPriceSystem:
                     'gotham': 'gothamcigars',
                     'hilandscigars': 'hilands',
                     'holts': 'holts',
+                    'iheartcigars': 'iheartcigars',
                     'neptune': 'neptune',
                     'nicks': 'nickscigarworld',
                     'planet_cigars': 'planetcigars',
