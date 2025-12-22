@@ -1729,29 +1729,34 @@ def get_best_deals(limit: int = Query(50, description="Max number of deals to re
         # Calculate prices for all offerings
         prices = []
         for p in products:
-            base_cents = p.price_cents
-            shipping_cents = estimate_shipping_cents(base_cents, p.retailer_key, None) or 0
-            tax_cents = estimate_tax_cents(base_cents + shipping_cents, p.retailer_key, None) or 0
-            delivered = base_cents + shipping_cents + tax_cents
-            prices.append((delivered, p))
+            base_cents = p.price_cents  # Advertised price
+            
+            # Check if promo applies
+            promo_price_cents, promo_code, promo_discount = apply_promotion(base_cents, p.retailer_key)
+            has_promo = promo_price_cents and promo_price_cents != base_cents
+            
+            # Use promo price if available, otherwise base price for comparison
+            comparison_price = promo_price_cents if has_promo else base_cents
+            
+            prices.append((comparison_price, p, base_cents, promo_price_cents if has_promo else None, promo_code if has_promo else None))
         
-        # Sort by price
+        # Sort by comparison price
         prices.sort(key=lambda x: x[0])
         
-        # Calculate median
+        # Calculate median using comparison prices
         price_values = [p[0] for p in prices]
         n = len(price_values)
         median = price_values[n // 2] if n % 2 == 1 else (price_values[n // 2 - 1] + price_values[n // 2]) / 2
         
         # Check if cheapest is >10% below median (Value)
-        cheapest_price, cheapest_product = prices[0]
+        cheapest_price, cheapest_product, base_cents, promo_price_cents, promo_code = prices[0]
         diff_percent = ((cheapest_price - median) / median) * 100
         
         if diff_percent <= -10:  # 10% or more below median = Value
             savings_vs_median = median - cheapest_price
             savings_percent = abs(diff_percent)
             
-            deals.append({
+            deal_data = {
                 "brand": cheapest_product.brand,
                 "line": cheapest_product.line,
                 "wrapper": cheapest_product.wrapper,
@@ -1760,14 +1765,24 @@ def get_best_deals(limit: int = Query(50, description="Max number of deals to re
                 "box_qty": cheapest_product.box_qty,
                 "retailer": cheapest_product.retailer_name,
                 "retailer_key": cheapest_product.retailer_key,
-                "price": f"${cheapest_price / 100:.2f}",
+                "advertised_price": f"${base_cents / 100:.2f}",  # Base price at retailer
+                "advertised_price_cents": base_cents,
+                "price": f"${cheapest_price / 100:.2f}",  # Price used for comparison
                 "price_cents": cheapest_price,
                 "median_price": f"${median / 100:.2f}",
                 "savings": f"${savings_vs_median / 100:.2f}",
                 "savings_percent": round(savings_percent, 1),
                 "url": cheapest_product.url,
                 "num_retailers": len(products)
-            })
+            }
+            
+            # Add promo info if applicable
+            if promo_price_cents:
+                deal_data["promo_price"] = f"${promo_price_cents / 100:.2f}"
+                deal_data["promo_code"] = promo_code
+                deal_data["promo_savings"] = f"${(base_cents - promo_price_cents) / 100:.2f}"
+            
+            deals.append(deal_data)
     
     # Sort by price (lowest first)
     deals.sort(key=lambda x: x["price_cents"])
