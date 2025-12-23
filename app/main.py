@@ -301,8 +301,10 @@ def get_analytics_conn():
 def load_promotions():
     """Load active promotions from promotions.json"""
     try:
-        promo_file = Path("promotions.json")
+        # Use absolute path from project root
+        promo_file = PROJECT_ROOT / "tools" / "promotions" / "promotions.json"
         if not promo_file.exists():
+            logger.warning(f"Promotions file not found at {promo_file}")
             return {}
         
         with open(promo_file, 'r') as f:
