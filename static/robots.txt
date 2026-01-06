@@ -7,6 +7,15 @@ Disallow: /compare-all
 Disallow: /admin/
 Disallow: /health
 
+# Block debug and analytics endpoints
+Disallow: /debug/
+Disallow: /go
+Disallow: /click
+
+# Block dynamic URLs with query parameters (prevents duplicate content)
+Disallow: /*?*
+Disallow: /compare?*
+
 # Block backup files and temporary files
 Disallow: *BACKUP*.html
 Disallow: *backup*.html

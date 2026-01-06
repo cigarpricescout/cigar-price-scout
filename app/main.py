@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Query, Form, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse, Response, RedirectResponse, PlainTextResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 from pathlib import Path
 import csv
 import re
@@ -348,6 +349,19 @@ STATIC_PATH = str(PROJECT_ROOT / "static")
 CSV_PATH_PREFIX = str(PROJECT_ROOT / "static" / "data")
 
 app = FastAPI()
+
+# SEO Fix: WWW to non-WWW redirect middleware
+# Forces all www.cigarpricescout.com traffic to cigarpricescout.com
+class WWWRedirectMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        host = request.headers.get("host", "")
+        if host.startswith("www."):
+            # Build the new URL without www
+            url = str(request.url).replace("://www.", "://", 1)
+            return RedirectResponse(url, status_code=301)
+        return await call_next(request)
+
+app.add_middleware(WWWRedirectMiddleware)
 app.mount("/static", StaticFiles(directory=STATIC_PATH), name="static")
 
 # Custom 404 handler
@@ -1459,6 +1473,48 @@ async def cigar_landing_page(brand: str, line: str):
     SEO-friendly landing page for specific cigar brands/lines
     URL format: /cigars/padron/1964-anniversary-series
     """
+    # Convert URL-friendly format back to display format
+    brand_display = brand.replace('-', ' ').title()
+    line_display = line.replace('-', ' ').title()
+    
+    # SEO Fix: Check if this cigar actually has product data
+    # Return proper 404 instead of soft 404 (empty page with 200 status)
+    all_products = load_all_products()
+    matching_products = [
+        p for p in all_products 
+        if p.brand.lower().replace(' ', '-').replace('&', 'and') == brand.lower()
+        and p.line.lower().replace(' ', '-').replace('&', 'and') == line.lower()
+    ]
+    
+    if not matching_products:
+        # Return proper 404 for cigars with no data (prevents soft 404 in Google)
+        return HTMLResponse(
+            content=f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Cigar Not Found - Cigar Price Scout</title>
+    <meta name="robots" content="noindex">
+    <link rel="icon" type="image/png" href="/static/logo.png">
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 font-sans">
+    <div class="max-w-2xl mx-auto px-5 py-20 text-center">
+        <img src="/static/logo.png" alt="Cigar Price Scout" class="w-24 h-20 mx-auto mb-6">
+        <h1 class="text-3xl font-bold text-gray-800 mb-4">Cigar Not Found</h1>
+        <p class="text-gray-600 mb-6">We don't have pricing data for <strong>{brand_display} {line_display}</strong> yet.</p>
+        <p class="text-gray-500 mb-8">Want us to add it? Let us know!</p>
+        <div class="space-x-4">
+            <a href="/" class="inline-block bg-amber-700 hover:bg-amber-800 text-white font-semibold py-3 px-6 rounded-lg">Browse All Cigars</a>
+            <a href="/request-box-pricing.html" class="inline-block border border-amber-700 text-amber-700 hover:bg-amber-50 font-semibold py-3 px-6 rounded-lg">Request This Cigar</a>
+        </div>
+    </div>
+</body>
+</html>""",
+            status_code=404
+        )
+    
     # Read the template
     template_path = Path(f"{STATIC_PATH}/cigar-template.html")
     
@@ -1468,10 +1524,6 @@ async def cigar_landing_page(brand: str, line: str):
     
     with open(template_path, 'r', encoding='utf-8') as f:
         template = f.read()
-    
-    # Convert URL-friendly format back to display format
-    brand_display = brand.replace('-', ' ').title()
-    line_display = line.replace('-', ' ').title()
     
     # Load SEO content
     seo_data = load_seo_content()
@@ -1549,47 +1601,7 @@ async def generate_landing_page_list():
     
     return {"pages": pages, "count": len(pages)}
 
-@app.get("/sitemap.xml", response_class=Response)
-async def sitemap():
-    base_url = "https://cigarpricescout.com"
-    
-    # Static pages
-    urls = [
-        {"url": base_url, "priority": "1.0", "changefreq": "daily"},
-        {"url": f"{base_url}/about.html", "priority": "0.8", "changefreq": "monthly"},
-        {"url": f"{base_url}/privacy-policy.html", "priority": "0.5", "changefreq": "yearly"},
-        {"url": f"{base_url}/terms-of-service.html", "priority": "0.5", "changefreq": "yearly"},
-        {"url": f"{base_url}/contact.html", "priority": "0.5", "changefreq": "yearly"},
-    ]
-    
-    # Add dynamic cigar landing pages
-    brands = build_options_tree()
-    for brand in brands[:50]:  # Increase from 20 to 50 brands
-        for line in brand['lines'][:5]:  # Increase from 3 to 5 lines per brand
-            brand_slug = create_slug(brand['brand'])
-            line_slug = create_slug(line['line'])
-            urls.append({
-                "url": f"{base_url}/cigars/{brand_slug}/{line_slug}",
-                "priority": "0.9",
-                "changefreq": "weekly"
-            })
-    
-    # Generate XML
-    xml_content = '<?xml version="1.0" encoding="UTF-8"?>\n'
-    xml_content += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
-    
-    for url_data in urls:
-        xml_content += f'  <url>\n'
-        xml_content += f'    <loc>{url_data["url"]}</loc>\n'
-        xml_content += f'    <priority>{url_data["priority"]}</priority>\n'
-        xml_content += f'    <changefreq>{url_data["changefreq"]}</changefreq>\n'
-        xml_content += f'  </url>\n'
-    
-    xml_content += '</urlset>'
-    
-    return Response(content=xml_content, media_type="application/xml")
-
-# Add this endpoint to your main.py after your other routes (around line 1200)
+# Note: Duplicate sitemap route removed - using the one at /sitemap.xml above (line ~1284)
 
 @app.get("/debug/init_analytics")
 def debug_init_analytics():
