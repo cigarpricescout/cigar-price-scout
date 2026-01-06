@@ -5,8 +5,8 @@
       "discount": 12,
       "scope": "sitewide",
       "end_date": "2026-01-05",
-      "active": true,
-      "notes": "New Year 2026 promotion"
+      "active": false,
+      "notes": "New Year 2026 promotion - ENDED"
     }
   ],
   "atlanticcigars": [],
@@ -27,6 +27,7 @@
     }
   ],
   "planetcigars": [],
+  "pyramidcigars": [],
   "smallbatchcigar": [],
   "smokeinn": [
      {

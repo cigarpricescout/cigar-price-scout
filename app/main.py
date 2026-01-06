@@ -126,6 +126,8 @@ except Exception:
         # Flat rate shipping
         elif retailer_key == 'cigarpairingparlor':
             return 995  # $9.95
+        elif retailer_key == 'pyramidcigars':
+            return 895  # $8.95
         elif retailer_key == 'smokeinn':
             return 995  # $9.95
         
@@ -176,6 +178,7 @@ except Exception:
             'oldhavana': ['OH'],
             'pipesandcigars': ['PA'],
             'planetcigars': ['FL'],
+            'pyramidcigars': ['TN'],  # Memphis, TN
             'santamonicacigars': ['CA'],
             'secretocigarbar': ['MI'],
             'smallbatchcigar': ['CA'],

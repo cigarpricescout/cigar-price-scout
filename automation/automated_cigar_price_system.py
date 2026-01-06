@@ -281,6 +281,7 @@ class AutomatedCigarPriceSystem:
                     'neptune': 'neptune',
                     'nicks': 'nickscigarworld',
                     'planet_cigars': 'planetcigars',
+                    'pyramidcigars': 'pyramidcigars',
                     'smallbatch_cigar': 'smallbatchcigar',
                     'smokeinn': 'smokeinn',
                     'tampasweethearts': 'tampasweethearts',
