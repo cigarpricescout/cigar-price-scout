@@ -271,6 +271,7 @@ class AutomatedCigarPriceSystem:
                     'bighumidor': 'bighumidor',
                     'bnbtobacco': 'bnbtobacco', 
                     'cccrafter': 'cccrafter',
+                    'cigarboxpa': 'cigarboxpa',
                     'cigarplace': 'cigarplace',
                     'cigarsdirect': 'cigarsdirect',
                     'foxcigar': 'foxcigar',

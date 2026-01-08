@@ -19,6 +19,16 @@
         "applies_to": "sitewide",
         "stackable": true
       }
+    ],
+    "cigarboxpa": [
+      {
+        "type": "freeship",
+        "threshold_cents": 17500,
+        "label": "Free shipping on $175+ with code FREESHIP",
+        "code": "FREESHIP",
+        "applies_to": "sitewide",
+        "stackable": false
+      }
     ]
   },
   "temporary": {

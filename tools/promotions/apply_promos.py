@@ -13,6 +13,7 @@ RETAILERS = [
     {"key": "absolutecigars", "csv": "../../static/data/absolutecigars.csv"},
     {"key": "bighumidor", "csv": "../../static/data/bighumidor.csv"},
     {"key": "bnbtobacco", "csv": "../../static/data/bnbtobacco.csv"},
+    {"key": "cigarboxpa", "csv": "../../static/data/cigarboxpa.csv"},
     {"key": "cigarsdirect", "csv": "../../static/data/cigarsdirect.csv"},
     {"key": "foxcigar", "csv": "../../static/data/foxcigar.csv"},
     {"key": "gothamcigars", "csv": "../../static/data/gothamcigars.csv"},

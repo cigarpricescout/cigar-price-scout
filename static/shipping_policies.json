@@ -8,6 +8,7 @@
     "famous":   { "base_cents": 995,  "free_threshold_cents": 19900, "surcharge_by_state": {} },
     "ci":       { "base_cents": 1495, "free_threshold_cents": 0,     "surcharge_by_state": {} },
     "jr":       { "base_cents": 1295, "free_threshold_cents": 0,     "surcharge_by_state": {} },
-    "smokeinn": { "base_cents": 995,  "free_threshold_cents": 9900,  "surcharge_by_state": {} }
+    "smokeinn": { "base_cents": 995,  "free_threshold_cents": 9900,  "surcharge_by_state": {} },
+    "cigarboxpa": { "base_cents": 995, "free_threshold_cents": 17500, "surcharge_by_state": {} }
   }
 }
