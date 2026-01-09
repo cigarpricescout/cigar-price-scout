@@ -267,6 +267,47 @@
           <strong>Disclosure:</strong> We earn a commission when you purchase through our affiliate links. This helps support our price comparison service at no extra cost to you.
         </div>
         
+        <!-- Best Delivered Price Answer Block -->
+        <div x-show="results.length > 0 && getCheapestResult()" x-cloak
+             class="bg-white border-2 border-emerald-500 rounded-xl overflow-hidden shadow-sm mb-6">
+          <!-- Top: Main Answer -->
+          <div class="bg-emerald-50 border-b border-emerald-200 px-6 py-5">
+            <div class="flex flex-col md:flex-row justify-between items-center gap-4">
+              <div class="text-center md:text-left">
+                <p class="text-sm font-display font-semibold text-emerald-700 uppercase tracking-wide mb-1">
+                  Best Delivered Price
+                </p>
+                <p class="text-4xl font-bold text-emerald-600" x-text="getCheapestResult()?.delivered_after_promo"></p>
+              </div>
+              <div class="text-center md:text-right">
+                <p class="text-sm text-muted mb-1">Cheapest at</p>
+                <p class="text-2xl font-semibold text-gray-900" x-text="getCheapestResult()?.retailer"></p>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Bottom: Stats -->
+          <div class="flex flex-col sm:flex-row divide-y sm:divide-y-0 sm:divide-x divide-gray-200">
+            <div class="flex-1 text-center p-4">
+              <div class="text-xs text-muted uppercase tracking-wide mb-1">Advertised</div>
+              <div class="text-lg font-semibold text-gray-700" x-text="getCheapestResult()?.base"></div>
+            </div>
+            <div class="flex-1 text-center p-4">
+              <div class="text-xs text-muted uppercase tracking-wide mb-1">Shipping</div>
+              <div class="text-lg font-semibold" 
+                   :class="getCheapestResult()?.shipping === '$0.00' ? 'text-emerald-600' : 'text-gray-700'"
+                   x-text="getCheapestResult()?.shipping === '$0.00' ? 'Free' : getCheapestResult()?.shipping"></div>
+            </div>
+            <div class="flex-1 text-center p-4">
+              <div class="text-xs text-muted uppercase tracking-wide mb-1">Tax</div>
+              <div class="text-lg font-semibold text-gray-700" x-text="getCheapestResult()?.tax"></div>
+            </div>
+            <div class="flex-1 text-center p-4">
+              <div class="text-xs text-muted uppercase tracking-wide mb-1">Compared</div>
+              <div class="text-lg font-semibold text-gray-700" x-text="results.length + ' retailers'"></div>
+            </div>
+          </div>
+        </div>
         
         <!-- Desktop Table -->
         <style>
@@ -572,6 +613,22 @@
           if (this.selection.wrapper) chips.push(`Wrapper: ${this.selection.wrapper}`);
           if (this.selection.vitola) chips.push(`Vitola: ${this.selection.vitola}`);
           return chips;
+        },
+        
+        // Get cheapest in-stock result for answer block
+        getCheapestResult() {
+          if (!this.results || this.results.length === 0) return null;
+          
+          // Filter to in-stock items first
+          const inStockResults = this.results.filter(r => !r.oos);
+          if (inStockResults.length === 0) return null;
+          
+          // Find the cheapest by delivered_after_promo price
+          return inStockResults.reduce((min, r) => {
+            const minPrice = parseFloat(min.delivered_after_promo.replace('$', '').replace(',', ''));
+            const rPrice = parseFloat(r.delivered_after_promo.replace('$', '').replace(',', ''));
+            return rPrice < minPrice ? r : min;
+          });
         },
         
         // Methods

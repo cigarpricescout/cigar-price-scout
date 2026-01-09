@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <!-- Google Analytics -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-QV9XYRECFK"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-QV9XYRECFK');
+  </script>
+  
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>How CigarPriceScout Works - Our Methodology</title>
+  <meta name="description" content="Learn how CigarPriceScout collects, validates, and compares cigar prices across 35+ retailers with shipping and tax calculations. Updated daily." />
+  
+  <link rel="canonical" href="https://cigarpricescout.com/methodology.html" />
+  <link rel="icon" type="image/png" href="/static/logo.png">
+  
+  <!-- Schema.org -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    "headline": "How CigarPriceScout Works - Our Methodology",
+    "description": "Technical documentation of CigarPriceScout's price comparison methodology including data collection, SKU normalization, shipping and tax calculations.",
+    "url": "https://cigarpricescout.com/methodology.html",
+    "author": {
+      "@type": "Organization",
+      "name": "Cigar Price Scout",
+      "url": "https://cigarpricescout.com"
+    },
+    "publisher": {
+      "@type": "Organization",
+      "name": "Cigar Price Scout",
+      "logo": {
+        "@type": "ImageObject",
+        "url": "https://cigarpricescout.com/static/logo.png"
+      }
+    },
+    "dateModified": "2026-01-09"
+  }
+  </script>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#faf7f2',
+              100: '#f5efe5',
+              500: '#7c5c2e',
+              600: '#6b4f27',
+              700: '#5a4220',
+            },
+            ink: '#111111',
+            muted: '#4b5563',
+          },
+          fontFamily: {
+            serif: ['Cormorant Garamond', 'Georgia', 'serif'],
+            display: ['Cinzel', 'Georgia', 'serif'],
+          },
+        },
+      },
+    }
+  </script>
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap" rel="stylesheet" />
+</head>
+
+<body class="bg-brand-50 font-serif text-ink text-lg leading-relaxed">
+  <div class="max-w-4xl mx-auto px-5">
+    
+    <!-- Header / Navigation -->
+    <header class="flex flex-col md:flex-row items-center justify-between py-5 border-b border-gray-200 mb-8 gap-4">
+      <a href="/" class="font-display font-bold text-2xl text-ink no-underline hover:text-brand-500 transition-colors">
+        Cigar Price Scout
+      </a>
+      <nav class="flex gap-4 text-base">
+        <a href="/" class="text-muted hover:text-brand-500 transition-colors">Search</a>
+        <a href="/best-cigar-box-prices" class="text-muted hover:text-brand-500 transition-colors">Best Prices</a>
+        <a href="/about.html" class="text-muted hover:text-brand-500 transition-colors">About</a>
+        <a href="/contact.html" class="text-muted hover:text-brand-500 transition-colors">Contact</a>
+      </nav>
+    </header>
+    
+    <main>
+      <h1 class="font-display font-bold text-4xl text-center mb-4">How CigarPriceScout Works</h1>
+      <p class="text-center text-muted text-xl mb-10 max-w-2xl mx-auto">
+        Our methodology for collecting, normalizing, and comparing cigar prices across 35+ online retailers.
+      </p>
+      
+      <!-- Data Collection -->
+      <section class="bg-white border border-gray-200 rounded-xl p-6 mb-6">
+        <h2 class="font-display font-bold text-2xl mb-4">Data Collection</h2>
+        <div class="space-y-3">
+          <div class="flex justify-between py-2 border-b border-gray-100">
+            <span class="font-semibold">Update Frequency</span>
+            <span class="text-muted">Daily at 3:00 AM ET</span>
+          </div>
+          <div class="flex justify-between py-2 border-b border-gray-100">
+            <span class="font-semibold">Retailers Tracked</span>
+            <span class="text-muted">35+ authorized dealers and marketplaces</span>
+          </div>
+          <div class="flex justify-between py-2 border-b border-gray-100">
+            <span class="font-semibold">Products Monitored</span>
+            <span class="text-muted">800+ premium cigar SKUs</span>
+          </div>
+          <div class="flex justify-between py-2">
+            <span class="font-semibold">Data Points Per Product</span>
+            <span class="text-muted">Price, stock status, box quantity, product details</span>
+          </div>
+        </div>
+      </section>
+      
+      <!-- SKU Normalization -->
+      <section class="bg-white border border-gray-200 rounded-xl p-6 mb-6">
+        <h2 class="font-display font-bold text-2xl mb-4">SKU Normalization</h2>
+        <p class="mb-4">
+          Different retailers use different naming conventions for the same cigar. We normalize products using a standardized identifier system:
+        </p>
+        <ul class="space-y-2 mb-4">
+          <li class="flex items-start gap-3">
+            <span class="text-brand-500 font-bold">1.</span>
+            <span><strong>Brand</strong> — Standardized manufacturer name (e.g., "Arturo Fuente")</span>
+          </li>
+          <li class="flex items-start gap-3">
+            <span class="text-brand-500 font-bold">2.</span>
+            <span><strong>Line/Series</strong> — Product line matching (e.g., "Hemingway")</span>
+          </li>
+          <li class="flex items-start gap-3">
+            <span class="text-brand-500 font-bold">3.</span>
+            <span><strong>Wrapper Type</strong> — Connecticut, Maduro, Habano, Cameroon, etc.</span>
+          </li>
+          <li class="flex items-start gap-3">
+            <span class="text-brand-500 font-bold">4.</span>
+            <span><strong>Vitola</strong> — Shape name (Short Story, Robusto, Churchill, etc.)</span>
+          </li>
+          <li class="flex items-start gap-3">
+            <span class="text-brand-500 font-bold">5.</span>
+            <span><strong>Size</strong> — Ring gauge × length (e.g., "4×49")</span>
+          </li>
+          <li class="flex items-start gap-3">
+            <span class="text-brand-500 font-bold">6.</span>
+            <span><strong>Box Quantity</strong> — Number of cigars per box (e.g., "Box of 25")</span>
+          </li>
+        </ul>
+        <div class="bg-gray-50 p-4 rounded-lg font-mono text-sm">
+          <span class="text-muted">Format:</span> BRAND|LINE|VITOLA|SIZE|WRAPPER|BOX_QTY
+        </div>
+      </section>
+      
+      <!-- Shipping Calculation -->
+      <section class="bg-white border border-gray-200 rounded-xl p-6 mb-6">
+        <h2 class="font-display font-bold text-2xl mb-4">Shipping Calculation</h2>
+        <p class="mb-4">
+          Estimated shipping costs are calculated based on:
+        </p>
+        <ul class="space-y-2 mb-4">
+          <li class="flex items-start gap-3">
+            <span class="w-2 h-2 bg-brand-500 rounded-full mt-2"></span>
+            <span>Retailer's published shipping policies and rates</span>
+          </li>
+          <li class="flex items-start gap-3">
+            <span class="w-2 h-2 bg-brand-500 rounded-full mt-2"></span>
+            <span>Order subtotal (free shipping thresholds where applicable)</span>
+          </li>
+          <li class="flex items-start gap-3">
+            <span class="w-2 h-2 bg-brand-500 rounded-full mt-2"></span>
+            <span>Destination state (derived from your ZIP code)</span>
+          </li>
+        </ul>
+        <p class="text-sm text-muted italic">
+          Note: Actual shipping may vary. Estimates are based on standard ground shipping to the contiguous United States.
+        </p>
+      </section>
+      
+      <!-- Tax Calculation -->
+      <section class="bg-white border border-gray-200 rounded-xl p-6 mb-6">
+        <h2 class="font-display font-bold text-2xl mb-4">Tax Calculation</h2>
+        <p class="mb-4">
+          Sales tax estimates consider:
+        </p>
+        <ul class="space-y-2 mb-4">
+          <li class="flex items-start gap-3">
+            <span class="w-2 h-2 bg-brand-500 rounded-full mt-2"></span>
+            <span><strong>State sales tax rates</strong> — Updated quarterly</span>
+          </li>
+          <li class="flex items-start gap-3">
+            <span class="w-2 h-2 bg-brand-500 rounded-full mt-2"></span>
+            <span><strong>Retailer nexus</strong> — Physical presence determines tax obligation</span>
+          </li>
+          <li class="flex items-start gap-3">
+            <span class="w-2 h-2 bg-brand-500 rounded-full mt-2"></span>
+            <span><strong>Tax base</strong> — Applied to subtotal + shipping</span>
+          </li>
+        </ul>
+        <p class="text-sm text-muted italic">
+          Note: Some states have additional tobacco taxes that may not be reflected. Always verify final tax at checkout.
+        </p>
+      </section>
+      
+      <!-- Price Context Algorithm -->
+      <section class="bg-white border border-gray-200 rounded-xl p-6 mb-6">
+        <h2 class="font-display font-bold text-2xl mb-4">Price Context Algorithm</h2>
+        <p class="mb-4">
+          We categorize prices relative to the market median to help you understand if you're getting a good deal:
+        </p>
+        <div class="space-y-3">
+          <div class="flex items-center gap-4 p-4 bg-emerald-50 rounded-lg border border-emerald-200">
+            <span class="font-bold text-emerald-600 text-xl w-24">Value</span>
+            <span>10% or more below median delivered price — an exceptional deal</span>
+          </div>
+          <div class="flex items-center gap-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <span class="font-bold text-gray-600 text-xl w-24">Market</span>
+            <span>Within 10% of median — fair market pricing</span>
+          </div>
+          <div class="flex items-center gap-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <span class="font-bold text-blue-600 text-xl w-24">Premium</span>
+            <span>10% or more above median — consider alternatives</span>
+          </div>
+        </div>
+      </section>
+      
+      <!-- Authorized Dealer Designation -->
+      <section class="bg-white border border-gray-200 rounded-xl p-6 mb-6">
+        <h2 class="font-display font-bold text-2xl mb-4">Authorized Dealer Designation</h2>
+        <p class="mb-4">
+          We distinguish between two types of retailers:
+        </p>
+        <div class="space-y-4">
+          <div class="p-4 bg-emerald-50 rounded-lg border border-emerald-200">
+            <h3 class="font-semibold text-emerald-700 mb-2">Authorized Dealers</h3>
+            <p class="text-sm">Direct relationships with manufacturers. Products come with full manufacturer warranty coverage and verified authenticity.</p>
+          </div>
+          <div class="p-4 bg-red-50 rounded-lg border border-red-200">
+            <h3 class="font-semibold text-red-700 mb-2">Marketplaces</h3>
+            <p class="text-sm">May offer competitive pricing but products may not include manufacturer warranty. Purchase at your own discretion.</p>
+          </div>
+        </div>
+      </section>
+      
+      <!-- Affiliate Disclosure -->
+      <section class="bg-yellow-50 border border-yellow-200 rounded-xl p-6 mb-6">
+        <h2 class="font-display font-bold text-2xl mb-4">Affiliate Disclosure</h2>
+        <p>
+          CigarPriceScout earns commissions from purchases made through our affiliate links. This revenue helps us maintain daily price updates and free access to our comparison service.
+        </p>
+        <p class="mt-4 font-semibold">
+          Affiliate relationships do not affect our comparison methodology — all prices are collected and calculated identically regardless of affiliate status.
+        </p>
+      </section>
+      
+      <!-- Questions -->
+      <section class="bg-white border border-gray-200 rounded-xl p-6 mb-6">
+        <h2 class="font-display font-bold text-2xl mb-4">Questions?</h2>
+        <p>
+          If you have questions about our methodology or notice a data discrepancy, please 
+          <a href="/contact.html" class="text-brand-500 underline font-semibold">contact us</a> 
+          or 
+          <a href="/report-data-issue.html" class="text-brand-500 underline font-semibold">report a data issue</a>.
+        </p>
+      </section>
+      
+    </main>
+    
+    <!-- Footer -->
+    <footer class="mt-10 py-5 border-t border-gray-200 text-center text-muted">
+      <p class="space-x-2">
+        <a href="/" class="text-brand-500 hover:underline">Home</a>
+        <span>|</span>
+        <a href="/best-cigar-box-prices" class="text-brand-500 hover:underline">Best Prices</a>
+        <span>|</span>
+        <a href="/about.html" class="text-brand-500 hover:underline">About</a>
+        <span>|</span>
+        <a href="/privacy-policy.html" class="text-brand-500 hover:underline">Privacy</a>
+        <span>|</span>
+        <a href="/terms-of-service.html" class="text-brand-500 hover:underline">Terms</a>
+        <span>|</span>
+        <a href="/contact.html" class="text-brand-500 hover:underline">Contact</a>
+      </p>
+      <p class="mt-2">&copy; 2026 Cigar Price Scout. Updated daily.</p>
+    </footer>
+    
+  </div>
+</body>
+</html>

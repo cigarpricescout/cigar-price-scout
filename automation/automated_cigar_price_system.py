@@ -286,6 +286,7 @@ class AutomatedCigarPriceSystem:
                     'smallbatch_cigar': 'smallbatchcigar',
                     'smokeinn': 'smokeinn',
                     'tampasweethearts': 'tampasweethearts',
+                    'thecigarshop': 'thecigarshop',
                     'tobaccolocker': 'tobaccolocker',
                     'two_guys': 'twoguys',
                     'watchcity': 'watchcity'
