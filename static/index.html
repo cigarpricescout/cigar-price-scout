@@ -267,21 +267,26 @@
           <strong>Disclosure:</strong> We earn a commission when you purchase through our affiliate links. This helps support our price comparison service at no extra cost to you.
         </div>
         
-        <!-- Best Delivered Price Answer Block -->
-        <div x-show="results.length > 0 && getCheapestResult()" x-cloak
-             class="bg-white border-2 border-emerald-500 rounded-xl overflow-hidden shadow-sm mb-6 max-w-4xl mx-auto">
-          <!-- Top: Main Answer -->
+        <!-- Best Delivered Price Answer Block (Clickable) -->
+        <a x-show="results.length > 0 && getCheapestResult()" x-cloak
+           :href="getTrackingUrl(getCheapestResult())"
+           target="_blank"
+           rel="noopener"
+           class="block bg-white border-2 border-emerald-500 rounded-xl overflow-hidden shadow-sm mb-6 max-w-3xl mx-auto hover:shadow-lg hover:border-emerald-600 transition-all cursor-pointer">
+          <!-- Top: Main Answer (Centered) -->
           <div class="bg-emerald-50 border-b border-emerald-200 px-5 py-4">
-            <div class="flex flex-col md:flex-row justify-between items-center gap-3">
-              <div class="text-center md:text-left">
+            <div class="flex flex-col md:flex-row justify-center items-center gap-4 md:gap-8">
+              <div class="text-center">
                 <p class="text-xs font-display font-semibold text-emerald-700 uppercase tracking-wide mb-1">
                   Best Delivered Price
                 </p>
                 <p class="text-3xl font-bold text-emerald-600" x-text="getCheapestResult()?.delivered_after_promo"></p>
               </div>
-              <div class="text-center md:text-right">
-                <p class="text-xs text-muted mb-1">Cheapest at</p>
+              <div class="hidden md:block w-px h-12 bg-emerald-300"></div>
+              <div class="text-center">
+                <p class="text-xs text-muted mb-1">Cheapest In Stock at</p>
                 <p class="text-xl font-semibold text-gray-900" x-text="getCheapestResult()?.retailer"></p>
+                <p class="text-xs text-emerald-600 font-semibold mt-1">✓ In Stock</p>
               </div>
             </div>
           </div>
@@ -307,7 +312,7 @@
               <div class="text-base font-semibold text-gray-700" x-text="results.length + ' retailers'"></div>
             </div>
           </div>
-        </div>
+        </a>
         
         <!-- Desktop Table -->
         <style>

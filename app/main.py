@@ -539,6 +539,7 @@ RETAILERS = [
     {"key": "thecigarstore", "name": "The Cigar Store", "csv": f"{CSV_PATH_PREFIX}/thecigarstore.csv", "authorized": False},
     {"key": "thompson", "name": "Thompson Cigar", "csv": f"{CSV_PATH_PREFIX}/thompson.csv", "authorized": True},
     {"key": "tobaccolocker", "name": "Tobacco Locker", "csv": f"{CSV_PATH_PREFIX}/tobaccolocker.csv", "authorized": False},
+    {"key": "tobaccostock", "name": "Tobacco Stock", "csv": f"{CSV_PATH_PREFIX}/tobaccostock.csv", "authorized": False},
     {"key": "twoguys", "name": "Two Guys Smoke Shop", "csv": f"{CSV_PATH_PREFIX}/twoguys.csv", "authorized": False},
     {"key": "watchcity", "name": "Watch City Cigar", "csv": f"{CSV_PATH_PREFIX}/watchcity.csv", "authorized": False},
     {"key": "windycitycigars", "name": "Windy City Cigars", "csv": f"{CSV_PATH_PREFIX}/windycitycigars.csv", "authorized": False},
