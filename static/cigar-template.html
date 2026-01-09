@@ -167,21 +167,23 @@
           </button>
           </div>
 
-        <!-- Best Advertised Price Answer Block -->
-        <div id="answerBlock" style="display: none;" 
-             class="bg-white border-2 border-emerald-500 rounded-xl overflow-hidden shadow-sm mb-6 max-w-3xl mx-auto">
-          <!-- Top: Main Answer -->
+        <!-- Best Advertised Price Answer Block (Clickable) -->
+        <a id="answerBlock" href="#" target="_blank" rel="noopener" style="display: none;" 
+           class="block bg-white border-2 border-emerald-500 rounded-xl overflow-hidden shadow-sm mb-6 max-w-3xl mx-auto hover:shadow-lg hover:border-emerald-600 transition-all cursor-pointer">
+          <!-- Top: Main Answer (Centered) -->
           <div class="bg-emerald-50 border-b border-emerald-200 px-5 py-4">
-            <div class="flex flex-col md:flex-row justify-between items-center gap-3">
-              <div class="text-center md:text-left">
+            <div class="flex flex-col md:flex-row justify-center items-center gap-4 md:gap-8">
+              <div class="text-center">
                 <p class="text-xs font-display font-semibold text-emerald-700 uppercase tracking-wide mb-1">
                   Best Advertised Price
                 </p>
                 <p id="cheapest-price" class="text-3xl font-bold text-emerald-600">--</p>
               </div>
-              <div class="text-center md:text-right">
-                <p class="text-xs text-muted mb-1">Cheapest at</p>
+              <div class="hidden md:block w-px h-12 bg-emerald-300"></div>
+              <div class="text-center">
+                <p class="text-xs text-muted mb-1">Cheapest In Stock at</p>
                 <p id="cheapest-retailer" class="text-xl font-semibold text-gray-900">--</p>
+                <p class="text-xs text-emerald-600 font-semibold mt-1">✓ In Stock</p>
               </div>
             </div>
           </div>
@@ -197,7 +199,7 @@
               <div id="compared-count" class="text-base font-semibold text-gray-700">--</div>
             </div>
           </div>
-        </div>
+        </a>
 
           <!-- Desktop Table -->
         <div class="desktop-table overflow-x-auto">
@@ -429,6 +431,10 @@
         // Update answer block elements
         document.getElementById('cheapest-price').textContent = cheapest.base;
         document.getElementById('cheapest-retailer').textContent = cheapest.retailer;
+        
+        // Set the clickable URL (use tracking URL if available, otherwise direct URL)
+        const trackingUrl = `/go?retailer=${encodeURIComponent(cheapest.retailer_key || cheapest.retailer)}&cid=${encodeURIComponent(brand + '|' + line)}&url=${encodeURIComponent(cheapest.url)}`;
+        answerBlock.href = trackingUrl;
         
         // Build product description
         let productDesc = '';
