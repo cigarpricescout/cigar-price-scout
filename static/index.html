@@ -269,42 +269,42 @@
         
         <!-- Best Delivered Price Answer Block -->
         <div x-show="results.length > 0 && getCheapestResult()" x-cloak
-             class="bg-white border-2 border-emerald-500 rounded-xl overflow-hidden shadow-sm mb-6">
+             class="bg-white border-2 border-emerald-500 rounded-xl overflow-hidden shadow-sm mb-6 max-w-4xl mx-auto">
           <!-- Top: Main Answer -->
-          <div class="bg-emerald-50 border-b border-emerald-200 px-6 py-5">
-            <div class="flex flex-col md:flex-row justify-between items-center gap-4">
+          <div class="bg-emerald-50 border-b border-emerald-200 px-5 py-4">
+            <div class="flex flex-col md:flex-row justify-between items-center gap-3">
               <div class="text-center md:text-left">
-                <p class="text-sm font-display font-semibold text-emerald-700 uppercase tracking-wide mb-1">
+                <p class="text-xs font-display font-semibold text-emerald-700 uppercase tracking-wide mb-1">
                   Best Delivered Price
                 </p>
-                <p class="text-4xl font-bold text-emerald-600" x-text="getCheapestResult()?.delivered_after_promo"></p>
+                <p class="text-3xl font-bold text-emerald-600" x-text="getCheapestResult()?.delivered_after_promo"></p>
               </div>
               <div class="text-center md:text-right">
-                <p class="text-sm text-muted mb-1">Cheapest at</p>
-                <p class="text-2xl font-semibold text-gray-900" x-text="getCheapestResult()?.retailer"></p>
+                <p class="text-xs text-muted mb-1">Cheapest at</p>
+                <p class="text-xl font-semibold text-gray-900" x-text="getCheapestResult()?.retailer"></p>
               </div>
             </div>
           </div>
           
           <!-- Bottom: Stats -->
           <div class="flex flex-col sm:flex-row divide-y sm:divide-y-0 sm:divide-x divide-gray-200">
-            <div class="flex-1 text-center p-4">
+            <div class="flex-1 text-center p-3">
               <div class="text-xs text-muted uppercase tracking-wide mb-1">Advertised</div>
-              <div class="text-lg font-semibold text-gray-700" x-text="getCheapestResult()?.base"></div>
+              <div class="text-base font-semibold text-gray-700" x-text="getCheapestResult()?.base"></div>
             </div>
-            <div class="flex-1 text-center p-4">
+            <div class="flex-1 text-center p-3">
               <div class="text-xs text-muted uppercase tracking-wide mb-1">Shipping</div>
-              <div class="text-lg font-semibold" 
+              <div class="text-base font-semibold" 
                    :class="getCheapestResult()?.shipping === '$0.00' ? 'text-emerald-600' : 'text-gray-700'"
                    x-text="getCheapestResult()?.shipping === '$0.00' ? 'Free' : getCheapestResult()?.shipping"></div>
             </div>
-            <div class="flex-1 text-center p-4">
+            <div class="flex-1 text-center p-3">
               <div class="text-xs text-muted uppercase tracking-wide mb-1">Tax</div>
-              <div class="text-lg font-semibold text-gray-700" x-text="getCheapestResult()?.tax"></div>
+              <div class="text-base font-semibold text-gray-700" x-text="getCheapestResult()?.tax"></div>
             </div>
-            <div class="flex-1 text-center p-4">
+            <div class="flex-1 text-center p-3">
               <div class="text-xs text-muted uppercase tracking-wide mb-1">Compared</div>
-              <div class="text-lg font-semibold text-gray-700" x-text="results.length + ' retailers'"></div>
+              <div class="text-base font-semibold text-gray-700" x-text="results.length + ' retailers'"></div>
             </div>
           </div>
         </div>

@@ -167,6 +167,38 @@
           </button>
           </div>
 
+        <!-- Best Advertised Price Answer Block -->
+        <div id="answerBlock" style="display: none;" 
+             class="bg-white border-2 border-emerald-500 rounded-xl overflow-hidden shadow-sm mb-6 max-w-3xl mx-auto">
+          <!-- Top: Main Answer -->
+          <div class="bg-emerald-50 border-b border-emerald-200 px-5 py-4">
+            <div class="flex flex-col md:flex-row justify-between items-center gap-3">
+              <div class="text-center md:text-left">
+                <p class="text-xs font-display font-semibold text-emerald-700 uppercase tracking-wide mb-1">
+                  Best Advertised Price
+                </p>
+                <p id="cheapest-price" class="text-3xl font-bold text-emerald-600">--</p>
+              </div>
+              <div class="text-center md:text-right">
+                <p class="text-xs text-muted mb-1">Cheapest at</p>
+                <p id="cheapest-retailer" class="text-xl font-semibold text-gray-900">--</p>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Bottom: Simple Stats -->
+          <div class="flex divide-x divide-gray-200">
+            <div class="flex-1 text-center p-3">
+              <div class="text-xs text-muted uppercase tracking-wide mb-1">Product</div>
+              <div id="cheapest-product" class="text-sm font-semibold text-gray-700">--</div>
+            </div>
+            <div class="flex-1 text-center p-3">
+              <div class="text-xs text-muted uppercase tracking-wide mb-1">Compared</div>
+              <div id="compared-count" class="text-base font-semibold text-gray-700">--</div>
+            </div>
+          </div>
+        </div>
+
           <!-- Desktop Table -->
         <div class="desktop-table overflow-x-auto">
           <table id="resultsTable" class="w-full border-collapse bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
@@ -328,6 +360,7 @@
         populateFilters(data.results);
         renderTable(data.results);
         renderMobileCards(data.results);
+        updateAnswerBlock(data.results);
     }
       
       function populateFilters(results) {
@@ -360,6 +393,7 @@
         
         renderTable(filtered);
         renderMobileCards(filtered);
+        updateAnswerBlock(filtered);
       }
       
       function clearFilters() {
@@ -367,6 +401,45 @@
         document.getElementById('vitolaFilter').value = '';
         renderTable(allResults);
         renderMobileCards(allResults);
+        updateAnswerBlock(allResults);
+      }
+      
+      function updateAnswerBlock(results) {
+        const answerBlock = document.getElementById('answerBlock');
+        
+        if (!results || results.length === 0) {
+          answerBlock.style.display = 'none';
+          return;
+        }
+        
+        // Find cheapest in-stock item
+        const inStock = results.filter(r => !r.oos);
+        if (inStock.length === 0) {
+          answerBlock.style.display = 'none';
+          return;
+        }
+        
+        // Find cheapest by base (advertised) price
+        const cheapest = inStock.reduce((min, r) => {
+          const minPrice = parseFloat(min.base.replace('$', '').replace(',', ''));
+          const rPrice = parseFloat(r.base.replace('$', '').replace(',', ''));
+          return rPrice < minPrice ? r : min;
+        });
+        
+        // Update answer block elements
+        document.getElementById('cheapest-price').textContent = cheapest.base;
+        document.getElementById('cheapest-retailer').textContent = cheapest.retailer;
+        
+        // Build product description
+        let productDesc = '';
+        if (cheapest.wrapper) productDesc += cheapest.wrapper;
+        if (cheapest.vitola) productDesc += (productDesc ? ' • ' : '') + cheapest.vitola;
+        if (cheapest.box_qty) productDesc += (productDesc ? ' • ' : '') + 'Box of ' + cheapest.box_qty;
+        document.getElementById('cheapest-product').textContent = productDesc || '--';
+        
+        document.getElementById('compared-count').textContent = results.length + ' retailers';
+        
+        answerBlock.style.display = 'block';
       }
       
       function renderTable(results) {

@@ -288,6 +288,7 @@ class AutomatedCigarPriceSystem:
                     'tampasweethearts': 'tampasweethearts',
                     'thecigarshop': 'thecigarshop',
                     'tobaccolocker': 'tobaccolocker',
+                    'tobaccostock': 'tobaccostock',
                     'two_guys': 'twoguys',
                     'watchcity': 'watchcity'
                 }
