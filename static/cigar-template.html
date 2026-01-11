@@ -9,6 +9,29 @@
   <link rel="canonical" href="https://cigarpricescout.com/cigars/{{BRAND_SLUG}}/{{LINE_SLUG}}" />
     <link rel="icon" type="image/png" href="/static/logo.png">
   
+  <!-- JSON-LD Structured Data for SEO -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    "name": "{{BRAND}} {{LINE}} Cigars",
+    "description": "Compare box prices for {{BRAND}} {{LINE}} cigars from top online retailers. Updated daily with shipping and tax calculations.",
+    "category": "Cigars",
+    "brand": {
+      "@type": "Brand",
+      "name": "{{BRAND}}"
+    },
+    "offers": {
+      "@type": "AggregateOffer",
+      "priceCurrency": "USD",
+      "availability": "https://schema.org/InStock",
+      "offerCount": "{{OFFER_COUNT}}",
+      "lowPrice": "{{LOW_PRICE}}",
+      "highPrice": "{{HIGH_PRICE}}"
+    }
+  }
+  </script>
+  
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
@@ -213,8 +236,8 @@
                 <th class="p-4 border-b border-gray-200 text-center font-display font-semibold">Stock Status</th>
                 </tr>
               </thead>
-              <tbody>
-              <tr><td colspan="4" class="p-4 text-center text-muted">Loading...</td></tr>
+              <tbody id="tableBody">
+              {{SSR_PRODUCT_ROWS}}
               </tbody>
             </table>
           </div>

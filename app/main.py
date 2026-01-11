@@ -1547,6 +1547,30 @@ async def cigar_landing_page(brand: str, line: str):
     html = html.replace('{{BRAND_SLUG}}', brand)
     html = html.replace('{{LINE_SLUG}}', line)
     
+    # Generate server-side rendered product rows for SEO (Google sees real content, not "Loading...")
+    ssr_rows = []
+    prices = []
+    for p in matching_products[:10]:  # Limit to first 10 for initial render
+        price_str = f"${p.price:.2f}" if p.price else "N/A"
+        if p.price:
+            prices.append(p.price)
+        ssr_rows.append(f'''<tr class="border-b border-gray-100 hover:bg-gray-50">
+          <td class="p-3 text-sm">{p.retailer}</td>
+          <td class="p-3 text-sm">{p.wrapper or 'N/A'}</td>
+          <td class="p-3 text-sm">{p.vitola or 'N/A'}</td>
+          <td class="p-3 text-sm font-semibold">{price_str}</td>
+        </tr>''')
+    
+    if ssr_rows:
+        html = html.replace('{{SSR_PRODUCT_ROWS}}', '\n'.join(ssr_rows))
+    else:
+        html = html.replace('{{SSR_PRODUCT_ROWS}}', '<tr><td colspan="4" class="p-4 text-center text-muted">Loading prices...</td></tr>')
+    
+    # Fill in JSON-LD structured data for SEO
+    html = html.replace('{{OFFER_COUNT}}', str(len(matching_products)))
+    html = html.replace('{{LOW_PRICE}}', f"{min(prices):.2f}" if prices else "0")
+    html = html.replace('{{HIGH_PRICE}}', f"{max(prices):.2f}" if prices else "0")
+    
     if has_seo:
         # Generate FAQ answers
         faq_1, faq_2, faq_3 = generate_faq_answers(brand_display, line_display, seo_data)
