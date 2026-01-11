@@ -1335,7 +1335,7 @@ async def sitemap():
         cigar_pages = set()
         for p in all_products:
             brand_slug = p.brand.lower().replace(' ', '-').replace('&', 'and')
-            line_slug = p.line.lower().replace(' ', '-').replace('&', 'and')
+            line_slug = normalize_line_slug(p.line)  # Use normalize for proper SEO slugs
             cigar_pages.add((brand_slug, line_slug, p.brand, p.line))
         
         # Limit to top 500 to keep sitemap reasonable
@@ -1474,6 +1474,15 @@ async def cigar_landing_page(brand: str, line: str):
     SEO-friendly landing page for specific cigar brands/lines
     URL format: /cigars/padron/1964-anniversary-series
     """
+    # Check if URL needs normalization (e.g., /opusx -> /opus-x)
+    normalized_line = normalize_line_slug(line.replace('-', ' '))
+    if normalized_line != line.lower():
+        # Redirect to canonical URL
+        return RedirectResponse(
+            url=f"/cigars/{brand}/{normalized_line}",
+            status_code=301  # Permanent redirect for SEO
+        )
+    
     # Convert URL-friendly format back to display format
     brand_display = brand.replace('-', ' ').title()
     line_display = line.replace('-', ' ').title()
@@ -1484,7 +1493,7 @@ async def cigar_landing_page(brand: str, line: str):
     matching_products = [
         p for p in all_products 
         if p.brand.lower().replace(' ', '-').replace('&', 'and') == brand.lower()
-        and p.line.lower().replace(' ', '-').replace('&', 'and') == line.lower()
+        and normalize_line_slug(p.line) == line.lower()
     ]
     
     if not matching_products:
@@ -1579,6 +1588,27 @@ def create_slug(text: str) -> str:
     return text.lower().replace(' ', '-').replace('/', '-')
 
 
+def normalize_line_slug(line: str) -> str:
+    """Normalize line names for SEO-friendly URLs with special case handling.
+    
+    Handles cases like 'Opus X' stored as 'OPUSX' in CSV data.
+    """
+    line_lower = line.lower().strip()
+    
+    # Special case mappings for known lines that need hyphenation
+    special_cases = {
+        'opusx': 'opus-x',
+        'opus x': 'opus-x',
+        # Add more special cases as needed
+    }
+    
+    if line_lower in special_cases:
+        return special_cases[line_lower]
+    
+    # Default: convert spaces to hyphens, & to 'and', remove other special chars
+    return line_lower.replace(' ', '-').replace('&', 'and').replace('/', '-')
+
+
 @app.get("/generate-landing-pages")
 async def generate_landing_page_list():
     """
@@ -1591,7 +1621,7 @@ async def generate_landing_page_list():
     for brand in brands[:20]:  # Start with top 20 brands
         for line in brand['lines'][:3]:  # Top 3 lines per brand
             brand_slug = create_slug(brand['brand'])
-            line_slug = create_slug(line['line'])
+            line_slug = normalize_line_slug(line['line'])  # Use normalize for proper SEO slugs
             url = f"/cigars/{brand_slug}/{line_slug}"
             pages.append({
                 'url': url,

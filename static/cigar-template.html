@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{{BRAND}} {{LINE}} Prices - Compare Deals | Cigar Price Scout</title>
   <meta name="description" content="Compare {{BRAND}} {{LINE}} cigar box prices across 35+ online retailers. Find the best deals with shipping and tax calculations when you visit cigarpricescout.com." />
+  <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://cigarpricescout.com/cigars/{{BRAND_SLUG}}/{{LINE_SLUG}}" />
     <link rel="icon" type="image/png" href="/static/logo.png">
   
@@ -222,6 +223,22 @@
         <div id="mobileCards" class="mobile-cards space-y-4">
             <!-- Mobile cards populated by JavaScript -->
           </div>
+          
+          <!-- Fallback content for search engines and JavaScript-disabled browsers -->
+          <noscript>
+            <div class="bg-white border border-gray-200 rounded-xl p-6 mt-6">
+              <p class="text-gray-700 mb-4">
+                Compare box prices for <strong>{{BRAND}} {{LINE}}</strong> cigars from multiple online retailers. 
+                Our price comparison tool shows prices from 35+ retailers including shipping and tax calculations.
+              </p>
+              <p class="text-gray-600 mb-4">
+                Enable JavaScript to see real-time price comparisons, or visit our homepage to search manually.
+              </p>
+              <a href="/" class="inline-block bg-amber-700 hover:bg-amber-800 text-white font-semibold py-2 px-6 rounded-lg">
+                Browse All Cigars
+              </a>
+            </div>
+          </noscript>
         </section>
 
         <!-- SEO Content Section -->
