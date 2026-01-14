@@ -131,8 +131,8 @@ except Exception:
             return 895  # $8.95
         elif retailer_key == 'smokeinn':
             return 995  # $9.95
-        elif retailer_key == 'stogies' and base_dollars >= 150:
-            return 0  # Free shipping on $150+
+        elif retailer_key == 'stogies' and base_dollars >= 100:
+            return 0  # Free shipping on $100+
         elif retailer_key == 'stogies':
             return 999  # $9.99 flat rate
         
@@ -188,7 +188,7 @@ except Exception:
             'secretocigarbar': ['MI'],
             'smallbatchcigar': ['CA'],
             'smokeinn': ['FL'],
-            'stogies': ['FL'],  # Stogies World Class Cigars
+            'stogies': ['TX'],  # Stogies World Class Cigars
             'tampasweethearts': ['FL'],
             'thecigarshop': ['SC','NC'],
             'thecigarstore': ['CA'],
@@ -557,6 +557,7 @@ RETAILERS = [
     {"key": "thecigarshouse", "name": "The Cigars House", "csv": f"{CSV_PATH_PREFIX}/thecigarshouse.csv", "authorized": False},
     {"key": "tobacconistofgreenwich", "name": "Tobacconist of Greenwich", "csv": f"{CSV_PATH_PREFIX}/tobacconistofgreenwich.csv", "authorized": False},
     {"key": "iheartcigars", "name": "iHeart Cigars", "csv": f"{CSV_PATH_PREFIX}/iheartcigars.csv", "authorized": False},
+    {"key": "stogies", "name": "Stogies World Class Cigars", "csv": f"{CSV_PATH_PREFIX}/stogies.csv", "authorized": False},
 ]
 
 # Enhanced CSV loader with wrapper and vitola support
