@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Answer Block Hybrid Designs - Cigar Price Scout</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#faf7f2',
+              500: '#7c5c2e',
+              600: '#6b4f27',
+            },
+            ink: '#111111',
+            muted: '#4b5563',
+            value: '#059669',
+          },
+          fontFamily: {
+            serif: ['Cormorant Garamond', 'Georgia', 'serif'],
+            display: ['Cinzel', 'Georgia', 'serif'],
+          },
+        },
+      },
+    }
+  </script>
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap" rel="stylesheet" />
+</head>
+
+<body class="bg-brand-50 font-serif text-ink text-lg leading-relaxed">
+  <div class="max-w-6xl mx-auto px-5 py-10">
+    
+    <!-- Header -->
+    <header class="flex flex-col items-center justify-center gap-2 mb-10 text-center">
+      <div class="font-display font-bold text-3xl tracking-wide">Cigar Price Scout</div>
+      <p class="italic text-muted text-xl">Hybrid Answer Block Designs</p>
+    </header>
+    
+    <main class="space-y-12">
+      
+      <!-- Current Search Context -->
+      <div class="bg-white border border-gray-200 rounded-xl p-6">
+        <h2 class="font-display font-bold text-2xl mb-4">Search: Arturo Fuente Hemingway Short Story (Box of 25)</h2>
+        <p class="text-muted">Showing prices for delivery to: <span class="font-semibold text-gray-700">Portland, OR (97008)</span></p>
+      </div>
+
+      <!-- Yellow Affiliate Disclosure -->
+      <div class="bg-yellow-50 border border-yellow-200 p-3 text-yellow-800 text-sm font-bold text-center max-w-3xl mx-auto rounded-lg">
+        <strong>Disclosure:</strong> We earn a commission when you purchase through our affiliate links.
+      </div>
+
+      <!-- HYBRID A: Stats Card with Emerald Border -->
+      <section class="space-y-4">
+        <div class="bg-gray-100 p-4 rounded">
+          <h3 class="font-display font-bold text-xl">Hybrid A: Stats Card with Emphasis Border</h3>
+          <p class="text-sm text-muted">Combines stat layout (Option 3) with highlight border (Option 1)</p>
+        </div>
+        
+        <div class="bg-white border-2 border-emerald-500 rounded-xl p-6 shadow-sm">
+          <div class="flex flex-col md:flex-row justify-center gap-8">
+            <div class="text-center">
+              <div class="text-sm text-emerald-700 font-display uppercase tracking-wide mb-1">Best Delivered Price</div>
+              <div class="text-4xl font-bold text-emerald-600">$186.40</div>
+            </div>
+            <div class="text-center">
+              <div class="text-sm text-muted font-display uppercase tracking-wide mb-1">Retailer</div>
+              <div class="text-2xl font-semibold text-brand-500">Hiland's Cigars</div>
+            </div>
+            <div class="text-center">
+              <div class="text-sm text-muted font-display uppercase tracking-wide mb-1">Savings vs Median</div>
+              <div class="text-2xl font-semibold text-emerald-600">$28.60</div>
+            </div>
+            <div class="text-center">
+              <div class="text-sm text-muted font-display uppercase tracking-wide mb-1">Compared</div>
+              <div class="text-xl font-semibold text-gray-700">15 retailers</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- HYBRID B: Two-Tier Card -->
+      <section class="space-y-4">
+        <div class="bg-gray-100 p-4 rounded">
+          <h3 class="font-display font-bold text-xl">Hybrid B: Two-Tier Card</h3>
+          <p class="text-sm text-muted">Primary answer on top, supporting stats below</p>
+        </div>
+        
+        <div class="bg-white border-2 border-emerald-500 rounded-xl overflow-hidden shadow-sm">
+          <!-- Top: Main Answer -->
+          <div class="bg-emerald-50 border-b border-emerald-200 px-6 py-5">
+            <div class="flex flex-col md:flex-row justify-between items-center gap-4">
+              <div class="text-center md:text-left">
+                <p class="text-sm font-display font-semibold text-emerald-700 uppercase tracking-wide mb-1">
+                  Best Delivered Price
+                </p>
+                <p class="text-4xl font-bold text-emerald-600">$186.40</p>
+              </div>
+              <div class="text-center md:text-right">
+                <p class="text-sm text-muted mb-1">Cheapest at</p>
+                <p class="text-2xl font-semibold text-gray-900">Hiland's Cigars</p>
+                <p class="text-sm text-muted">to Portland, OR</p>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Bottom: Stats -->
+          <div class="flex flex-col sm:flex-row divide-y sm:divide-y-0 sm:divide-x divide-gray-200">
+            <div class="flex-1 text-center p-4">
+              <div class="text-xs text-muted uppercase tracking-wide mb-1">Advertised</div>
+              <div class="text-lg font-semibold text-gray-700">$186.40</div>
+            </div>
+            <div class="flex-1 text-center p-4">
+              <div class="text-xs text-muted uppercase tracking-wide mb-1">Shipping</div>
+              <div class="text-lg font-semibold text-emerald-600">Free</div>
+            </div>
+            <div class="flex-1 text-center p-4">
+              <div class="text-xs text-muted uppercase tracking-wide mb-1">Savings</div>
+              <div class="text-lg font-semibold text-emerald-600">$28.60</div>
+            </div>
+            <div class="flex-1 text-center p-4">
+              <div class="text-xs text-muted uppercase tracking-wide mb-1">Compared</div>
+              <div class="text-lg font-semibold text-gray-700">15 retailers</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- HYBRID C: Focused Winner Card -->
+      <section class="space-y-4">
+        <div class="bg-gray-100 p-4 rounded">
+          <h3 class="font-display font-bold text-xl">Hybrid C: Focused Winner Card</h3>
+          <p class="text-sm text-muted">Spotlight on the winner, minimal distraction</p>
+        </div>
+        
+        <div class="bg-white border-2 border-emerald-500 rounded-xl p-6 shadow-sm">
+          <div class="text-center space-y-4">
+            <!-- Label -->
+            <div class="text-sm font-display font-semibold text-emerald-700 uppercase tracking-wide">
+              Best Delivered Price Right Now
+            </div>
+            
+            <!-- Main Price -->
+            <div class="text-5xl font-bold text-emerald-600">
+              $186.40
+            </div>
+            
+            <!-- Retailer -->
+            <div class="text-xl text-gray-700">
+              <span class="font-semibold text-gray-900">Hiland's Cigars</span>
+              <span class="text-muted mx-2">•</span>
+              <span class="text-muted">to Portland, OR</span>
+            </div>
+            
+            <!-- Stats Row -->
+            <div class="flex justify-center gap-6 pt-4 border-t border-gray-200">
+              <div class="text-center">
+                <div class="text-xs text-muted uppercase tracking-wide">Savings</div>
+                <div class="text-lg font-semibold text-emerald-600">$28.60</div>
+              </div>
+              <div class="text-center">
+                <div class="text-xs text-muted uppercase tracking-wide">vs Median</div>
+                <div class="text-lg font-semibold text-gray-700">15%</div>
+              </div>
+              <div class="text-center">
+                <div class="text-xs text-muted uppercase tracking-wide">Retailers</div>
+                <div class="text-lg font-semibold text-gray-700">15</div>
+              </div>
+            </div>
+            
+            <!-- Update stamp -->
+            <div class="text-xs text-muted pt-2">
+              Updated daily at 3am ET
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Mock Results Table -->
+      <section class="space-y-4">
+        <h3 class="font-display font-bold text-2xl text-center">Full Comparison Table</h3>
+        
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+            <thead>
+              <tr class="bg-gray-50">
+                <th class="p-3 border-b border-gray-200 text-left font-display font-semibold text-sm">Retailer</th>
+                <th class="p-3 border-b border-gray-200 text-center font-display font-semibold text-sm">Advertised Price</th>
+                <th class="p-3 border-b border-gray-200 text-center font-display font-semibold text-sm font-bold">Est. Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="hover:bg-gray-50">
+                <td class="p-3 border-b border-gray-200"><span class="text-brand-500 font-semibold">Hiland's Cigars</span></td>
+                <td class="p-3 border-b border-gray-200 text-center">$186.40</td>
+                <td class="p-3 border-b border-gray-200 text-center font-bold text-xl text-emerald-600">$186.40</td>
+              </tr>
+              <tr class="hover:bg-gray-50">
+                <td class="p-3 border-b border-gray-200"><span class="text-brand-500 font-semibold">Fox Cigar</span></td>
+                <td class="p-3 border-b border-gray-200 text-center">$197.99</td>
+                <td class="p-3 border-b border-gray-200 text-center font-bold text-xl text-brand-500">$197.99</td>
+              </tr>
+              <tr class="hover:bg-gray-50">
+                <td class="p-3 border-b border-gray-200"><span class="text-brand-500 font-semibold">Neptune Cigar</span></td>
+                <td class="p-3 border-b border-gray-200 text-center">$209.99</td>
+                <td class="p-3 border-b border-gray-200 text-center font-bold text-xl text-brand-500">$209.99</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+    </main>
+    
+  </div>
+</body>
+</html>
