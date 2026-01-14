@@ -131,6 +131,10 @@ except Exception:
             return 895  # $8.95
         elif retailer_key == 'smokeinn':
             return 995  # $9.95
+        elif retailer_key == 'stogies' and base_dollars >= 150:
+            return 0  # Free shipping on $150+
+        elif retailer_key == 'stogies':
+            return 999  # $9.99 flat rate
         
         # Standard rates
         elif retailer_key == 'famous':
@@ -184,6 +188,7 @@ except Exception:
             'secretocigarbar': ['MI'],
             'smallbatchcigar': ['CA'],
             'smokeinn': ['FL'],
+            'stogies': ['FL'],  # Stogies World Class Cigars
             'tampasweethearts': ['FL'],
             'thecigarshop': ['SC','NC'],
             'thecigarstore': ['CA'],

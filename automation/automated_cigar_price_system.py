@@ -285,6 +285,7 @@ class AutomatedCigarPriceSystem:
                     'pyramidcigars': 'pyramidcigars',
                     'smallbatch_cigar': 'smallbatchcigar',
                     'smokeinn': 'smokeinn',
+                    'stogies': 'stogies',
                     'tampasweethearts': 'tampasweethearts',
                     'thecigarshop': 'thecigarshop',
                     'tobaccolocker': 'tobaccolocker',
