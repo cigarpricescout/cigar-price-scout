@@ -31,6 +31,7 @@ RETAILERS = [
     {"key": "thompson", "csv": "../../static/data/thompson.csv"},
     {"key": "thecigarshop", "csv": "../../static/data/thecigarshop.csv"},
     {"key": "tobaccostock", "csv": "../../static/data/tobaccostock.csv"},
+    {"key": "stogies", "csv": "../../static/data/stogies.csv"},
 ]
 
 def apply_promos_to_csv(retailer_info, dry_run=False):
