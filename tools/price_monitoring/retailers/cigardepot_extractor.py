@@ -73,7 +73,7 @@ class CigarDepotExtractor:
             }
     
     def _extract_box_quantity(self, soup: BeautifulSoup) -> Optional[int]:
-        """Extract box quantity from product page"""
+        """Extract box quantity from product page - prioritize larger box sizes"""
         page_text = soup.get_text()
         
         qty_patterns = [
@@ -82,57 +82,92 @@ class CigarDepotExtractor:
             r'[Cc]edar [Cc]hest of (\d+)'
         ]
         
+        # Collect all quantities found and return the largest (box size, not singles)
+        quantities = []
         for pattern in qty_patterns:
-            qty_match = re.search(pattern, page_text)
-            if qty_match:
-                return int(qty_match.group(1))
+            for match in re.finditer(pattern, page_text):
+                qty = int(match.group(1))
+                # Only consider quantities >= 10 as box quantities
+                if qty >= 10:
+                    quantities.append(qty)
+        
+        if quantities:
+            return max(quantities)  # Return the largest box quantity
         
         return None
     
     def _extract_price(self, soup: BeautifulSoup) -> Optional[float]:
         """
-        Extract price from WooCommerce product page
-        Strategy: Find price in product summary section near "Box of X" text
+        Extract box price from WooCommerce product page
+        Strategy: Find the FIRST/main .price element and extract the higher price
+        (WooCommerce variable products show price range: single price – box price)
         """
-        box_price = None
-        
-        # Method 1: Find price near "Box of X" text (most reliable)
-        box_text_elem = soup.find(string=re.compile(r'[Bb]ox [Oo]f \d+'))
-        if box_text_elem:
-            current = box_text_elem.parent if hasattr(box_text_elem, 'parent') else None
-            depth = 0
+        # Method 1: Find the FIRST p.price element (main product price in summary)
+        # This contains "Price range: $X through $Y" where Y is the box price
+        main_price = soup.find('p', class_='price')
+        if main_price:
+            # Look for screen-reader-text that shows "Price range: $X through $Y"
+            screen_reader = main_price.find(class_='screen-reader-text')
+            if screen_reader:
+                sr_text = screen_reader.get_text()
+                range_match = re.search(r'through \$(\d+[\d,]*\.?\d*)', sr_text)
+                if range_match:
+                    try:
+                        price = float(range_match.group(1).replace(',', ''))
+                        if price >= 50:
+                            return price
+                    except ValueError:
+                        pass
             
-            while current and depth < 10:
-                price_elem = current.find(class_=re.compile(r'price|amount'))
-                if price_elem:
-                    price_text = price_elem.get_text().strip()
-                    price_match = re.search(r'\$(\d+\.?\d*)', price_text.replace(',', ''))
-                    if price_match:
+            # Fallback: Extract all prices from main price element, take the highest
+            prices_in_main = []
+            for bdi in main_price.find_all('bdi'):
+                if bdi.find_parent('del'):  # Skip strikethrough
+                    continue
+                price_text = bdi.get_text().strip()
+                price_match = re.search(r'\$(\d+[\d,]*\.?\d*)', price_text.replace(',', ''))
+                if price_match:
+                    try:
+                        price = float(price_match.group(1).replace(',', ''))
+                        prices_in_main.append(price)
+                    except ValueError:
+                        pass
+            
+            if prices_in_main:
+                # Take the highest price (box price, not single)
+                return max(prices_in_main)
+        
+        # Method 2: Look in summary section for price range
+        summary = soup.find(class_=re.compile(r'summary|entry-summary', re.I))
+        if summary:
+            price_elem = summary.find(class_='price')
+            if price_elem:
+                # Check screen-reader-text first
+                sr = price_elem.find(class_='screen-reader-text')
+                if sr:
+                    sr_text = sr.get_text()
+                    range_match = re.search(r'through \$(\d+[\d,]*\.?\d*)', sr_text)
+                    if range_match:
                         try:
-                            price = float(price_match.group(1))
-                            if 100 <= price <= 500:  # Reasonable box price range
-                                return price
+                            return float(range_match.group(1).replace(',', ''))
                         except ValueError:
                             pass
                 
-                current = current.parent if hasattr(current, 'parent') else None
-                depth += 1
-        
-        # Method 2: Look in main product summary section
-        product_summary = soup.find(class_=re.compile(r'product.*summary|summary|product-info', re.I))
-        if product_summary:
-            price_elems = product_summary.find_all(class_=re.compile(r'woocommerce-Price-amount|price|amount'))
-            
-            for elem in price_elems:
-                price_text = elem.get_text().strip()
-                price_match = re.search(r'\$(\d+\.?\d*)', price_text.replace(',', ''))
-                if price_match:
-                    try:
-                        price = float(price_match.group(1))
-                        if 100 <= price <= 500:
-                            return price
-                    except ValueError:
+                # Extract all prices from this element
+                prices = []
+                for bdi in price_elem.find_all('bdi'):
+                    if bdi.find_parent('del'):
                         continue
+                    price_text = bdi.get_text().strip()
+                    price_match = re.search(r'\$(\d+[\d,]*\.?\d*)', price_text.replace(',', ''))
+                    if price_match:
+                        try:
+                            prices.append(float(price_match.group(1).replace(',', '')))
+                        except ValueError:
+                            pass
+                
+                if prices:
+                    return max(prices)
         
         return None
     
@@ -165,16 +200,29 @@ class CigarDepotExtractor:
         if not current_price:
             return None
         
-        # Look for strikethrough prices (original/MSRP)
+        # Look for strikethrough prices (original/MSRP) in <del> tags
         strikethrough_prices = []
         
-        for elem in soup.select('del, s, [style*="line-through"]'):
+        # WooCommerce puts original prices in <del> tags
+        for elem in soup.select('del .woocommerce-Price-amount, del bdi, del .amount'):
             price_text = elem.get_text().strip()
-            price_match = re.search(r'\$(\d+\.?\d*)', price_text.replace(',', ''))
+            price_match = re.search(r'\$(\d+[\d,]*\.?\d*)', price_text.replace(',', ''))
             if price_match:
                 try:
-                    price = float(price_match.group(1))
-                    if price > current_price and 100 <= price <= 500:
+                    price = float(price_match.group(1).replace(',', ''))
+                    if price > current_price:
+                        strikethrough_prices.append(price)
+                except ValueError:
+                    continue
+        
+        # Also check for generic strikethrough elements
+        for elem in soup.select('del, s, [style*="line-through"]'):
+            price_text = elem.get_text().strip()
+            price_match = re.search(r'\$(\d+[\d,]*\.?\d*)', price_text.replace(',', ''))
+            if price_match:
+                try:
+                    price = float(price_match.group(1).replace(',', ''))
+                    if price > current_price:
                         strikethrough_prices.append(price)
                 except ValueError:
                     continue

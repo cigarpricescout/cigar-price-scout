@@ -70,6 +70,8 @@ except Exception:
             return 0
         elif retailer_key == 'cigarboxpa' and base_dollars >= 175:
             return 0
+        elif retailer_key == 'cigardepot' and base_dollars >= 200:
+            return 0
         elif retailer_key == 'cigarcountry' and base_dollars >= 150:
             return 0
         elif retailer_key == 'cigarking' and base_dollars >= 150:
@@ -160,6 +162,7 @@ except Exception:
             'ci': ['PA','TX','FL','AZ'],
             'cigar': ['PA'],
             'cigarboxpa': ['PA'],
+            'cigardepot': ['FL'],  # Tampa, FL
             'cigarcellarofmiami': ['FL'],
             'cigarhustler': ['FL'],
             'cigarking': ['AZ'],
@@ -506,6 +509,7 @@ RETAILERS = [
     {"key": "ci", "name": "Cigars International", "csv": f"{CSV_PATH_PREFIX}/ci.csv", "authorized": True},
     {"key": "cigar", "name": "Cigar.com", "csv": f"{CSV_PATH_PREFIX}/cigar.csv", "authorized": False},
     {"key": "cigarboxpa", "name": "Cigar Box PA", "csv": f"{CSV_PATH_PREFIX}/cigarboxpa.csv", "authorized": False},
+    {"key": "cigardepot", "name": "Cigar Depot", "csv": f"{CSV_PATH_PREFIX}/cigardepot.csv", "authorized": False},
     {"key": "cigarcellarofmiami", "name": "Cigar Cellar of Miami", "csv": f"{CSV_PATH_PREFIX}/cigarcellarofmiami.csv", "authorized": False},
     {"key": "cigarcountry", "name": "Cigar Country", "csv": f"{CSV_PATH_PREFIX}/cigarcountry.csv", "authorized": False},
     {"key": "cigarhustler", "name": "Cigar Hustler", "csv": f"{CSV_PATH_PREFIX}/cigarhustler.csv", "authorized": False},
