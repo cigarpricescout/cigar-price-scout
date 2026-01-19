@@ -174,9 +174,6 @@ except Exception:
             'cigarcellarofmiami': ['FL'],
             'cigarhustler': ['FL'],
             'cigarking': ['AZ'],
-            'cigarplace': ['FL'],
-            'cigarprimestore': ['CA'],  # Research exact location
-            'cigarsdirect': ['FL'],
             'cigora': ['PA'],
             'corona': ['FL'],
             'coronacigar': ['FL'],  # Corona Cigar Co. - Florida based,
@@ -566,7 +563,6 @@ RETAILERS = [
     {"key": "windycitycigars", "name": "Windy City Cigars", "csv": f"{CSV_PATH_PREFIX}/windycitycigars.csv", "authorized": False},
     {"key": "baysidecigars", "name": "Bayside Cigars", "csv": f"{CSV_PATH_PREFIX}/baysidecigars.csv", "authorized": False},
     {"key": "cigarboxinc", "name": "Cigar Box Inc", "csv": f"{CSV_PATH_PREFIX}/cigarboxinc.csv", "authorized": False},
-    {"key": "cigarprimestore", "name": "Cigar Prime Store", "csv": f"{CSV_PATH_PREFIX}/cigarprimestore.csv", "authorized": False},
     {"key": "karmacigar", "name": "Karma Cigar Bar", "csv": f"{CSV_PATH_PREFIX}/karmacigar.csv", "authorized": False},
     {"key": "mailcubancigars", "name": "Mail Cuban Cigars", "csv": f"{CSV_PATH_PREFIX}/mailcubancigars.csv", "authorized": False},
     {"key": "pyramidcigars", "name": "Pyramid Cigars", "csv": f"{CSV_PATH_PREFIX}/pyramidcigars.csv", "authorized": False},

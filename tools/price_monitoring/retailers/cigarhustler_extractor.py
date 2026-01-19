@@ -122,9 +122,25 @@ class CigarHustlerExtractor:
     def _extract_price(self, soup: BeautifulSoup) -> Optional[float]:
         """
         Extract current price from ZenCart product page
-        Strategy: Focus on main product area, avoid related products
+        Strategy: Use ZenCart's specific price element IDs, then fallback to text parsing
         """
-        # Method 1: Look for the main product title/price area (above "Related Products")
+        # Method 1: Look for ZenCart's standard price elements by ID
+        # These are the most reliable indicators
+        price_elements = soup.find_all('span', id=re.compile(r'productPrice', re.I))
+        for elem in price_elements:
+            price_text = elem.get_text()
+            price_match = re.search(r'\$(\d+(?:,\d{3})*(?:\.\d{2})?)', price_text)
+            if price_match:
+                try:
+                    # Remove commas from price (e.g., "$4,200.00" -> "4200.00")
+                    price_str = price_match.group(1).replace(',', '')
+                    price = float(price_str)
+                    if price >= 10:  # Minimum reasonable price
+                        return price
+                except ValueError:
+                    continue
+        
+        # Method 2: Look for the main product title/price area (above "Related Products")
         # Find the product title first to locate the main product section
         product_title = soup.find('h1')
         if product_title:
@@ -134,13 +150,14 @@ class CigarHustlerExtractor:
                 # Look for prices in this section only
                 section_text = main_section.get_text()
                 
-                # Extract all prices from this section
-                price_matches = re.findall(r'\$(\d+(?:\.\d{2})?)', section_text)
+                # Extract all prices from this section (with comma support)
+                price_matches = re.findall(r'\$(\d+(?:,\d{3})*(?:\.\d{2})?)', section_text)
                 prices = []
                 for price_str in price_matches:
                     try:
-                        price = float(price_str)
-                        if 50 <= price <= 2000:  # Box prices usually $50+
+                        # Remove commas
+                        price = float(price_str.replace(',', ''))
+                        if price >= 10:  # Minimum reasonable price (no upper limit for rare cigars)
                             prices.append(price)
                     except ValueError:
                         continue
@@ -160,22 +177,22 @@ class CigarHustlerExtractor:
                     if len(prices) >= 1:
                         return prices[0]
         
-        # Method 2: Look for h1 + immediate following price elements
+        # Method 3: Look for h1 + immediate following price elements
         h1 = soup.find('h1')
         if h1:
             # Look at the next few siblings for price info
             for sibling in h1.find_next_siblings(limit=5):
                 sibling_text = sibling.get_text()
-                price_match = re.search(r'\$(\d+(?:\.\d{2})?)', sibling_text)
+                price_match = re.search(r'\$(\d+(?:,\d{3})*(?:\.\d{2})?)', sibling_text)
                 if price_match:
                     try:
-                        price = float(price_match.group(1))
-                        if 50 <= price <= 2000:
+                        price = float(price_match.group(1).replace(',', ''))
+                        if price >= 10:
                             return price
                     except ValueError:
                         continue
         
-        # Method 3: Look for the main price display (typically large/prominent)
+        # Method 4: Look for the main price display (typically large/prominent)
         # Avoid "Related Products" section
         body_text = soup.get_text()
         
@@ -185,13 +202,13 @@ class CigarHustlerExtractor:
         else:
             main_content = body_text
         
-        # Extract prices from main content only
-        price_matches = re.findall(r'\$(\d+(?:\.\d{2})?)', main_content)
+        # Extract prices from main content only (with comma support)
+        price_matches = re.findall(r'\$(\d+(?:,\d{3})*(?:\.\d{2})?)', main_content)
         prices = []
         for price_str in price_matches:
             try:
-                price = float(price_str)
-                if 50 <= price <= 2000:
+                price = float(price_str.replace(',', ''))
+                if price >= 10:
                     prices.append(price)
             except ValueError:
                 continue
@@ -296,14 +313,14 @@ class CigarHustlerExtractor:
         # ZenCart typically shows: $75.00 $71.25
         # We need to find the higher price (original)
         
-        price_matches = re.findall(r'\$(\d+(?:\.\d{2})?)', section_text)
+        price_matches = re.findall(r'\$(\d+(?:,\d{3})*(?:\.\d{2})?)', section_text)
         prices = []
         for price_str in price_matches:
             try:
-                price = float(price_str)
+                price = float(price_str.replace(',', ''))
                 # Only consider prices that are close to our current price
                 # (within 20% higher) to be very restrictive
-                if 50 <= price <= 2000 and price >= current_price and price <= current_price * 1.2:
+                if price >= 10 and price >= current_price and price <= current_price * 1.2:
                     prices.append(price)
             except ValueError:
                 continue
