@@ -137,6 +137,14 @@ except Exception:
             return 0  # Free shipping on $100+
         elif retailer_key == 'stogies':
             return 999  # $9.99 flat rate
+        elif retailer_key == 'cigarhustler':
+            return 999  # $9.99 flat rate (research exact policy)
+        elif retailer_key == 'cigarprimestore':
+            return 999  # $9.99 flat rate (research exact policy)
+        elif retailer_key == 'coronacigar' and base_dollars >= 100:
+            return 0  # Free shipping on $100+
+        elif retailer_key == 'coronacigar':
+            return 999  # $9.99 under $100
         
         # Standard rates
         elif retailer_key == 'famous':
@@ -167,9 +175,11 @@ except Exception:
             'cigarhustler': ['FL'],
             'cigarking': ['AZ'],
             'cigarplace': ['FL'],
+            'cigarprimestore': ['CA'],  # Research exact location
             'cigarsdirect': ['FL'],
             'cigora': ['PA'],
             'corona': ['FL'],
+            'coronacigar': ['FL'],  # Corona Cigar Co. - Florida based,
             'cubancrafters': ['FL'],
             'cuencacigars': ['FL'],
             'famous': ['PA'],
@@ -518,9 +528,11 @@ RETAILERS = [
     {"key": "cigarpage", "name": "Cigar Page", "csv": f"{CSV_PATH_PREFIX}/cigarpage.csv", "authorized": False},
     {"key": "cigarpairingparlor", "name": "The Cigar Pairing Parlor LLC", "csv": f"{CSV_PATH_PREFIX}/cigarpairingparlor.csv", "authorized": False},
     {"key": "cigarplace", "name": "Cigar Place", "csv": f"{CSV_PATH_PREFIX}/cigarplace.csv", "authorized": False},
+    {"key": "cigarprimestore", "name": "Cigar Prime Store", "csv": f"{CSV_PATH_PREFIX}/cigarprimestore.csv", "authorized": False},
     {"key": "cigarsdirect", "name": "Cigars Direct", "csv": f"{CSV_PATH_PREFIX}/cigarsdirect.csv", "authorized": False},
     {"key": "cigora", "name": "Cigora", "csv": f"{CSV_PATH_PREFIX}/cigora.csv", "authorized": True},
     {"key": "corona", "name": "Corona Cigar", "csv": f"{CSV_PATH_PREFIX}/corona.csv", "authorized": False},
+    {"key": "coronacigar", "name": "Corona Cigar Co.", "csv": f"{CSV_PATH_PREFIX}/coronacigar.csv", "authorized": False},
     {"key": "cubancrafters", "name": "Cuban Crafters", "csv": f"{CSV_PATH_PREFIX}/cubancrafters.csv", "authorized": False},
     {"key": "cuencacigars", "name": "Cuenca Cigars", "csv": f"{CSV_PATH_PREFIX}/cuencacigars.csv", "authorized": False},
     {"key": "escobarcigars", "name": "Escobar Cigars", "csv": f"{CSV_PATH_PREFIX}/escobarcigars.csv", "authorized": False},
