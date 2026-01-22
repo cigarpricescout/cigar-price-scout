@@ -1,0 +1,67 @@
+================================================================================
+SMART CSV POPULATOR - SUMMARY REPORT
+================================================================================
+Generated: 2026-01-21 19:52:12
+Priority CIDs: 100
+Retailers processed: 31
+
+OVERALL STATISTICS:
+  Total CIDs added across all retailers: 3073
+  Total CIDs skipped (already existed): 27
+
+BREAKDOWN BY RETAILER:
+
+Retailer                         Existing      Added      Total
+--------------------------------------------------------------------------------
+absolutecigars                         41        100        141
+atlantic                               47        100        147
+bighumidor                             59         95        154
+bnbtobacco                             25        100        125
+cccrafter                              27        100        127
+cigarboxpa                              5         99        104
+cigarcellarofmiami                      8        100        108
+cigardepot                             10        100        110
+cigarhustler                           11         98        109
+cigarking                               3        100        103
+cigarprimestore                         7         95        102
+cigarsdirect                           60         96        156
+coronacigar                             8        100        108
+foxcigar                               44        100        144
+gothamcigars                           35        100        135
+hilands                                46        100        146
+holts                                  59        100        159
+iheartcigars                           10         99        109
+neptune                                61        100        161
+nickscigarworld                        46        100        146
+planetcigars                           18         99        117
+pyramidcigars                           8        100        108
+smallbatchcigar                        55        100        155
+smokeinn                               56         98        154
+stogies                                 8        100        108
+tampasweethearts                       12        100        112
+thecigarshop                           10        100        110
+tobaccolocker                          58         97        155
+tobaccostock                            9        100        109
+twoguys                                32         97        129
+watchcity                              10        100        110
+
+================================================================================
+TOP 10 RETAILERS BY CIDS ADDED:
+  absolutecigars: 100 CIDs
+  atlantic: 100 CIDs
+  bnbtobacco: 100 CIDs
+  cccrafter: 100 CIDs
+  cigarcellarofmiami: 100 CIDs
+  cigardepot: 100 CIDs
+  cigarking: 100 CIDs
+  coronacigar: 100 CIDs
+  foxcigar: 100 CIDs
+  gothamcigars: 100 CIDs
+
+================================================================================
+NEXT STEPS:
+  1. Review this summary report
+  2. Manually research and add URLs for the new CIDs
+  3. Run retailer updater scripts to populate prices
+  4. Commit changes to Git
+================================================================================

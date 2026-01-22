@@ -1,0 +1,51 @@
+================================================================================
+CSV VALIDATION REPORT
+================================================================================
+
+SUMMARY:
+  Total CSVs validated: 31
+  Valid CSVs: 31
+  CSVs with errors: 0
+  Total errors: 0
+  Total warnings: 62
+
+GLOBAL STATISTICS:
+  Total CIDs across all retailers: 3961
+  CIDs needing URL research: 3073
+  CIDs needing price updates: 3081
+
+NO ERRORS FOUND!
+
+================================================================================
+WARNINGS (Sample):
+================================================================================
+  absolutecigars: 100 CID(s) need URL research
+  absolutecigars: 100 CID(s) need price updates
+  atlantic: 100 CID(s) need URL research
+  atlantic: 100 CID(s) need price updates
+  bighumidor: 95 CID(s) need URL research
+  bighumidor: 95 CID(s) need price updates
+  bnbtobacco: 100 CID(s) need URL research
+  bnbtobacco: 100 CID(s) need price updates
+  cccrafter: 100 CID(s) need URL research
+  cccrafter: 100 CID(s) need price updates
+  ... and 52 more warnings
+
+================================================================================
+TOP 10 RETAILERS NEEDING URL RESEARCH:
+================================================================================
+  absolutecigars: 100 CIDs
+  atlantic: 100 CIDs
+  bnbtobacco: 100 CIDs
+  cccrafter: 100 CIDs
+  cigarcellarofmiami: 100 CIDs
+  cigardepot: 100 CIDs
+  cigarking: 100 CIDs
+  coronacigar: 100 CIDs
+  foxcigar: 100 CIDs
+  gothamcigars: 100 CIDs
+
+================================================================================
+VALIDATION PASSED - All CSVs are valid!
+Ready for URL research and price updates.
+================================================================================
