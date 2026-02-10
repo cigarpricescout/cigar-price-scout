@@ -1570,11 +1570,12 @@ async def cigar_landing_page(brand: str, line: str):
     ssr_rows = []
     prices = []
     for p in matching_products[:10]:  # Limit to first 10 for initial render
-        price_str = f"${p.price:.2f}" if p.price else "N/A"
-        if p.price:
-            prices.append(p.price)
+        price_dollars = p.price_cents / 100 if p.price_cents else 0
+        price_str = f"${price_dollars:.2f}" if p.price_cents else "N/A"
+        if p.price_cents:
+            prices.append(price_dollars)
         ssr_rows.append(f'''<tr class="border-b border-gray-100 hover:bg-gray-50">
-          <td class="p-3 text-sm">{p.retailer}</td>
+          <td class="p-3 text-sm">{p.retailer_name}</td>
           <td class="p-3 text-sm">{p.wrapper or 'N/A'}</td>
           <td class="p-3 text-sm">{p.vitola or 'N/A'}</td>
           <td class="p-3 text-sm font-semibold">{price_str}</td>
