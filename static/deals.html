@@ -1,11 +1,20 @@
 <!doctype html>
 <html lang="en">
 <head>
+  <!-- Google Analytics -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-QV9XYRECFK"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-QV9XYRECFK');
+  </script>
+
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Best Cigar Box Prices Today | Cigar Price Scout</title>
-  <meta name="description" content="Find the best cigar box prices today. Compare deals across 20+ retailers - products priced significantly below market average. Updated daily." />
-  <link rel="canonical" href="https://cigarpricescout.com/deals.html" />
+  <meta name="description" content="Best cigar box prices today. Compare deals across 35+ retailers - products priced significantly below market average. Updated daily." />
+  <link rel="canonical" href="https://cigarpricescout.com/best-cigar-box-prices" />
   <link rel="icon" type="image/png" href="/static/logo.png">
   
   <!-- Schema.org -->
@@ -14,8 +23,13 @@
     "@context": "https://schema.org",
     "@type": "CollectionPage",
     "name": "Best Cigar Box Prices Today",
-    "description": "Today's best cigar box deals - products priced significantly below market average.",
-    "url": "https://cigarpricescout.com/deals.html"
+    "description": "Today's best cigar box deals across 35+ retailers - products priced significantly below market average.",
+    "url": "https://cigarpricescout.com/best-cigar-box-prices",
+    "mainEntity": {
+      "@type": "OfferCatalog",
+      "name": "Best Cigar Deals",
+      "itemListOrder": "https://schema.org/ItemListOrderDescending"
+    }
   }
   </script>
   
@@ -109,7 +123,7 @@
         <span>|</span>
         <a href="/contact.html" class="text-brand-500 hover:underline">Contact</a>
       </p>
-      <p class="mt-2">&copy; 2025 Cigar Price Scout. Updated daily.</p>
+      <p class="mt-2">&copy; 2026 Cigar Price Scout. Updated daily.</p>
     </footer>
   </div>
 
@@ -144,7 +158,7 @@
         grid.innerHTML = data.deals.map(deal => `
           <div class="bg-white border border-gray-200 rounded-xl p-5 shadow-sm hover:-translate-y-0.5 hover:shadow-lg transition-all">
             <div class="flex justify-between items-start mb-3">
-              <div class="font-display font-semibold text-lg leading-tight">${deal.brand} ${deal.line}</div>
+              <a href="/cigars/${deal.brand.toLowerCase().replace(/ /g,'-').replace(/&/g,'and')}/${deal.line.toLowerCase().replace(/ /g,'-').replace(/&/g,'and')}" class="font-display font-semibold text-lg leading-tight text-ink hover:text-brand-500 hover:underline">${deal.brand} ${deal.line}</a>
               <div class="bg-value text-white px-3 py-1 rounded-full text-sm font-bold whitespace-nowrap">${deal.savings_percent.toFixed(0)}% OFF</div>
             </div>
             
@@ -186,7 +200,7 @@
                 <div class="font-semibold text-brand-500">${deal.retailer}</div>
                 <div class="text-sm text-muted">vs. ${deal.num_retailers} retailers</div>
               </div>
-              <a href="${deal.url}" target="_blank" rel="noopener" 
+              <a href="/go?retailer=${encodeURIComponent(deal.retailer_key || deal.retailer)}&cid=${encodeURIComponent(deal.brand + '|' + deal.line)}&url=${encodeURIComponent(deal.url)}" target="_blank" rel="noopener" 
                  class="bg-brand-500 hover:bg-brand-600 text-white px-5 py-2 rounded-lg font-semibold transition-all">
                 View
               </a>

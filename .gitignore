@@ -35,3 +35,7 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+
+# Backup CSV data files (prevent repo bloat)
+static/data/*_backup_*.csv
+static/data/*.backup_*.csv
