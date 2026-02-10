@@ -2,9 +2,11 @@ from fastapi import FastAPI, Query, Form, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse, Response, RedirectResponse, PlainTextResponse
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.gzip import GZipMiddleware
 from pathlib import Path
 import csv
 import re
+import time
 from typing import Optional
 from pydantic import BaseModel
 import smtplib
@@ -377,6 +379,17 @@ class WWWRedirectMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 app.add_middleware(WWWRedirectMiddleware)
+app.add_middleware(GZipMiddleware, minimum_size=500)
+
+# Cache-Control middleware for static assets (browsers cache for 24 hours)
+class StaticCacheMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        if request.url.path.startswith("/static/"):
+            response.headers["Cache-Control"] = "public, max-age=86400"
+        return response
+
+app.add_middleware(StaticCacheMiddleware)
 app.mount("/static", StaticFiles(directory=STATIC_PATH), name="static")
 
 # Custom 404 handler
@@ -627,12 +640,23 @@ def load_csv(csv_path, retailer_key, retailer_name):
     
     return items
 
+# In-memory product cache (refreshes every 5 minutes instead of reading 35+ CSVs per request)
+_product_cache = {"data": None, "timestamp": 0}
+CACHE_TTL_SECONDS = 300  # 5 minutes
+
 def load_all_products():
-    """Load all products from all retailer CSV files"""
+    """Load all products from all retailer CSV files, with in-memory caching"""
+    now = time.time()
+    if _product_cache["data"] is not None and (now - _product_cache["timestamp"]) < CACHE_TTL_SECONDS:
+        return _product_cache["data"]
+    
     all_products = []
     for retailer in RETAILERS:
         products = load_csv(retailer["csv"], retailer["key"], retailer["name"])
         all_products.extend(products)
+    
+    _product_cache["data"] = all_products
+    _product_cache["timestamp"] = now
     return all_products
 
 def load_master_wrapper_aliases():
