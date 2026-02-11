@@ -222,8 +222,7 @@ class CigarsDirectCSVUpdaterCorrected:
         if not data:
             return False
         
-        if not self.dry_run and not self.create_backup():
-            return False
+        # Backup disabled - historical prices tracked in historical_prices.db
         
         successful_updates = 0
         failed_updates = 0

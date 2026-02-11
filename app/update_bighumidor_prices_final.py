@@ -221,9 +221,7 @@ class BigHumidorCSVUpdater:
         if not data:
             return False
         
-        # Create backup (skip in dry run)
-        if not self.dry_run and not self.create_backup():
-            return False
+        # Backup disabled - historical prices tracked in historical_prices.db
         
         # Update each product
         successful_updates = 0

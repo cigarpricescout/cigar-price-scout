@@ -117,16 +117,7 @@ def update_smokeinn_prices(dry_run=False):
         print(f"[ERROR] Failed to load Smoke Inn CSV: {e}")
         return False
     
-    # Create backup (skip in dry run)
-    if not dry_run:
-        try:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            backup_path = csv_path.replace('.csv', f'_backup_{timestamp}.csv')
-            import shutil
-            shutil.copy2(csv_path, backup_path)
-            print(f"[INFO] Backup created: {backup_path}")
-        except Exception as e:
-            print(f"[WARNING] Could not create backup: {e}")
+    # Backup disabled - historical prices tracked in historical_prices.db
     
     # Process each product
     successful_updates = 0

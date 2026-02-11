@@ -326,8 +326,7 @@ class IHeartCigarsPriceUpdater:
         
         print(f"[INFO] Loaded {len(products)} products from iHeartCigars CSV")
         
-        # Create backup
-        backup_file = self.create_backup()
+        # Backup disabled - historical prices tracked in historical_prices.db
         
         # Process each product
         updated_products = []

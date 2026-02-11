@@ -259,9 +259,7 @@ class CigarPrimeStoreCSVUpdater:
             print("[WARNING] No products to update")
             return False
         
-        # Create backup
-        if not self.create_backup():
-            return False
+        # Backup disabled - historical prices tracked in historical_prices.db
         
         # Update each product
         updated_products = []

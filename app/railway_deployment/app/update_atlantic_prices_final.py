@@ -335,10 +335,7 @@ class AtlanticCSVUpdaterWithMaster:
             print(f"[ERROR] CSV file not found: {self.csv_path}")
             return False
         
-        # Create backup
-        if not self.create_backup():
-            print("[ERROR] Cannot proceed without backup")
-            return False
+        # Backup disabled - historical prices tracked in historical_prices.db
         
         # Read current data
         products = self.read_csv_data()

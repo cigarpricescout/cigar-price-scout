@@ -293,12 +293,7 @@ class TobaccoStockPriceUpdater:
     def save_updated_data(self, updated_data):
         """Save updated data to CSV with backup"""
         try:
-            # Create backup
-            if self.csv_path.exists():
-                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                backup_path = self.csv_path.with_suffix(f'.backup_{timestamp}.csv')
-                self.csv_path.rename(backup_path)
-                print(f"Backup created: {backup_path.name}")
+            # Backup disabled - historical prices tracked in historical_prices.db
             
             # Write updated data
             fieldnames = [
