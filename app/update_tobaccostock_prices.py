@@ -15,6 +15,7 @@ import os
 import csv
 import argparse
 import pandas as pd
+import sqlite3
 from pathlib import Path
 from datetime import datetime
 import time
@@ -37,7 +38,7 @@ class TobaccoStockPriceUpdater:
         self.dry_run = dry_run
         self.project_root = project_root
         self.csv_path = self.project_root / "static" / "data" / "tobaccostock.csv"
-        self.master_csv_path = self.project_root / "data" / "master_cigars.csv"
+        self.master_csv_path = self.project_root / "data" / "master_cigars.db"
         
         # Ensure directories exist
         self.csv_path.parent.mkdir(parents=True, exist_ok=True)

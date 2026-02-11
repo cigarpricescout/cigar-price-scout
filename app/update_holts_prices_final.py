@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Holt's Cigars Enhanced Price Updater with Master-Driven Metadata Sync
-ALWAYS syncs ALL metadata from master_cigars.csv (master is authority source)
+ALWAYS syncs ALL metadata from master_cigars.db (master is authority source)
 Enhanced version: metadata changes in master file auto-propagate to retailer CSV
 Following the proven master-sync pattern for true data consistency
 """
@@ -9,6 +9,7 @@ Following the proven master-sync pattern for true data consistency
 import sys
 import os
 import pandas as pd
+import sqlite3
 import csv
 from datetime import datetime
 import time
@@ -33,11 +34,13 @@ except ImportError:
 def load_master_data():
     """Load the master cigar database for matching and metadata sync"""
     try:
-        master_path = os.path.join(project_root, 'data', 'master_cigars.csv')
+        master_path = os.path.join(project_root, 'data', 'master_cigars.db')
         if not os.path.exists(master_path):
-            master_path = os.path.join(project_root, 'static', 'data', 'master_cigars.csv')
+            master_path = os.path.join(project_root, 'static', 'data', 'master_cigars.db')
         
-        master_df = pd.read_csv(master_path)
+        conn = sqlite3.connect(master_path)
+        master_df = pd.read_sql_query("SELECT * FROM cigars", conn)
+        conn.close()
         print(f"[INFO] Loaded master file with {len(master_df)} total cigars")
         
         # Handle duplicate cigar_id values by keeping the first occurrence

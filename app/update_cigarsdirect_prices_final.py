@@ -9,6 +9,7 @@ import os
 import sys
 import shutil
 import pandas as pd
+import sqlite3
 from datetime import datetime
 from typing import List, Dict
 
@@ -30,7 +31,7 @@ class CigarsDirectCSVUpdaterCorrected:
             self.csv_path = csv_path
             
         if master_path is None:
-            self.master_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'master_cigars.csv')
+            self.master_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'master_cigars.db')
         else:
             self.master_path = master_path
             
@@ -41,7 +42,9 @@ class CigarsDirectCSVUpdaterCorrected:
     def load_master_file(self) -> bool:
         """Load the master cigars file"""
         try:
-            self.master_df = pd.read_csv(self.master_path)
+            conn = sqlite3.connect(self.master_path)
+            self.master_df = pd.read_sql_query("SELECT * FROM cigars", conn)
+            conn.close()
             self.master_df['Box Quantity'] = pd.to_numeric(self.master_df['Box Quantity'], errors='coerce').fillna(0)
             box_skus = self.master_df[self.master_df['Box Quantity'] >= 5]
             

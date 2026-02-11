@@ -1,6 +1,6 @@
 """
 Fox Cigar Enhanced CSV Updater with Master-Driven Metadata Sync
-ALWAYS syncs ALL metadata from master_cigars.csv (master is authority source)
+ALWAYS syncs ALL metadata from master_cigars.db (master is authority source)
 Enhanced version: metadata changes in master file auto-propagate to retailer CSV
 Following the proven master-sync pattern for true data consistency
 """
@@ -10,6 +10,7 @@ import os
 import sys
 import shutil
 import pandas as pd
+import sqlite3
 from datetime import datetime
 from typing import List, Dict
 
@@ -34,7 +35,7 @@ class FoxCigarCSVUpdater:
             self.csv_path = csv_path
             
         if master_path is None:
-            self.master_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'master_cigars.csv')
+            self.master_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'master_cigars.db')
         else:
             self.master_path = master_path
             
@@ -45,7 +46,9 @@ class FoxCigarCSVUpdater:
     def load_master_file(self) -> bool:
         """Load the master cigars file"""
         try:
-            self.master_df = pd.read_csv(self.master_path)
+            conn = sqlite3.connect(self.master_path)
+            self.master_df = pd.read_sql_query("SELECT * FROM cigars", conn)
+            conn.close()
             
             # Convert Box Quantity to numeric
             self.master_df['Box Quantity'] = pd.to_numeric(self.master_df['Box Quantity'], errors='coerce').fillna(0)

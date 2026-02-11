@@ -1,6 +1,6 @@
 """
 Atlantic Cigar CSV Updater with Google Sheets Master File Integration
-Uses cigar_id from master_cigars.csv for metadata auto-population
+Uses cigar_id from master_cigars.db for metadata auto-population
 """
 
 import csv
@@ -8,6 +8,7 @@ import os
 import sys
 import shutil
 import pandas as pd
+import sqlite3
 from datetime import datetime
 from typing import List, Dict
 
@@ -31,7 +32,7 @@ class AtlanticCSVUpdaterWithMaster:
             
         if master_path is None:
             # Default path to master file
-            self.master_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'master_cigars.csv')
+            self.master_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'master_cigars.db')
         else:
             self.master_path = master_path
             
@@ -41,7 +42,9 @@ class AtlanticCSVUpdaterWithMaster:
     def load_master_file(self) -> bool:
         """Load the master cigars file"""
         try:
-            self.master_df = pd.read_csv(self.master_path)
+            conn = sqlite3.connect(self.master_path)
+            self.master_df = pd.read_sql_query("SELECT * FROM cigars", conn)
+            conn.close()
             
             # Convert Box Quantity to numeric, replacing any non-numeric values with 0
             self.master_df['Box Quantity'] = pd.to_numeric(self.master_df['Box Quantity'], errors='coerce').fillna(0)

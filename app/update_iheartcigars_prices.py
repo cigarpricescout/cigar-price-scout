@@ -155,7 +155,7 @@ class IHeartCigarsPriceUpdater:
     
     def __init__(self):
         # Use same path pattern as working Absolute Cigars updater
-        self.master_file_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'master_cigars.csv')
+        self.master_file_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'master_cigars.db')
         self.output_file_path = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'iheartcigars.csv')
         self.master_cigars = {}
         

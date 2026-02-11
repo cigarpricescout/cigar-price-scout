@@ -8,6 +8,7 @@ import os
 import sys
 import shutil
 import pandas as pd
+import sqlite3
 import logging
 from datetime import datetime
 from typing import List, Dict
@@ -45,7 +46,7 @@ class CCCrafterCSVUpdaterWithMaster:
         if master_path is None:
             current_dir = os.path.dirname(os.path.abspath(__file__))
             project_root = os.path.dirname(current_dir)
-            self.master_path = os.path.join(project_root, 'data', 'master_cigars.csv')
+            self.master_path = os.path.join(project_root, 'data', 'master_cigars.db')
         else:
             self.master_path = master_path
             
@@ -67,7 +68,9 @@ class CCCrafterCSVUpdaterWithMaster:
     def load_master_file(self) -> bool:
         """Load the master cigars file"""
         try:
-            self.master_df = pd.read_csv(self.master_path)
+            conn = sqlite3.connect(self.master_path)
+            self.master_df = pd.read_sql_query("SELECT * FROM cigars", conn)
+            conn.close()
             
             # Convert Box Quantity to numeric
             self.master_df['Box Quantity'] = pd.to_numeric(self.master_df['Box Quantity'], errors='coerce').fillna(0)

@@ -660,56 +660,57 @@ def load_all_products():
     return all_products
 
 def load_master_wrapper_aliases():
-    """Load wrapper aliases from master_cigars.csv for lookup"""
-    # Try multiple possible paths for the master file using dynamic path resolution
+    """Load wrapper aliases from master_cigars.db (SQLite) for lookup"""
+    # Try multiple possible paths for the master database
     possible_paths = [
-        Path("data/master_cigars.csv"),
-        Path("../data/master_cigars.csv") if os.path.exists("../data") else Path("data/master_cigars.csv"),
-        Path("./master_cigars.csv"),
-        Path(f"{STATIC_PATH}/data/master_cigars.csv")
+        Path("data/master_cigars.db"),
+        Path("../data/master_cigars.db") if os.path.exists("../data") else Path("data/master_cigars.db"),
+        Path(f"{STATIC_PATH}/data/master_cigars.db")
     ]
     
-    master_file = None
+    master_db = None
     for path in possible_paths:
         if path.exists():
-            master_file = path
+            master_db = path
             break
     
-    if not master_file:
-        print(f"Warning: Master file not found in any of these locations: {[str(p) for p in possible_paths]}")
+    if not master_db:
+        print(f"Warning: Master database not found in any of these locations: {[str(p) for p in possible_paths]}")
         return {}
     
-    print(f"Loading wrapper aliases from: {master_file}")
+    print(f"Loading wrapper aliases from: {master_db}")
     wrapper_aliases = {}
     
     try:
-        with open(master_file, 'r', newline='', encoding='utf-8') as f:
-            reader = csv.DictReader(f)
-            rows_processed = 0
-            aliases_found = 0
+        conn = sqlite3.connect(master_db)
+        cursor = conn.execute("SELECT brand, line, wrapper, wrapper_alias FROM cigars WHERE wrapper_alias IS NOT NULL AND wrapper_alias != ''")
+        rows_processed = 0
+        aliases_found = 0
+        
+        for row in cursor:
+            rows_processed += 1
+            brand, line, wrapper, wrapper_alias = row
+            wrapper = (wrapper or '').strip()
+            wrapper_alias = (wrapper_alias or '').strip()
+            brand = (brand or '').strip()
+            line = (line or '').strip()
             
-            for row in reader:
-                rows_processed += 1
-                wrapper = row.get('Wrapper', '').strip()
-                wrapper_alias = row.get('Wrapper_Alias', '').strip()
-                brand = row.get('Brand', '').strip()
-                line = row.get('Line', '').strip()
+            if wrapper and wrapper_alias and wrapper_alias != wrapper:
+                aliases_found += 1
+                # Create a composite key for more precise matching
+                key = f"{brand}|{line}|{wrapper}"
+                wrapper_aliases[key] = wrapper_alias
                 
-                if wrapper and wrapper_alias and wrapper_alias != wrapper:
-                    aliases_found += 1
-                    # Create a composite key for more precise matching
-                    key = f"{brand}|{line}|{wrapper}"
-                    wrapper_aliases[key] = wrapper_alias
-                    
-                    # Also create a simple wrapper-only key as fallback
-                    if wrapper not in wrapper_aliases:
-                        wrapper_aliases[wrapper] = wrapper_alias
-                    
-                    # Debug first few entries
-                    if aliases_found <= 5:
-                        print(f"  Added alias: {wrapper} -> {wrapper_alias} (Brand: {brand}, Line: {line})")
-            
-            print(f"Processed {rows_processed} rows, found {aliases_found} wrapper aliases")
+                # Also create a simple wrapper-only key as fallback
+                if wrapper not in wrapper_aliases:
+                    wrapper_aliases[wrapper] = wrapper_alias
+                
+                # Debug first few entries
+                if aliases_found <= 5:
+                    print(f"  Added alias: {wrapper} -> {wrapper_alias} (Brand: {brand}, Line: {line})")
+        
+        conn.close()
+        print(f"Processed {rows_processed} rows, found {aliases_found} wrapper aliases")
             
     except Exception as e:
         print(f"Error loading master wrapper aliases: {e}")
