@@ -630,8 +630,8 @@ def load_csv(csv_path, retailer_key, retailer_name):
                         in_stock=row.get('in_stock', True),
                         current_promotions_applied=row.get('current_promotions_applied', '')
                     )
-                    # Only include products with valid URLs (exclude empty URLs)
-                    if product.brand and product.line and product.size and product.url:
+                    # Only include products with valid URLs and prices (exclude empty/zero)
+                    if product.brand and product.line and product.size and product.url and product.price_cents > 0:
                         items.append(product)
                 except Exception as e:
                     continue
