@@ -359,9 +359,9 @@
         const metaDesc = document.querySelector('meta[name="description"]');
 
         if (!data.results || data.results.length === 0) {
-        if (titleEl) titleEl.textContent = 'No results found';
-        document.querySelector('#resultsTable tbody').innerHTML = '<tr><td colspan="4" class="p-4 text-center">No matching cigars found.</td></tr>';
-        document.getElementById('mobileCards').innerHTML = '<div class="bg-white border border-gray-200 rounded-xl p-5 text-center">No matching cigars found.</div>';
+        if (titleEl) titleEl.textContent = 'Not enough data yet';
+        document.querySelector('#resultsTable tbody').innerHTML = '<tr><td colspan="4" class="p-4 text-center text-gray-500">We need at least 3 retailers to show a meaningful price comparison. Check back soon!</td></tr>';
+        document.getElementById('mobileCards').innerHTML = '<div class="bg-white border border-gray-200 rounded-xl p-5 text-center text-gray-500">We need at least 3 retailers to show a meaningful price comparison. Check back soon!</div>';
             return;
         }
 

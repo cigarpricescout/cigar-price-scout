@@ -1202,7 +1202,10 @@ def compare_all(
     else:
         median_price = None
 
-    if not matching_products:
+    # Require at least 3 unique retailers with prices for a meaningful comparison
+    unique_retailers_with_prices = {p.retailer_key for p in matching_products if p.price_cents}
+    
+    if not matching_products or len(unique_retailers_with_prices) < 3:
         return {
             "brand": brand,
             "line": line,
@@ -1540,8 +1543,11 @@ async def cigar_landing_page(brand: str, line: str):
         and normalize_line_slug(p.line) == line.lower()
     ]
     
-    if not matching_products:
-        # Return proper 404 for cigars with no data (prevents soft 404 in Google)
+    # Require at least 3 unique retailers with prices for a meaningful comparison
+    unique_retailers_with_prices = {p.retailer_key for p in matching_products if p.price_cents}
+    
+    if not matching_products or len(unique_retailers_with_prices) < 3:
+        # Return proper 404 for cigars with no/insufficient data (prevents thin content in Google)
         return HTMLResponse(
             content=f"""<!DOCTYPE html>
 <html lang="en">
@@ -1557,8 +1563,8 @@ async def cigar_landing_page(brand: str, line: str):
     <div class="max-w-2xl mx-auto px-5 py-20 text-center">
         <img src="/static/logo.png" alt="Cigar Price Scout" class="w-24 h-20 mx-auto mb-6">
         <h1 class="text-3xl font-bold text-gray-800 mb-4">Cigar Not Found</h1>
-        <p class="text-gray-600 mb-6">We don't have pricing data for <strong>{brand_display} {line_display}</strong> yet.</p>
-        <p class="text-gray-500 mb-8">Want us to add it? Let us know!</p>
+        <p class="text-gray-600 mb-6">We don't have enough pricing data for <strong>{brand_display} {line_display}</strong> yet.</p>
+        <p class="text-gray-500 mb-8">We need at least 3 retailers to show a meaningful comparison. Want us to add more? Let us know!</p>
         <div class="space-x-4">
             <a href="/" class="inline-block bg-amber-700 hover:bg-amber-800 text-white font-semibold py-3 px-6 rounded-lg">Browse All Cigars</a>
             <a href="/request-box-pricing.html" class="inline-block border border-amber-700 text-amber-700 hover:bg-amber-50 font-semibold py-3 px-6 rounded-lg">Request This Cigar</a>
