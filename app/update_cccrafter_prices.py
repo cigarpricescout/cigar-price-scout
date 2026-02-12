@@ -73,10 +73,10 @@ class CCCrafterCSVUpdaterWithMaster:
             conn.close()
             
             # Convert Box Quantity to numeric
-            self.master_df['Box Quantity'] = pd.to_numeric(self.master_df['Box Quantity'], errors='coerce').fillna(0)
+            self.master_df['box_quantity'] = pd.to_numeric(self.master_df['box_quantity'], errors='coerce').fillna(0)
             
             # Filter to box quantities (10+)
-            box_skus = self.master_df[self.master_df['Box Quantity'] >= 10]
+            box_skus = self.master_df[self.master_df['box_quantity'] >= 10]
             
             print(f"[INFO] Loaded master file with {len(self.master_df)} total cigars")
             print(f"[INFO] Found {len(box_skus)} box SKUs for retail comparison")
@@ -107,24 +107,24 @@ class CCCrafterCSVUpdaterWithMaster:
         
         # Build size string from Length x Ring Gauge
         size = ''
-        if pd.notna(row.get('Length')) and pd.notna(row.get('Ring Gauge')):
-            size = f"{row.get('Length')}x{row.get('Ring Gauge')}"
+        if pd.notna(row.get('length')) and pd.notna(row.get('ring_gauge')):
+            size = f"{row.get('length')}x{row.get('ring_gauge')}"
         
         # Get box quantity
         box_qty = 0
-        if pd.notna(row.get('Box Quantity')):
+        if pd.notna(row.get('box_quantity')):
             try:
-                box_qty = int(row.get('Box Quantity', 0))
+                box_qty = int(row.get('box_quantity', 0))
             except (ValueError, TypeError):
                 pass
         
         # CORRECTED FIELD MAPPING - use actual master file column names
         return {
-            'title': str(row.get('Vitola', '')),  # Use Vitola as title (like "Classic", "Robusto")
-            'brand': str(row.get('Brand', '')), 
-            'line': str(row.get('Line', '')),
-            'wrapper': str(row.get('Wrapper', '')),
-            'vitola': str(row.get('Vitola', '')),
+            'title': str(row.get('vitola', '')),  # Use Vitola as title (like "Classic", "Robusto")
+            'brand': str(row.get('brand', '')), 
+            'line': str(row.get('line', '')),
+            'wrapper': str(row.get('wrapper', '')),
+            'vitola': str(row.get('vitola', '')),
             'size': size,
             'box_qty': str(box_qty)  # Convert to string for CSV consistency
         }

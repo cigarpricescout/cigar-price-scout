@@ -68,12 +68,12 @@ def sync_metadata_from_master(row_dict, master_lookup):
     # Field mapping from master to row
     field_mapping = {
         'title': 'product_name',
-        'brand': 'Brand',
-        'line': 'Line', 
-        'wrapper': 'Wrapper',
-        'vitola': 'Vitola',
-        'size': lambda data: f"{data.get('Length', '')}x{data.get('Ring Gauge', '')}" if pd.notna(data.get('Length')) and pd.notna(data.get('Ring Gauge')) else '',
-        'box_qty': 'Box Quantity'
+        'brand': 'brand',
+        'line': 'line', 
+        'wrapper': 'wrapper',
+        'vitola': 'vitola',
+        'size': lambda data: f"{data.get('length', '')}x{data.get('ring_gauge', '')}" if pd.notna(data.get('length')) and pd.notna(data.get('ring_gauge')) else '',
+        'box_qty': 'box_quantity'
     }
     
     # ALWAYS override with master data

@@ -49,10 +49,10 @@ class AtlanticCigarsCSVUpdaterWithMaster:
             conn.close()
             
             # Convert Box Quantity to numeric
-            self.master_df['Box Quantity'] = pd.to_numeric(self.master_df['Box Quantity'], errors='coerce').fillna(0)
+            self.master_df['box_quantity'] = pd.to_numeric(self.master_df['box_quantity'], errors='coerce').fillna(0)
             
             # Filter to box quantities (10+)
-            box_skus = self.master_df[self.master_df['Box Quantity'] >= 10]
+            box_skus = self.master_df[self.master_df['box_quantity'] >= 10]
             
             print(f"[INFO] Loaded master file with {len(self.master_df)} total cigars")
             print(f"[INFO] Found {len(box_skus)} box SKUs for retail comparison")
@@ -83,23 +83,23 @@ class AtlanticCigarsCSVUpdaterWithMaster:
         
         # Build size string from Length x Ring Gauge
         size = ''
-        if pd.notna(row.get('Length')) and pd.notna(row.get('Ring Gauge')):
-            size = f"{row.get('Length')}x{row.get('Ring Gauge')}"
+        if pd.notna(row.get('length')) and pd.notna(row.get('ring_gauge')):
+            size = f"{row.get('length')}x{row.get('ring_gauge')}"
         
         # Get box quantity
         box_qty = 0
-        if pd.notna(row.get('Box Quantity')):
+        if pd.notna(row.get('box_quantity')):
             try:
-                box_qty = int(row.get('Box Quantity', 0))
+                box_qty = int(row.get('box_quantity', 0))
             except (ValueError, TypeError):
                 pass
         
         return {
             'title': row.get('product_name', ''),
-            'brand': row.get('Brand', ''), 
-            'line': row.get('Line', ''),
-            'wrapper': row.get('Wrapper', ''),
-            'vitola': row.get('Vitola', ''),
+            'brand': row.get('brand', ''), 
+            'line': row.get('line', ''),
+            'wrapper': row.get('wrapper', ''),
+            'vitola': row.get('vitola', ''),
             'size': size,
             'box_qty': box_qty
         }

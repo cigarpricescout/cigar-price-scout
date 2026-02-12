@@ -48,17 +48,12 @@ class WatchCityCigarsCSVUpdaterWithMaster:
             self.master_df = pd.read_sql_query("SELECT * FROM cigars", conn)
             conn.close()
             
-            # Convert Box Quantity to numeric
-            if 'Box Quantity' in self.master_df.columns:
-                self.master_df['Box Quantity'] = pd.to_numeric(self.master_df['Box Quantity'], errors='coerce').fillna(0)
-                box_skus = self.master_df[self.master_df['Box Quantity'] >= 5]
+            # Convert box_quantity to numeric
+            if 'box_quantity' in self.master_df.columns:
+                self.master_df['box_quantity'] = pd.to_numeric(self.master_df['box_quantity'], errors='coerce').fillna(0)
+                box_skus = self.master_df[self.master_df['box_quantity'] >= 5]
             else:
-                # Alternative column names
-                if 'Box_Qty' in self.master_df.columns:
-                    self.master_df['Box_Qty'] = pd.to_numeric(self.master_df['Box_Qty'], errors='coerce').fillna(0)
-                    box_skus = self.master_df[self.master_df['Box_Qty'] >= 5]
-                else:
-                    box_skus = self.master_df  # Use all if no box quantity column
+                box_skus = self.master_df  # Use all if no box quantity column
             
             print(f"[INFO] Loaded master file with {len(self.master_df)} total cigars")
             print(f"[INFO] Found {len(box_skus)} box SKUs for retail comparison")
@@ -96,8 +91,8 @@ class WatchCityCigarsCSVUpdaterWithMaster:
         
         # Build size string from Length x Ring Gauge
         size = ''
-        length = get_column_value(row, ['Length', 'length'])
-        ring_gauge = get_column_value(row, ['Ring Gauge', 'ring_gauge', 'RingGauge'])
+        length = get_column_value(row, ['length', 'Length'])
+        ring_gauge = get_column_value(row, ['ring_gauge', 'Ring Gauge', 'RingGauge'])
         
         if length and ring_gauge:
             size = f"{length}x{ring_gauge}"
@@ -106,7 +101,7 @@ class WatchCityCigarsCSVUpdaterWithMaster:
         
         # Get box quantity
         box_qty = 25  # Default
-        box_qty_raw = get_column_value(row, ['Box Quantity', 'Box_Qty', 'box_qty'])
+        box_qty_raw = get_column_value(row, ['box_quantity', 'Box Quantity', 'Box_Qty'])
         if box_qty_raw:
             try:
                 box_qty = int(box_qty_raw)
@@ -114,11 +109,11 @@ class WatchCityCigarsCSVUpdaterWithMaster:
                 pass
         
         return {
-            'title': get_column_value(row, ['product_name', 'Product_Name', 'Vitola', 'vitola']),
-            'brand': get_column_value(row, ['Brand', 'brand']), 
-            'line': get_column_value(row, ['Line', 'line']),
-            'wrapper': get_column_value(row, ['Wrapper', 'wrapper']),
-            'vitola': get_column_value(row, ['Vitola', 'vitola']),
+            'title': get_column_value(row, ['product_name', 'Product_Name', 'vitola', 'Vitola']),
+            'brand': get_column_value(row, ['brand', 'Brand']), 
+            'line': get_column_value(row, ['line', 'Line']),
+            'wrapper': get_column_value(row, ['wrapper', 'Wrapper']),
+            'vitola': get_column_value(row, ['vitola', 'Vitola']),
             'size': size,
             'box_qty': box_qty
         }

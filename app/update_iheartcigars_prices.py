@@ -240,25 +240,25 @@ class IHeartCigarsPriceUpdater:
         
         # Build size string from Length x Ring Gauge
         size = ''
-        length = master_entry.get('Length', '')
-        ring_gauge = master_entry.get('Ring Gauge', '')
+        length = master_entry.get('length', '')
+        ring_gauge = master_entry.get('ring_gauge', '')
         if length and ring_gauge:
             size = f"{length}x{ring_gauge}"
         
         # Get box quantity
         box_qty = 0
-        if master_entry.get('Box Quantity'):
+        if master_entry.get('box_quantity'):
             try:
-                box_qty = int(master_entry.get('Box Quantity', 0))
+                box_qty = int(master_entry.get('box_quantity', 0))
             except (ValueError, TypeError):
                 pass
         
         return {
             'title': master_entry.get('product_name', ''),
-            'brand': master_entry.get('Brand', ''), 
-            'line': master_entry.get('Line', ''),
-            'wrapper': master_entry.get('Wrapper', ''),
-            'vitola': master_entry.get('Vitola', ''),
+            'brand': master_entry.get('brand', ''), 
+            'line': master_entry.get('line', ''),
+            'wrapper': master_entry.get('wrapper', ''),
+            'vitola': master_entry.get('vitola', ''),
             'size': size,
             'box_qty': box_qty
         }

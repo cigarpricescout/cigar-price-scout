@@ -47,10 +47,10 @@ class AtlanticCSVUpdaterWithMaster:
             conn.close()
             
             # Convert Box Quantity to numeric, replacing any non-numeric values with 0
-            self.master_df['Box Quantity'] = pd.to_numeric(self.master_df['Box Quantity'], errors='coerce').fillna(0)
+            self.master_df['box_quantity'] = pd.to_numeric(self.master_df['box_quantity'], errors='coerce').fillna(0)
             
             # Filter to only box quantities (10+) for retail comparison
-            box_skus = self.master_df[self.master_df['Box Quantity'] >= 10]
+            box_skus = self.master_df[self.master_df['box_quantity'] >= 10]
             
             print(f"[OK] Loaded {len(self.master_df)} total SKUs from master file")
             print(f"[OK] Found {len(box_skus)} box quantity SKUs (10+ cigars)")
@@ -72,17 +72,17 @@ class AtlanticCSVUpdaterWithMaster:
             row = matching_rows.iloc[0]  # Take first match
             
             return {
-                'brand': str(row['Brand']),
-                'line': str(row['Line']),
-                'wrapper': str(row['Wrapper']),
-                'vitola': str(row['Vitola']),
-                'size': f"{row['Length']}x{row['Ring Gauge']}",
-                'box_qty': int(row['Box Quantity']),
-                'binder': str(row.get('Binder', '')),
-                'filler': str(row.get('Filler', '')),
-                'strength': str(row.get('Strength', '')),
-                'style': str(row.get('Style', '')),
-                'wrapper_alias': str(row.get('Wrapper_Alias', '')),
+                'brand': str(row['brand']),
+                'line': str(row['line']),
+                'wrapper': str(row['wrapper']),
+                'vitola': str(row['vitola']),
+                'size': f"{row['length']}x{row['ring_gauge']}",
+                'box_qty': int(row['box_quantity']),
+                'binder': str(row.get('binder', '')),
+                'filler': str(row.get('filler', '')),
+                'strength': str(row.get('strength', '')),
+                'style': str(row.get('style', '')),
+                'wrapper_alias': str(row.get('wrapper_alias', '')),
                 'country': str(row.get('country_of_origin', '')),
                 'factory': str(row.get('factory', ''))
             }
@@ -94,7 +94,7 @@ class AtlanticCSVUpdaterWithMaster:
         """Find a matching cigar_id from the master file based on product details"""
         try:
             # Filter box quantities only
-            box_skus = self.master_df[self.master_df['Box Quantity'] >= 10].copy()
+            box_skus = self.master_df[self.master_df['box_quantity'] >= 10].copy()
             
             # Simple matching - look for brand and vitola in title
             matches = []
@@ -103,28 +103,28 @@ class AtlanticCSVUpdaterWithMaster:
                 score = 0
                 
                 # Check if brand matches
-                if brand.lower() in row['Brand'].lower() or row['Brand'].lower() in brand.lower():
+                if brand.lower() in row['brand'].lower() or row['brand'].lower() in brand.lower():
                     score += 3
                 elif brand.lower() in title.lower():
                     score += 2
                 
                 # Check if line matches
-                if line and (line.lower() in row['Line'].lower() or row['Line'].lower() in line.lower()):
+                if line and (line.lower() in row['line'].lower() or row['line'].lower() in line.lower()):
                     score += 2
                 
                 # Check if vitola matches
-                if vitola and (vitola.lower() in row['Vitola'].lower() or row['Vitola'].lower() in vitola.lower()):
+                if vitola and (vitola.lower() in row['vitola'].lower() or row['vitola'].lower() in vitola.lower()):
                     score += 2
                 
                 # Check title contains vitola
-                if row['Vitola'].lower() in title.lower():
+                if row['vitola'].lower() in title.lower():
                     score += 1
                 
                 if score >= 3:  # Minimum threshold for a match
                     matches.append({
                         'cigar_id': row['cigar_id'],
                         'score': score,
-                        'match_text': f"{row['Brand']} {row['Line']} {row['Vitola']} ({row['Length']}x{row['Ring Gauge']})"
+                        'match_text': f"{row['brand']} {row['line']} {row['vitola']} ({row['length']}x{row['ring_gauge']})"
                     })
             
             if matches:

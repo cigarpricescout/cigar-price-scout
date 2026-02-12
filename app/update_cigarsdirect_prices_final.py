@@ -45,8 +45,8 @@ class CigarsDirectCSVUpdaterCorrected:
             conn = sqlite3.connect(self.master_path)
             self.master_df = pd.read_sql_query("SELECT * FROM cigars", conn)
             conn.close()
-            self.master_df['Box Quantity'] = pd.to_numeric(self.master_df['Box Quantity'], errors='coerce').fillna(0)
-            box_skus = self.master_df[self.master_df['Box Quantity'] >= 5]
+            self.master_df['box_quantity'] = pd.to_numeric(self.master_df['box_quantity'], errors='coerce').fillna(0)
+            box_skus = self.master_df[self.master_df['box_quantity'] >= 5]
             
             print(f"[INFO] Loaded master file with {len(self.master_df)} total cigars")
             print(f"[INFO] Found {len(box_skus)} box SKUs for retail comparison")
@@ -76,22 +76,22 @@ class CigarsDirectCSVUpdaterCorrected:
         row = matching_rows.iloc[0]
         
         size = ''
-        if pd.notna(row.get('Length')) and pd.notna(row.get('Ring Gauge')):
-            size = f"{row.get('Length')}x{row.get('Ring Gauge')}"
+        if pd.notna(row.get('length')) and pd.notna(row.get('ring_gauge')):
+            size = f"{row.get('length')}x{row.get('ring_gauge')}"
         
         box_qty = 0
-        if pd.notna(row.get('Box Quantity')):
+        if pd.notna(row.get('box_quantity')):
             try:
-                box_qty = int(row.get('Box Quantity', 0))
+                box_qty = int(row.get('box_quantity', 0))
             except (ValueError, TypeError):
                 pass
         
         return {
             'title': row.get('product_name', ''),
-            'brand': row.get('Brand', ''), 
-            'line': row.get('Line', ''),
-            'wrapper': row.get('Wrapper', ''),
-            'vitola': row.get('Vitola', ''),
+            'brand': row.get('brand', ''), 
+            'line': row.get('line', ''),
+            'wrapper': row.get('wrapper', ''),
+            'vitola': row.get('vitola', ''),
             'size': size,
             'box_qty': box_qty
         }
