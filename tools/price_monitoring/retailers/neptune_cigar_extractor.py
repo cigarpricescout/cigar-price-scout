@@ -12,9 +12,13 @@ import re
 import time
 from typing import Dict, Optional
 
-def extract_neptune_cigar_data(url: str) -> Dict:
+def extract_neptune_cigar_data(url: str, target_box_qty: int = None) -> Dict:
     """
     Extract data from Neptune Cigar URL - FIXED VERSION
+    
+    Args:
+        url: The Neptune product URL
+        target_box_qty: The specific box quantity we're tracking (e.g., 25)
     
     Returns:
     {
@@ -39,13 +43,13 @@ def extract_neptune_cigar_data(url: str) -> Dict:
         soup = BeautifulSoup(response.content, 'html.parser')
         
         # Extract box quantity
-        box_qty = _extract_box_quantity(soup)
+        box_qty = _extract_box_quantity(soup, target_box_qty)
         
         # Extract pricing using Neptune-specific logic
-        price, discount_percent = _extract_neptune_pricing(soup)
+        price, discount_percent = _extract_neptune_pricing(soup, box_qty)
         
-        # Check stock status
-        in_stock = _extract_stock_status(soup)
+        # Check stock status FOR THE SPECIFIC BOX QUANTITY
+        in_stock = _extract_stock_status(soup, box_qty)
         
         return {
             'success': True,
@@ -67,9 +71,18 @@ def extract_neptune_cigar_data(url: str) -> Dict:
         }
 
 
-def _extract_box_quantity(soup: BeautifulSoup) -> Optional[int]:
-    """Extract box quantity from Neptune's table"""
+def _extract_box_quantity(soup: BeautifulSoup, target_box_qty: int = None) -> Optional[int]:
+    """
+    Extract box quantity from Neptune's table
+    
+    Args:
+        soup: BeautifulSoup object
+        target_box_qty: If provided, we're looking for this specific quantity
+    
+    Returns the target box quantity if found, otherwise the first box quantity
+    """
     table_rows = soup.find_all('tr')
+    found_quantities = []
     
     for row in table_rows:
         cells = row.find_all(['td', 'th'])
@@ -81,16 +94,22 @@ def _extract_box_quantity(soup: BeautifulSoup) -> Optional[int]:
                 try:
                     qty = int(match.group(1))
                     if qty >= 10:
-                        return qty
+                        found_quantities.append(qty)
+                        # If this is the target quantity, return immediately
+                        if target_box_qty and qty == target_box_qty:
+                            return qty
                 except ValueError:
                     continue
     
-    return None
+    # Return first found quantity if target not specified or not found
+    return found_quantities[0] if found_quantities else None
 
 
-def _extract_neptune_pricing(soup: BeautifulSoup) -> tuple:
+def _extract_neptune_pricing(soup: BeautifulSoup, target_box_qty: int = None) -> tuple:
     """
     Extract pricing from Neptune's table structure - prioritize sale price over MSRP
+    Match pricing to specific box quantity if provided
+    
     Expected format: BOX OF X | MSRP $375.60 | OUR PRICE $337.95 | YOU SAVE $37.65
     """
     current_price = None
@@ -103,7 +122,13 @@ def _extract_neptune_pricing(soup: BeautifulSoup) -> tuple:
         row_text = row.get_text().strip()
         
         # Look for rows containing "BOX OF"
-        if re.search(r'box\s+of\s+\d+', row_text, re.IGNORECASE):
+        box_match = re.search(r'box\s+of\s+(\d+)', row_text, re.IGNORECASE)
+        if box_match:
+            # Check if this is the box quantity we're looking for
+            found_qty = int(box_match.group(1))
+            if target_box_qty and found_qty != target_box_qty:
+                continue  # Skip this row, not the box size we want
+            
             cells = row.find_all(['td', 'th'])
             
             # Extract prices from each cell in order
@@ -121,7 +146,7 @@ def _extract_neptune_pricing(soup: BeautifulSoup) -> tuple:
                         continue
             
             if cell_prices:
-                print(f"DEBUG: Found {len(cell_prices)} prices in box row:")
+                print(f"DEBUG: Found {len(cell_prices)} prices in BOX OF {found_qty} row:")
                 for price_val, cell_idx, cell_text in cell_prices:
                     print(f"  Cell {cell_idx}: ${price_val} in '{cell_text[:30]}...'")
                 
@@ -208,20 +233,73 @@ def _extract_neptune_pricing(soup: BeautifulSoup) -> tuple:
     return current_price, discount_percent
 
 
-def _extract_stock_status(soup: BeautifulSoup) -> bool:
-    """Extract stock status from Neptune"""
-    page_text = soup.get_text().lower()
+def _extract_stock_status(soup: BeautifulSoup, target_box_qty: int = None) -> bool:
+    """
+    Extract stock status from Neptune FOR THE SPECIFIC BOX QUANTITY
     
-    # Check for out of stock indicators
-    if 'backorder' in page_text:
-        return False
+    Neptune shows multiple box sizes with different availability:
+    - BOX OF 25 | MSRP | OUR PRICE | AVAILABILITY: IN STOCK
+    - BOX OF 15 | MSRP | OUR PRICE | AVAILABILITY: BACKORDER
     
-    # Check for in stock indicators  
-    if 'in stock' in page_text:
+    We need to match the availability to the specific box quantity we're tracking.
+    """
+    if not target_box_qty:
+        # Fallback to old behavior if no target specified
+        page_text = soup.get_text().lower()
+        if 'backorder' in page_text:
+            return False
+        if 'in stock' in page_text:
+            return True
+        if soup.find(['button', 'input'], string=re.compile(r'add\s*to\s*cart', re.I)):
+            return True
         return True
     
-    # Check for add to cart button
-    if soup.find(['button', 'input'], string=re.compile(r'add\s*to\s*cart', re.I)):
+    # NEW LOGIC: Find the row with the target box quantity and check its availability
+    table_rows = soup.find_all('tr')
+    
+    for row in table_rows:
+        row_text = row.get_text().strip()
+        
+        # Check if this row contains our target box quantity
+        box_match = re.search(r'box\s+of\s+(\d+)', row_text, re.IGNORECASE)
+        if box_match:
+            found_qty = int(box_match.group(1))
+            if found_qty == target_box_qty:
+                # This is our row - check availability in this specific row
+                row_text_lower = row_text.lower()
+                
+                print(f"DEBUG: Found BOX OF {target_box_qty} row")
+                print(f"DEBUG: Row text: {row_text[:100]}...")
+                
+                # Check for availability indicators in THIS row only
+                if 'backorder' in row_text_lower or 'out of stock' in row_text_lower:
+                    print(f"DEBUG: BOX OF {target_box_qty} - OUT OF STOCK")
+                    return False
+                
+                if 'in stock' in row_text_lower:
+                    print(f"DEBUG: BOX OF {target_box_qty} - IN STOCK")
+                    return True
+                
+                # Check cells in this row for availability column
+                cells = row.find_all(['td', 'th'])
+                for cell in cells:
+                    cell_text = cell.get_text().strip().lower()
+                    if 'availability' in cell_text or len(cell_text) < 50:  # Likely the availability cell
+                        if 'in stock' in cell_text:
+                            print(f"DEBUG: BOX OF {target_box_qty} - IN STOCK (from cell)")
+                            return True
+                        if 'backorder' in cell_text or 'out of stock' in cell_text:
+                            print(f"DEBUG: BOX OF {target_box_qty} - OUT OF STOCK (from cell)")
+                            return False
+                
+                # If we found the row but no clear status, default to in stock
+                print(f"DEBUG: BOX OF {target_box_qty} - Assuming IN STOCK (no clear status)")
+                return True
+    
+    # If we didn't find the specific box quantity row, fallback to general check
+    print(f"DEBUG: Could not find BOX OF {target_box_qty} row, using fallback")
+    page_text = soup.get_text().lower()
+    if 'in stock' in page_text:
         return True
     
     return True  # Default to in stock

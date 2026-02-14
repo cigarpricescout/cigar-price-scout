@@ -1,5 +1,17 @@
 {
-  "hilands": [],
+  "hilands": [
+    {
+      "active": true,
+      "scope": "sitewide",
+      "discount": 12,
+      "code": "LOVE12",
+      "description": "12% off sitewide - Valentine's Day Sale",
+      "end_date": "2026-02-16",
+      "excluded_brands": [],
+      "brands": [],
+      "lines": []
+    }
+  ],
   "atlanticcigars": [],
   "absolutecigars": [],
   "bighumidor": [],
@@ -12,7 +24,19 @@
   "foxcigar": [],
   "gothamcigars": [],
   "holts": [],
-  "neptune": [],
+  "neptune": [
+    {
+      "active": true,
+      "scope": "sitewide",
+      "discount": 14,
+      "code": "LOVE26",
+      "description": "14% off sitewide - Valentine's Day Sale",
+      "end_date": "2026-02-16",
+      "excluded_brands": [],
+      "brands": [],
+      "lines": []
+    }
+  ],
   "planetcigars": [],
   "pyramidcigars": [],
   "smallbatchcigar": [],

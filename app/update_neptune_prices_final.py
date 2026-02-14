@@ -184,10 +184,10 @@ class NeptuneCSVUpdaterWithMaster:
             print(f"[ERROR] Failed to save CSV: {e}")
             return False
     
-    def update_pricing_data(self, url: str) -> Dict:
-        """Extract live pricing data from Neptune Cigar"""
+    def update_pricing_data(self, url: str, target_box_qty: int = None) -> Dict:
+        """Extract live pricing data from Neptune Cigar for a specific box quantity"""
         try:
-            result = extract_neptune_cigar_data(url)
+            result = extract_neptune_cigar_data(url, target_box_qty)
             
             if result.get('success'):
                 return {
@@ -257,7 +257,15 @@ class NeptuneCSVUpdaterWithMaster:
                 continue
             
             # Extract live pricing
-            pricing_data = self.update_pricing_data(url)
+            # Get the target box quantity from CSV to ensure we check the right product variant
+            target_box_qty = None
+            if row.get('box_qty'):
+                try:
+                    target_box_qty = int(row['box_qty'])
+                except (ValueError, TypeError):
+                    pass
+            
+            pricing_data = self.update_pricing_data(url, target_box_qty)
             
             if 'error' in pricing_data:
                 print(f"  [FAIL] {pricing_data['error']}")
