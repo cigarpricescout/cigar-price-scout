@@ -4,12 +4,15 @@ Should extract $270.52, not $100
 
 Fixed to handle Neptune's table structure:
 BOX OF 25 | MSRP $270.52 | OUR PRICE $270.52 | SMOKE RINGS | AVAILABILITY
+
+Rate limiting: 3-6 seconds per request (same as Holt's)
 """
 
 import requests
 from bs4 import BeautifulSoup
 import re
 import time
+import random
 from typing import Dict, Optional
 
 def extract_neptune_cigar_data(url: str, target_box_qty: int = None) -> Dict:
@@ -32,12 +35,15 @@ def extract_neptune_cigar_data(url: str, target_box_qty: int = None) -> Dict:
     """
     try:
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            'User-Agent': 'CigarPriceScoutBot/1.0 (+https://cigarpricescout.com/contact)'
         }
         
-        time.sleep(1)
+        # Rate limiting: 3-6 seconds with jitter (same as Holt's)
+        delay = random.uniform(3.0, 6.0)
+        print(f"[RATE LIMIT] Waiting {delay:.1f} seconds before Neptune request")
+        time.sleep(delay)
         
-        response = requests.get(url, headers=headers, timeout=10)
+        response = requests.get(url, headers=headers, timeout=15)
         response.raise_for_status()
         
         soup = BeautifulSoup(response.content, 'html.parser')
