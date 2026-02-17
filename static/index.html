@@ -12,22 +12,22 @@
   
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Cigar Price Scout - Compare Cigar Box Prices Across 35+ Retailers</title>
+  <title>Cigar Price Comparison - Compare Box Prices Across 35+ Retailers | Cigar Price Scout</title>
   
   <!-- Verification Tags -->
   <meta name="fo-verify" content="cc05d5b4-848a-4809-b7d9-5c4ae620bb8f" />
   <meta name='impact-site-verification' value='8827da88-cb8b-450d-934b-22aff8541f4b'>
   
   <!-- SEO Meta Tags -->
-  <meta name="description" content="Free cigar price checker. Compare box prices across 35+ online retailers with shipping and tax calculations. Updated daily." />
-  <meta name="keywords" content="cigar prices, cigar box prices, cigar box deals, cigar deals, wrapper types, vitola sizes, Connecticut, Maduro, Habano, cigar comparison, online cigar shopping" />
+  <meta name="description" content="Compare cigar box prices across 35+ online retailers. Find the best deals with real-time price comparison including shipping and tax. Updated daily." />
+  <meta name="keywords" content="cigar price comparison, compare cigar prices, cigar box prices, cigar box deals, cigar deals, best cigar prices, wrapper types, vitola sizes, Connecticut, Maduro, Habano, online cigar shopping" />
   
   <!-- Canonical URL -->
   <link rel="canonical" href="https://cigarpricescout.com/" />
   
   <!-- Open Graph Tags -->
-  <meta property="og:title" content="Cigar Price Scout - Compare Cigar Box Prices Across 35+ Retailers" />
-  <meta property="og:description" content="Free cigar price checker. Compare box prices across 35+ online retailers with shipping and tax calculations. Updated daily." />
+  <meta property="og:title" content="Cigar Price Comparison - Compare Box Prices Across 35+ Retailers | Cigar Price Scout" />
+  <meta property="og:description" content="Compare cigar box prices across 35+ online retailers. Find the best deals with real-time price comparison including shipping and tax. Updated daily." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://cigarpricescout.com" />
   <meta property="og:image" content="https://cigarpricescout.com/static/cigar-scout-social.png" />
@@ -269,6 +269,7 @@
            :href="getTrackingUrl(getCheapestResult())"
            target="_blank"
            rel="noopener"
+           @click="gtag('event','retailer_click',{retailer:getCheapestResult()?.retailer,cigar:brand+' '+line,price:getCheapestResult()?.delivered_after_promo,source:'best_price_block'})"
            class="block bg-white border-2 border-emerald-500 rounded-xl overflow-hidden shadow-sm mb-6 max-w-3xl mx-auto hover:shadow-lg hover:border-emerald-600 transition-all cursor-pointer">
           <!-- Top: Main Answer (Centered) -->
           <div class="bg-emerald-50 border-b border-emerald-200 px-5 py-4">
@@ -348,6 +349,7 @@
                     <a :href="getTrackingUrl(result)" 
                        target="_blank" 
                        rel="noopener"
+                       @click="gtag('event','retailer_click',{retailer:result.retailer,cigar:brand+' '+line,price:result.delivered_after_promo,source:'table'})"
                        class="text-brand-500 hover:underline font-semibold text-lg"
                        x-text="result.retailer"></a>
                   </td>
@@ -482,6 +484,7 @@
               <a :href="getTrackingUrl(result)" 
                  target="_blank" 
                  rel="noopener"
+                 @click="gtag('event','retailer_click',{retailer:result.retailer,cigar:brand+' '+line,price:result.delivered_after_promo,source:'mobile_card'})"
                  class="flex items-center justify-center mt-5 py-4 bg-brand-500 hover:bg-brand-600 rounded-xl transition-all duration-200 shadow-md hover:shadow-lg">
                 <img src="/static/logo.png" alt="Scout" class="w-8 h-8 object-contain" />
               </a>
@@ -697,6 +700,13 @@
         
         async search() {
           if (!this.canSearch) return;
+          
+          gtag('event', 'cigar_search', {
+            brand: this.selection.brand,
+            line: this.selection.line,
+            wrapper: this.selection.wrapper || '',
+            vitola: this.selection.vitola || ''
+          });
           
           this.isSearching = true;
           this.showResults = false;

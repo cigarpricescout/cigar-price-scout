@@ -490,7 +490,7 @@
       tbody.innerHTML = results.map(result => `
         <tr class="hover:bg-gray-50 transition-colors">
           <td class="p-4 border-b border-gray-200 text-center">
-            <a href="${result.url}" target="_blank" class="text-brand-500 hover:underline font-semibold text-lg">${result.retailer}</a>
+            <a href="${result.url}" target="_blank" class="text-brand-500 hover:underline font-semibold text-lg" onclick="gtag('event','retailer_click',{retailer:'${result.retailer}',cigar:brand+' '+line,price:'${result.base}',source:'table'})">${result.retailer}</a>
           </td>
           <td class="p-4 border-b border-gray-200 text-left text-sm text-muted">
                 ${result.wrapper ? `<div>Wrapper: ${result.wrapper}</div>` : ''}
@@ -527,7 +527,7 @@
             <div class="flex justify-between"><span class="text-muted">Box Size:</span><span class="font-semibold">${result.box_qty}</span></div>
             <div class="flex justify-between"><span class="text-muted">Stock:</span><span class="font-semibold">${result.oos ? '<span class="text-red-600">Out of Stock</span>' : '<span class="text-emerald-600">In Stock</span>'}</span></div>
               </div>
-          <a href="${result.url}" class="flex items-center justify-center py-4 bg-brand-500 hover:bg-brand-600 text-white rounded-xl font-semibold transition-all" target="_blank" rel="noopener">
+          <a href="${result.url}" class="flex items-center justify-center py-4 bg-brand-500 hover:bg-brand-600 text-white rounded-xl font-semibold transition-all" target="_blank" rel="noopener" onclick="gtag('event','retailer_click',{retailer:'${result.retailer}',cigar:brand+' '+line,price:'${result.base}',source:'mobile_card'})">
               View at ${result.retailer}
             </a>
         </div>
@@ -560,6 +560,7 @@
 
       // SEO Content Toggle
       function toggleSEO() {
+        gtag('event', 'seo_expand', { cigar: brand + ' ' + line });
         const content = document.getElementById('seo-content');
         const button = document.getElementById('seo-toggle-btn');
         
