@@ -1534,22 +1534,20 @@ async def cigar_landing_page(brand: str, line: str):
     brand_display = brand.replace('-', ' ').title()
     line_display = line.replace('-', ' ').title()
     
-    # SEO Fix: Check if this cigar actually has product data
-    # Return proper 404 instead of soft 404 (empty page with 200 status)
-    all_products = load_all_products()
-    matching_products = [
-        p for p in all_products 
-        if p.brand.lower().replace(' ', '-').replace('&', 'and') == brand.lower()
-        and normalize_line_slug(p.line) == line.lower()
-    ]
-    
-    # Require at least 3 unique retailers with prices for a meaningful comparison
-    unique_retailers_with_prices = {p.retailer_key for p in matching_products if p.price_cents}
-    
-    if not matching_products or len(unique_retailers_with_prices) < 3:
-        # Return proper 404 for cigars with no/insufficient data (prevents thin content in Google)
-        return HTMLResponse(
-            content=f"""<!DOCTYPE html>
+    try:
+        all_products = load_all_products()
+        matching_products = [
+            p for p in all_products 
+            if p.brand.lower().replace(' ', '-').replace('&', 'and') == brand.lower()
+            and normalize_line_slug(p.line) == line.lower()
+        ]
+        
+        # Require at least 3 unique retailers with prices for a meaningful comparison
+        unique_retailers_with_prices = {p.retailer_key for p in matching_products if p.price_cents}
+        
+        if not matching_products or len(unique_retailers_with_prices) < 3:
+            return HTMLResponse(
+                content=f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
@@ -1572,89 +1570,104 @@ async def cigar_landing_page(brand: str, line: str):
     </div>
 </body>
 </html>""",
-            status_code=404
-        )
-    
-    # Read the template
-    template_path = Path(f"{STATIC_PATH}/cigar-template.html")
-    
-    if not template_path.exists():
-        # Fallback if template doesn't exist yet
-        return HTMLResponse(content="<h1>Page not found</h1>", status_code=404)
-    
-    with open(template_path, 'r', encoding='utf-8') as f:
-        template = f.read()
-    
-    # Load SEO content
-    seo_data = load_seo_content()
-    
-    # Check if this cigar has quality SEO data
-    has_seo = has_quality_seo_data(brand_display, line_display, seo_data)
-    
-    # Replace basic placeholders
-    html = template.replace('{{BRAND}}', brand_display)
-    html = html.replace('{{LINE}}', line_display)
-    html = html.replace('{{BRAND_SLUG}}', brand)
-    html = html.replace('{{LINE_SLUG}}', line)
-    
-    # Generate server-side rendered product rows for SEO (Google sees real content, not "Loading...")
-    ssr_rows = []
-    prices = []
-    for p in matching_products[:10]:  # Limit to first 10 for initial render
-        price_dollars = p.price_cents / 100 if p.price_cents else 0
-        price_str = f"${price_dollars:.2f}" if p.price_cents else "N/A"
-        if p.price_cents:
-            prices.append(price_dollars)
-        ssr_rows.append(f'''<tr class="border-b border-gray-100 hover:bg-gray-50">
+                status_code=404
+            )
+        
+        # Read the template
+        template_path = Path(f"{STATIC_PATH}/cigar-template.html")
+        
+        if not template_path.exists():
+            return HTMLResponse(content="<h1>Page not found</h1>", status_code=404)
+        
+        with open(template_path, 'r', encoding='utf-8') as f:
+            template = f.read()
+        
+        # Load SEO content
+        seo_data = load_seo_content()
+        
+        # Check if this cigar has quality SEO data
+        has_seo = has_quality_seo_data(brand_display, line_display, seo_data)
+        
+        # Replace basic placeholders
+        html = template.replace('{{BRAND}}', brand_display)
+        html = html.replace('{{LINE}}', line_display)
+        html = html.replace('{{BRAND_SLUG}}', brand)
+        html = html.replace('{{LINE_SLUG}}', line)
+        
+        # Generate server-side rendered product rows for SEO (Google sees real content, not "Loading...")
+        ssr_rows = []
+        prices = []
+        for p in matching_products[:10]:
+            price_dollars = p.price_cents / 100 if p.price_cents else 0
+            price_str = f"${price_dollars:.2f}" if p.price_cents else "N/A"
+            if p.price_cents:
+                prices.append(price_dollars)
+            ssr_rows.append(f'''<tr class="border-b border-gray-100 hover:bg-gray-50">
           <td class="p-3 text-sm">{p.retailer_name}</td>
           <td class="p-3 text-sm">{p.wrapper or 'N/A'}</td>
           <td class="p-3 text-sm">{p.vitola or 'N/A'}</td>
           <td class="p-3 text-sm font-semibold">{price_str}</td>
         </tr>''')
-    
-    if ssr_rows:
-        html = html.replace('{{SSR_PRODUCT_ROWS}}', '\n'.join(ssr_rows))
-    else:
-        html = html.replace('{{SSR_PRODUCT_ROWS}}', '<tr><td colspan="4" class="p-4 text-center text-muted">Loading prices...</td></tr>')
-    
-    # Fill in JSON-LD structured data for SEO
-    html = html.replace('{{OFFER_COUNT}}', str(len(matching_products)))
-    html = html.replace('{{LOW_PRICE}}', f"{min(prices):.2f}" if prices else "0")
-    html = html.replace('{{HIGH_PRICE}}', f"{max(prices):.2f}" if prices else "0")
-    
-    if has_seo:
-        # Generate FAQ answers
-        faq_1, faq_2, faq_3 = generate_faq_answers(brand_display, line_display, seo_data)
         
-        # Get SEO description
-        key = f"{brand_display.lower()}|{line_display.lower()}"
-        cigar_data = seo_data.get(key, {})
+        if ssr_rows:
+            html = html.replace('{{SSR_PRODUCT_ROWS}}', '\n'.join(ssr_rows))
+        else:
+            html = html.replace('{{SSR_PRODUCT_ROWS}}', '<tr><td colspan="4" class="p-4 text-center text-muted">Loading prices...</td></tr>')
         
-        # Build comprehensive SEO description
-        seo_description = cigar_data.get('description', '')
-        tasting_notes = cigar_data.get('tasting_notes', '')
-        if tasting_notes:
-            seo_description += f" Features rich flavors of {tasting_notes}."
+        # Fill in JSON-LD structured data for SEO
+        html = html.replace('{{OFFER_COUNT}}', str(len(matching_products)))
+        html = html.replace('{{LOW_PRICE}}', f"{min(prices):.2f}" if prices else "0")
+        html = html.replace('{{HIGH_PRICE}}', f"{max(prices):.2f}" if prices else "0")
         
-        # Get last updated timestamp
-        last_updated = datetime.now().strftime('%B %d, %Y')
+        if has_seo:
+            faq_1, faq_2, faq_3 = generate_faq_answers(brand_display, line_display, seo_data)
+            
+            key = f"{brand_display.lower()}|{line_display.lower()}"
+            cigar_data = seo_data.get(key, {})
+            
+            seo_description = cigar_data.get('description', '')
+            tasting_notes = cigar_data.get('tasting_notes', '')
+            if tasting_notes:
+                seo_description += f" Features rich flavors of {tasting_notes}."
+            
+            last_updated = datetime.now().strftime('%B %d, %Y')
+            
+            html = html.replace('{{SEO_DESCRIPTION}}', seo_description)
+            html = html.replace('{{FAQ_ANSWER_1}}', faq_1)
+            html = html.replace('{{FAQ_ANSWER_2}}', faq_2)
+            html = html.replace('{{FAQ_ANSWER_3}}', faq_3)
+            html = html.replace('{{LAST_UPDATED}}', last_updated)
+        else:
+            import re
+            html = re.sub(r'<div class="text-center my-8">.*?Learn More About This Cigar.*?</button>\s*</div>', '', html, flags=re.DOTALL)
+            html = re.sub(r'<section id="seo-content".*?</section>', '', html, flags=re.DOTALL)
         
-        # Replace SEO placeholders
-        html = html.replace('{{SEO_DESCRIPTION}}', seo_description)
-        html = html.replace('{{FAQ_ANSWER_1}}', faq_1)
-        html = html.replace('{{FAQ_ANSWER_2}}', faq_2)
-        html = html.replace('{{FAQ_ANSWER_3}}', faq_3)
-        html = html.replace('{{LAST_UPDATED}}', last_updated)
-    else:
-        # Hide the entire SEO section by removing it from HTML
-        # Find and remove the button and content section
-        import re
-        # Remove the "Learn More" button div
-        html = re.sub(r'<div class="text-center my-8">.*?Learn More About This Cigar.*?</button>\s*</div>', '', html, flags=re.DOTALL)
-        # Remove the SEO content section
-        html = re.sub(r'<section id="seo-content".*?</section>', '', html, flags=re.DOTALL)
+        return HTMLResponse(content=html)
     
-    return HTMLResponse(content=html)
+    except Exception as e:
+        print(f"Error rendering cigar page /{brand}/{line}: {e}")
+        return HTMLResponse(
+            content=f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{brand_display} {line_display} - Cigar Price Scout</title>
+    <meta name="robots" content="noindex">
+    <link rel="icon" type="image/png" href="/static/logo.png">
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 font-sans">
+    <div class="max-w-2xl mx-auto px-5 py-20 text-center">
+        <img src="/static/logo.png" alt="Cigar Price Scout" class="w-24 h-20 mx-auto mb-6">
+        <h1 class="text-3xl font-bold text-gray-800 mb-4">Temporarily Unavailable</h1>
+        <p class="text-gray-600 mb-6">The page for <strong>{brand_display} {line_display}</strong> is temporarily unavailable. Please try again shortly.</p>
+        <a href="/" class="inline-block bg-amber-700 hover:bg-amber-800 text-white font-semibold py-3 px-6 rounded-lg">Browse All Cigars</a>
+    </div>
+</body>
+</html>""",
+            status_code=404
+        )
 
 
 # Helper function to generate URL-friendly slugs
