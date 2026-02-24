@@ -320,9 +320,8 @@ def get_analytics_conn():
     return psycopg2.connect(db_url)  
 
 def load_promotions():
-    """Load active promotions from promotions.json"""
+    """Load active, non-expired promotions from promotions.json"""
     try:
-        # Use absolute path from project root
         promo_file = PROJECT_ROOT / "tools" / "promotions" / "promotions.json"
         if not promo_file.exists():
             logger.warning(f"Promotions file not found at {promo_file}")
@@ -331,10 +330,13 @@ def load_promotions():
         with open(promo_file, 'r') as f:
             promotions = json.load(f)
         
-        # Filter to only active promotions
+        today = datetime.now().strftime('%Y-%m-%d')
         active_promos = {}
         for retailer, promos in promotions.items():
-            active_promos[retailer] = [p for p in promos if p.get('active', False)]
+            active_promos[retailer] = [
+                p for p in promos
+                if p.get('active', False) and p.get('end_date', '9999-12-31') >= today
+            ]
         
         return active_promos
     except Exception as e:
