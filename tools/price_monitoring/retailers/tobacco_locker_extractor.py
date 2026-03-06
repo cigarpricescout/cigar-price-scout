@@ -93,7 +93,7 @@ def _extract_tobacco_locker_price(soup: BeautifulSoup) -> Optional[float]:
             if price_match:
                 try:
                     price_val = float(price_match.group(1).replace(',', ''))
-                    if 50 <= price_val <= 3000:  # FIXED: Increased upper limit for Opus X
+                    if price_val >= 50:  # Removed upper limit for high-value boxes
                         return price_val
                 except ValueError:
                     continue
