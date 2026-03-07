@@ -1,0 +1,31 @@
+=== URL Discovery Report - March 06, 2026 11:36 AM ===
+
+Retailers scanned: 26
+CIDs searched: 5
+Time elapsed: 213s
+
+STAGED FOR BATCH APPROVAL (high confidence): 6 matches
+  ALECBRADLEY|ALECBRADLEY|PROJECT40MADURO|ROBUSTO|RO... -> https://www.cigarking.com/alec-bradley-project-40-maduro-robusto-5x50-box-24/
+  ALECBRADLEY|ALECBRADLEY|PRENSADO|ROBUSTO|ROBUSTO|5... -> https://www.cigarsdirect.com/products/alec-bradley-prensado-robusto
+  ALECBRADLEY|ALECBRADLEY|PRENSADO|ROBUSTO|ROBUSTO|5... -> https://www.hilandscigars.com/shop/cigars/alec-bradley/alec-bradley-prensado/alec-bradley-prensado-robusto/
+  ALECBRADLEY|ALECBRADLEY|PRENSADO|ROBUSTO|ROBUSTO|5... -> https://nickscigarworld.com/shop/premium-cigars/alec-bradley-prensado/alec-bradley-prensado-robusto/
+  ALECBRADLEY|ALECBRADLEY|PROJECT40MADURO|ROBUSTO|RO... -> https://nickscigarworld.com/shop/premium-cigars/alec-bradley-project-40-maduro/alec-bradley-project-40-maduro-robusto/
+  ... and 1 more
+
+NEEDS INDIVIDUAL REVIEW (medium confidence): 3 matches
+  -> Review file: C:\Users\briah\cigar-price-scout\tools\ai\pending_review.csv
+  ALECBRADLEY|ALECBRADLEY|PRENSADO|ROBUSTO|ROBUSTO|5...
+    Reason: Brand and line match, but need to verify vitola, size, wrapper and box quantity from product page
+  ALECBRADLEY|ALECBRADLEY|PRENSADO|ROBUSTO|ROBUSTO|5...
+    Reason: Brand, line, and vitola match perfectly. Wrapper code HON (Honduran) is not explicitly shown but Prensado typically uses Honduran wrapper. Box quantity unclear from URL.
+  ALECBRADLEY|ALECBRADLEY|PRENSADO|ROBUSTO|ROBUSTO|5...
+    Reason: Brand and line match (Alec Bradley Prensado), vitola matches (Robusto), box format, but 'Lost Art' variant may indicate different wrapper than HON
+
+NO MATCH FOUND: 121 CIDs had no matches
+LOW CONFIDENCE (skipped): 0 matches discarded
+
+Next steps:
+  1. Spot-check ~5% of high-confidence matches in C:\Users\briah\cigar-price-scout\tools\ai\staged_matches.csv
+  2. If spot-checks pass: python tools/ai/url_discoverer.py --approve-batch
+  3. Review medium matches in C:\Users\briah\cigar-price-scout\tools\ai\pending_review.csv
+  4. Publish approved: python tools/ai/url_discoverer.py --publish-approved

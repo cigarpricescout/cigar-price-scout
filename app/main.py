@@ -1639,10 +1639,43 @@ async def cigar_landing_page(brand: str, line: str):
             html = html.replace('{{FAQ_ANSWER_2}}', faq_2)
             html = html.replace('{{FAQ_ANSWER_3}}', faq_3)
             html = html.replace('{{LAST_UPDATED}}', last_updated)
+            
+            rating_value = cigar_data.get('rating_average', '')
+            review_count = cigar_data.get('review_count', '').replace('+', '')
+            
+            if rating_value and review_count:
+                aggregate_rating = (
+                    '"aggregateRating": {\n'
+                    '      "@type": "AggregateRating",\n'
+                    f'      "ratingValue": "{rating_value}",\n'
+                    '      "bestRating": "100",\n'
+                    f'      "reviewCount": "{review_count}"\n'
+                    '    },'
+                )
+                review_body = seo_description[:200].replace('"', '\\"')
+                review_block = (
+                    '"review": {\n'
+                    '      "@type": "Review",\n'
+                    '      "author": { "@type": "Organization", "name": "Cigar Price Scout" },\n'
+                    '      "reviewRating": {\n'
+                    '        "@type": "Rating",\n'
+                    f'        "ratingValue": "{rating_value}",\n'
+                    '        "bestRating": "100"\n'
+                    '      },\n'
+                    f'      "reviewBody": "{review_body}"\n'
+                    '    },'
+                )
+                html = html.replace('{{AGGREGATE_RATING_BLOCK}}', aggregate_rating)
+                html = html.replace('{{REVIEW_BLOCK}}', review_block)
+            else:
+                html = html.replace('{{AGGREGATE_RATING_BLOCK}}', '')
+                html = html.replace('{{REVIEW_BLOCK}}', '')
         else:
             import re
             html = re.sub(r'<div class="text-center my-8">.*?Learn More About This Cigar.*?</button>\s*</div>', '', html, flags=re.DOTALL)
             html = re.sub(r'<section id="seo-content".*?</section>', '', html, flags=re.DOTALL)
+            html = html.replace('{{AGGREGATE_RATING_BLOCK}}', '')
+            html = html.replace('{{REVIEW_BLOCK}}', '')
         
         return HTMLResponse(content=html)
     

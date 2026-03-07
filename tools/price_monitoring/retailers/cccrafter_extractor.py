@@ -69,11 +69,18 @@ class CCCrafterExtractor:
             title_elem = soup.find('h1') or soup.find('title')
             title = title_elem.get_text(strip=True) if title_elem else "Unknown Product"
             
+            # Extract box quantity FIRST (needed for per-stick price conversion)
+            box_qty = self._extract_box_quantity(soup, title)
+            
             # Extract pricing information
             price_data = self._extract_price(soup)
             
-            # Extract box quantity
-            box_qty = self._extract_box_quantity(soup, title)
+            # If price is per-stick and we have box quantity, calculate box price
+            final_price = price_data['sale_price']
+            if price_data.get('is_per_stick') and final_price and box_qty:
+                box_price = final_price * box_qty
+                logger.warning(f"Converted per-stick price ${final_price} to box price ${box_price:.2f} (x{box_qty} cigars)")
+                final_price = box_price
             
             # Extract stock status
             in_stock = self._extract_stock_status(soup)
@@ -81,14 +88,14 @@ class CCCrafterExtractor:
             result = {
                 'url': url,
                 'title': title,
-                'sale_price': price_data['sale_price'],
+                'sale_price': final_price,
                 'msrp_price': price_data['msrp_price'],
                 'box_qty': box_qty,
                 'in_stock': in_stock,
                 'raw_price_text': price_data['raw_text']
             }
             
-            logger.info(f"Extracted: {title} - ${price_data['sale_price']} (Box of {box_qty}) - {'In Stock' if in_stock else 'Out of Stock'}")
+            logger.info(f"Extracted: {title} - ${final_price} (Box of {box_qty}) - {'In Stock' if in_stock else 'Out of Stock'}")
             return result
             
         except Exception as e:
@@ -100,10 +107,23 @@ class CCCrafterExtractor:
         price_data = {
             'sale_price': None,
             'msrp_price': None,
-            'raw_text': ''
+            'raw_text': '',
+            'is_per_stick': False  # Flag to indicate if price needs box quantity multiplication
         }
         
-        # Method 1: Parse BCData JavaScript object (BigCommerce specific)
+        # Method 1: Check for "Box" vs "Single" radio options first
+        # This site uses variations where "Box" has the full box price, but it's loaded via JS
+        # We need to detect if "Single" is the default and handle accordingly
+        has_box_single_options = False
+        radio_labels = soup.find_all('label', {'data-product-attribute-value': True})
+        for label in radio_labels:
+            label_text = label.get_text(strip=True).lower()
+            if 'box' in label_text or 'single' in label_text:
+                has_box_single_options = True
+                logger.debug(f"Found Box/Single variation options: {label_text}")
+                break
+        
+        # Method 2: Parse BCData JavaScript object (BigCommerce specific)
         scripts = soup.find_all('script')
         for script in scripts:
             if script.string and 'BCData' in script.string:
@@ -140,12 +160,17 @@ class CCCrafterExtractor:
                             if base_price.get('value'):
                                 price_data['sale_price'] = float(base_price['value'])
                                 logger.debug(f"Found base price from BCData: ${price_data['sale_price']}")
+                                
+                                # If we have Box/Single options and price < $100, it's likely per-stick
+                                if has_box_single_options and price_data['sale_price'] < 100:
+                                    price_data['is_per_stick'] = True
+                                    logger.warning(f"Price ${price_data['sale_price']} appears to be PER STICK (Box/Single options detected)")
                         
                         price_data['raw_text'] = f"BCData: MSRP ${price_data['msrp_price']}, Sale ${price_data['sale_price']}"
                         
                         # If we found prices in BCData, return early
                         if price_data['sale_price']:
-                            logger.debug(f"BCData extraction successful: Sale=${price_data['sale_price']}, MSRP=${price_data['msrp_price']}")
+                            logger.debug(f"BCData extraction successful: Sale=${price_data['sale_price']}, MSRP=${price_data['msrp_price']}, PerStick={price_data['is_per_stick']}")
                             return price_data
                             
                     except (json.JSONDecodeError, KeyError, ValueError) as e:
@@ -273,20 +298,32 @@ class CCCrafterExtractor:
             if box_match:
                 return int(box_match.group(1))
         
-        # Method 2: Extract from title
+        # Method 2: Look in description/product content for "Box of XX"
+        # This is critical for CC Crafter as they mention box quantity in description
+        description_areas = soup.find_all(['div', 'p', 'span'], class_=lambda x: x and ('description' in str(x).lower() or 'panel' in str(x).lower() or 'powr' in str(x).lower()))
+        for area in description_areas:
+            text = area.get_text(strip=True)
+            # Look for explicit "Box of XX" or "(Box of XX)"
+            box_match = re.search(r'[(\[]?Box of (\d+)[)\]]?\s*cigars?', text, re.IGNORECASE)
+            if box_match:
+                qty = int(box_match.group(1))
+                logger.debug(f"Found box quantity in description: {qty}")
+                return qty
+        
+        # Method 3: Extract from title
         title_box_match = re.search(r'Box of (\d+)', title, re.IGNORECASE)
         if title_box_match:
             return int(title_box_match.group(1))
         
-        # Method 3: Look in product specifications or description
-        spec_areas = soup.find_all(['div', 'p', 'span'], class_=lambda x: x and ('spec' in x.lower() or 'detail' in x.lower()))
+        # Method 4: Look in product specifications or description
+        spec_areas = soup.find_all(['div', 'p', 'span'], class_=lambda x: x and ('spec' in str(x).lower() or 'detail' in str(x).lower()))
         for area in spec_areas:
             text = area.get_text(strip=True)
             box_match = re.search(r'(\d+)\s*(?:count|pc|piece|cigar)', text, re.IGNORECASE)
             if box_match:
                 return int(box_match.group(1))
         
-        # Method 4: Look for quantity in product meta
+        # Method 5: Look for quantity in product meta
         quantity_selectors = [
             '[data-quantity]',
             '.quantity input[type="number"]',

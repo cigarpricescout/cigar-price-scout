@@ -1,0 +1,19 @@
+# Extractor Generator - New Retailer Queue
+#
+# Format:
+#   Retailer Display Name | retailer_key
+#   https://url-to-product-page-1
+#   https://url-to-product-page-2
+#   https://url-to-product-page-3
+#
+# Separate entries with a blank line.
+# Add 3-5 product page URLs per retailer for best results.
+# Include a mix of in-stock and out-of-stock products if possible.
+#
+# To process: python tools/ai/extractor_generator.py --process-queue
+#
+# Example (uncomment to use):
+# New Cigar Shop | newcigarshop
+# https://newcigarshop.com/products/padron-1964-maduro-box-25
+# https://newcigarshop.com/products/arturo-fuente-hemingway-classic
+# https://newcigarshop.com/products/oliva-serie-v-melanio-robusto

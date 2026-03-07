@@ -769,6 +769,17 @@ class AutomatedCigarPriceSystem:
             automation_run_id = self.log_automation_run(start_time, end_time, git_success, errors)
             self.log_retailer_runs(automation_run_id)
             
+            # 7.5. Run extractor health monitor
+            health_report = ""
+            try:
+                from tools.ai.extractor_monitor import ExtractorHealthMonitor
+                monitor = ExtractorHealthMonitor(project_root=self.project_root)
+                health_report = monitor.generate_health_report()
+                self.logger.info("Extractor health report generated")
+            except Exception as e:
+                self.logger.warning(f"Health monitor failed (non-critical): {e}")
+                health_report = "\n(Health monitor unavailable)\n"
+
             # 8. Send notifications
             email_config = self.config['email_notifications']
             overall_success = successful_retailers == len(retailers) and git_success
@@ -797,6 +808,8 @@ Results:
                     body += f"\nErrors encountered:\n"
                     for error in errors:
                         body += f"- {error}\n"
+
+                body += health_report
                 
                 body += f"\nDetailed logs available at: {self.log_dir}"
                 
