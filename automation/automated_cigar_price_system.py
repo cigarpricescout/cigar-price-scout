@@ -512,6 +512,82 @@ class AutomatedCigarPriceSystem:
             except Exception as e:
                 self.logger.warning(f"Failed to capture post-state for {retailer_name}: {e}")
 
+    def process_approved_matches(self) -> int:
+        """Fetch approved matches from the live API and append to retailer CSVs."""
+        import requests as http_req
+
+        admin_key = os.getenv("ADMIN_SECRET_KEY", "")
+        base_url = os.getenv("APP_BASE_URL", "https://cigarpricescout.com")
+
+        if not admin_key:
+            self.logger.info("ADMIN_SECRET_KEY not set, skipping approved match processing")
+            return 0
+
+        try:
+            resp = http_req.get(
+                f"{base_url}/api/admin/approved-matches",
+                headers={"X-Admin-Key": admin_key},
+                timeout=15,
+            )
+            resp.raise_for_status()
+            matches = resp.json().get("matches", [])
+        except Exception as e:
+            self.logger.warning(f"Could not fetch approved matches: {e}")
+            return 0
+
+        if not matches:
+            self.logger.info("No approved matches to publish")
+            return 0
+
+        self.logger.info(f"Processing {len(matches)} approved matches")
+        published_ids = []
+        csv_dir = self.project_root / "static" / "data"
+
+        for m in matches:
+            retailer_key = m["retailer_key"]
+            csv_path = csv_dir / f"{retailer_key}.csv"
+
+            if not csv_path.exists():
+                self.logger.warning(f"CSV not found for {retailer_key}, skipping")
+                continue
+
+            existing_cids = set()
+            with open(csv_path, "r", encoding="utf-8") as f:
+                reader = pd.read_csv(f)
+                if "cigar_id" in reader.columns:
+                    existing_cids = set(reader["cigar_id"].dropna().values)
+
+            cid = m["cid"]
+            if cid in existing_cids:
+                self.logger.info(f"CID {cid} already in {retailer_key}.csv, skipping")
+                published_ids.append(m["id"])
+                continue
+
+            with open(csv_path, "r", encoding="utf-8") as f:
+                header_line = f.readline().strip()
+
+            new_row = f'{cid},,{m["url"]},{m.get("brand","")},{m.get("line","")},{m.get("wrapper","")},{m.get("vitola","")},{m.get("size","")},{m.get("box_qty","")},,,\n'
+
+            with open(csv_path, "a", encoding="utf-8") as f:
+                f.write(new_row)
+
+            self.logger.info(f"Added {cid} to {retailer_key}.csv")
+            published_ids.append(m["id"])
+
+        if published_ids:
+            try:
+                http_req.post(
+                    f"{base_url}/api/admin/mark-published",
+                    json={"ids": published_ids},
+                    headers={"X-Admin-Key": admin_key},
+                    timeout=15,
+                )
+                self.logger.info(f"Marked {len(published_ids)} matches as published")
+            except Exception as e:
+                self.logger.warning(f"Could not mark matches as published: {e}")
+
+        return len(published_ids)
+
     def git_commit_and_push(self) -> bool:
         """Commit and push changes to git"""
         if not self.config['git_automation']['enabled']:
@@ -752,6 +828,14 @@ class AutomatedCigarPriceSystem:
             if not promo_success:
                 errors.append("Promotional processing failed")
             
+            # 4.7. Process any approved URL matches from the review API
+            try:
+                approved_count = self.process_approved_matches()
+                if approved_count > 0:
+                    self.logger.info(f"Published {approved_count} approved URL matches")
+            except Exception as e:
+                self.logger.warning(f"Approved match processing failed (non-critical): {e}")
+
             # 5. Git commit and push
             git_success = self.git_commit_and_push()
             if not git_success:

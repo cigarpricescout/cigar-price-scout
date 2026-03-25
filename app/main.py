@@ -1,12 +1,13 @@
 from fastapi import FastAPI, Query, Form, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, FileResponse, Response, RedirectResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, FileResponse, Response, RedirectResponse, PlainTextResponse, JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.gzip import GZipMiddleware
 from pathlib import Path
 import csv
 import re
 import time
+import uuid
 from typing import Optional
 from pydantic import BaseModel
 import smtplib
@@ -493,6 +494,30 @@ def init_analytics_tables():
             target_url TEXT,
             ip_hash TEXT,
             user_agent TEXT
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS url_staged_matches (
+            id SERIAL PRIMARY KEY,
+            match_token TEXT UNIQUE NOT NULL,
+            cid TEXT NOT NULL,
+            retailer_key TEXT NOT NULL,
+            url TEXT NOT NULL,
+            confidence TEXT,
+            reason TEXT,
+            brand TEXT,
+            line TEXT,
+            vitola TEXT,
+            wrapper TEXT,
+            size TEXT,
+            box_qty INTEGER,
+            price NUMERIC(10,2),
+            in_stock BOOLEAN,
+            status TEXT DEFAULT 'staged',
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            reviewed_at TIMESTAMPTZ,
+            UNIQUE(cid, retailer_key, url)
         )
     """)
 
@@ -1868,6 +1893,180 @@ async def trigger_feed_update():
     """Manual trigger for testing (remove in production or add auth)"""
     run_feed_processor()
     return {"status": "Feed processor triggered"}
+
+# ============== URL MATCH REVIEW API ==============
+
+@app.post("/api/admin/upload-matches")
+async def upload_staged_matches(request: Request):
+    """Upload discovered URL matches from the weekly discovery agent."""
+    admin_key = request.headers.get("X-Admin-Key", "")
+    expected = os.getenv("ADMIN_SECRET_KEY", "")
+    if not expected or admin_key != expected:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+
+    data = await request.json()
+    matches = data.get("matches", [])
+
+    conn = get_analytics_conn()
+    cur = conn.cursor()
+    uploaded = 0
+    tokens = []
+
+    for m in matches:
+        token = uuid.uuid4().hex[:16]
+        try:
+            cur.execute("""
+                INSERT INTO url_staged_matches
+                (match_token, cid, retailer_key, url, confidence, reason,
+                 brand, line, vitola, wrapper, size, box_qty, price, in_stock)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT (cid, retailer_key, url) DO NOTHING
+            """, (
+                token, m["cid"], m["retailer_key"], m["url"],
+                m.get("confidence"), m.get("reason"),
+                m.get("brand"), m.get("line"), m.get("vitola"),
+                m.get("wrapper"), m.get("size"), m.get("box_qty"),
+                m.get("price"), m.get("in_stock"),
+            ))
+            if cur.rowcount > 0:
+                uploaded += 1
+                tokens.append({"cid": m["cid"], "retailer_key": m["retailer_key"], "token": token})
+        except Exception as e:
+            logger.warning(f"Upload match error: {e}")
+            conn.rollback()
+
+    conn.commit()
+    conn.close()
+    return {"uploaded": uploaded, "tokens": tokens}
+
+
+@app.get("/admin/match/{token}/{action}", response_class=HTMLResponse)
+async def review_match_action(token: str, action: str):
+    """One-click approve/reject from email link."""
+    if action not in ("approve", "reject"):
+        return HTMLResponse("<p>Invalid action</p>", status_code=400)
+
+    try:
+        conn = get_analytics_conn()
+        cur = conn.cursor()
+
+        cur.execute(
+            "SELECT cid, retailer_key, url, brand, line, vitola, size, box_qty, status "
+            "FROM url_staged_matches WHERE match_token=%s", (token,)
+        )
+        row = cur.fetchone()
+
+        if not row:
+            conn.close()
+            return HTMLResponse(
+                '<div style="font-family:sans-serif;text-align:center;padding:60px">'
+                '<h2>Match not found</h2><p>This link may have expired.</p></div>',
+                status_code=404,
+            )
+
+        cid, retailer, url, brand, line, vitola, size, box_qty, current_status = row
+
+        if current_status != "staged":
+            conn.close()
+            return HTMLResponse(
+                '<div style="font-family:sans-serif;text-align:center;padding:60px">'
+                f'<h2>Already {current_status}</h2>'
+                f'<p>{brand} {line} at {retailer} was already {current_status}.</p></div>'
+            )
+
+        new_status = "approved" if action == "approve" else "rejected"
+        cur.execute(
+            "UPDATE url_staged_matches SET status=%s, reviewed_at=NOW() WHERE match_token=%s",
+            (new_status, token),
+        )
+        conn.commit()
+        conn.close()
+
+        color = "#2e7d32" if action == "approve" else "#c62828"
+        icon = "&#10003;" if action == "approve" else "&#10007;"
+        label = "Approved" if action == "approve" else "Rejected"
+        next_step = (
+            "This will be published to your website in the next daily price update."
+            if action == "approve"
+            else "This match has been rejected and won't be published."
+        )
+
+        return HTMLResponse(f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Match {label} - Cigar Price Scout</title>
+<link rel="icon" type="image/png" href="/static/logo.png">
+<style>
+body {{ font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:#f5f5f5; display:flex; justify-content:center; align-items:center; min-height:100vh; margin:0; }}
+.card {{ background:#fff; border-radius:16px; padding:40px; max-width:480px; text-align:center; box-shadow:0 2px 8px rgba(0,0,0,.1); }}
+.icon {{ width:64px; height:64px; border-radius:50%; background:{color}; color:#fff; font-size:32px; display:flex; align-items:center; justify-content:center; margin:0 auto 16px; }}
+h1 {{ color:{color}; margin:0 0 4px; font-size:24px; }}
+.cigar {{ font-size:18px; font-weight:600; margin:12px 0 4px; }}
+.detail {{ color:#666; font-size:14px; margin:4px 0; }}
+.cid {{ font-family:monospace; background:#f5f5f5; padding:8px 12px; border-radius:6px; font-size:11px; margin-top:16px; display:inline-block; word-break:break-all; }}
+.next {{ color:#888; font-size:13px; margin-top:20px; }}
+</style></head>
+<body><div class="card">
+<div class="icon">{icon}</div>
+<h1>Match {label}</h1>
+<p class="cigar">{brand} {line}</p>
+<p class="detail">{vitola} &middot; {size} &middot; Box of {box_qty}</p>
+<p class="detail">Retailer: {retailer}</p>
+<div class="cid">{cid}</div>
+<p class="next">{next_step}</p>
+</div></body></html>""")
+
+    except Exception as e:
+        logger.error(f"Review match error: {e}")
+        return HTMLResponse(f"<p>Error processing request</p>", status_code=500)
+
+
+@app.get("/api/admin/approved-matches")
+async def get_approved_matches(request: Request):
+    """Fetch approved matches for publishing by local automation."""
+    admin_key = request.headers.get("X-Admin-Key", "")
+    expected = os.getenv("ADMIN_SECRET_KEY", "")
+    if not expected or admin_key != expected:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+
+    conn = get_analytics_conn()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT id, cid, retailer_key, url, brand, line, vitola, wrapper, size, box_qty
+        FROM url_staged_matches WHERE status='approved'
+    """)
+    rows = cur.fetchall()
+    conn.close()
+
+    return {"matches": [
+        {"id": r[0], "cid": r[1], "retailer_key": r[2], "url": r[3],
+         "brand": r[4], "line": r[5], "vitola": r[6], "wrapper": r[7],
+         "size": r[8], "box_qty": r[9]}
+        for r in rows
+    ]}
+
+
+@app.post("/api/admin/mark-published")
+async def mark_matches_published(request: Request):
+    """Mark matches as published after local automation processes them."""
+    admin_key = request.headers.get("X-Admin-Key", "")
+    expected = os.getenv("ADMIN_SECRET_KEY", "")
+    if not expected or admin_key != expected:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+
+    data = await request.json()
+    ids = data.get("ids", [])
+
+    conn = get_analytics_conn()
+    cur = conn.cursor()
+    for match_id in ids:
+        cur.execute(
+            "UPDATE url_staged_matches SET status='published' WHERE id=%s",
+            (match_id,),
+        )
+    conn.commit()
+    conn.close()
+
+    return {"published": len(ids)}
 
 # ============== BEST CIGAR BOX PRICES API ==============
 
