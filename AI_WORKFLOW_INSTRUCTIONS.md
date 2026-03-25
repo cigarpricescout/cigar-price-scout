@@ -35,38 +35,38 @@ Then restart the terminal.
 Every Monday morning you'll get a **Weekly Discovery Digest** email.  
 Do the following whenever you have a few minutes that week:
 
-### Step 1: Spot-check staged matches
-Open this file in Excel or a text editor:
+### Step 1: Review matches using the review tool
 
-```
-C:\Users\briah\cigar-price-scout\tools\ai\staged_matches.csv
-```
+Run the review tool to see every staged match with full CID metadata and live price data:
 
-Pick 2-3 rows at random. Click the URL. Confirm the product on the website matches the CID (brand, line, vitola, wrapper, box quantity).
-
-### Step 2: Approve the batch (if spot-checks pass)
 ```
 cd C:\Users\briah\cigar-price-scout
-python tools/ai/url_discoverer.py --approve-batch
+python tools/ai/review_matches.py
 ```
 
-### Step 3: Review medium-confidence matches
-Open this file:
+This shows you each match with:
+- The CID and master metadata (brand, line, vitola, size, wrapper, box qty)
+- The matched URL
+- Live extracted price, box qty, and stock status
+- Flags any mismatches (e.g., box qty doesn't match master)
+
+Or use **interactive mode** to approve/reject one at a time:
 
 ```
-C:\Users\briah\cigar-price-scout\tools\ai\pending_review.csv
+python tools/ai/review_matches.py --interactive
 ```
 
-For any bad matches, type a short reason in the **feedback** column (e.g., "wrong vitola", "this is a 5-pack not a box", "wrong wrapper").
+It will ask you for each match: `[a]pprove / [r]eject / [s]kip / [q]uit`
+For rejections, it asks for a short reason (e.g., "wrong vitola", "this is a 5-pack").
 
-Leave the feedback column empty for matches that look correct.
+To skip live extraction and just see CID metadata + URLs (faster):
 
-### Step 4: Process your reviews
 ```
-python tools/ai/url_discoverer.py --reject-flagged
+python tools/ai/review_matches.py --skip-extraction
 ```
 
-### Step 5: Publish to production
+### Step 2: Publish approved matches
+
 ```
 python tools/ai/url_discoverer.py --publish-approved
 ```

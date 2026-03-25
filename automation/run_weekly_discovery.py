@@ -167,6 +167,18 @@ def main():
 
     config = load_config()
 
+    # Pull latest from git before making changes
+    import subprocess
+    logger.info("Pulling latest from git...")
+    pull_result = subprocess.run(
+        ["git", "pull", "--rebase"],
+        capture_output=True, text=True, cwd=str(PROJECT_ROOT),
+    )
+    if pull_result.returncode == 0:
+        logger.info("Git pull successful")
+    else:
+        logger.warning(f"Git pull issue (continuing): {pull_result.stderr}")
+
     # Run URL discovery
     logger.info(f"Running URL discovery for top {args.top_cids} CIDs...")
     try:

@@ -1,0 +1,54 @@
+{
+  "rejections": [
+    {
+      "cid": "ALECBRADLEY|ALECBRADLEY|PRENSADO|ROBUSTO|ROBUSTO|5x50|HON|BOX20",
+      "url": "https://www.bnbtobacco.com/products/alec-bradley-prensado",
+      "retailer_key": "bnbtobacco",
+      "feedback": "Generic URL pulls wrong vitola price (Churchill instead of Robusto)",
+      "timestamp": "2026-03-25T15:29:23.425075"
+    },
+    {
+      "cid": "ALECBRADLEY|ALECBRADLEY|PRENSADO|ROBUSTO|ROBUSTO|5x50|HON|BOX20",
+      "url": "https://www.cigarsdirect.com/products/alec-bradley-prensado-robusto",
+      "retailer_key": "cigarsdirect",
+      "feedback": "Box qty is 24 not 20, does not match CID. Also out of stock.",
+      "timestamp": "2026-03-25T15:29:23.425150"
+    },
+    {
+      "cid": "ALECBRADLEY|ALECBRADLEY|PRENSADO|ROBUSTO|ROBUSTO|5x50|HON|BOX20",
+      "url": "https://www.hilandscigars.com/shop/cigars/alec-bradley/alec-bradley-prensado/alec-bradley-prensado-robusto/",
+      "retailer_key": "hilands",
+      "feedback": "Extractor error, could not validate",
+      "timestamp": "2026-03-25T15:29:23.425200"
+    },
+    {
+      "cid": "ALECBRADLEY|ALECBRADLEY|PRENSADO|ROBUSTO|ROBUSTO|5x50|HON|BOX20",
+      "url": "https://nickscigarworld.com/shop/premium-cigars/alec-bradley-prensado/alec-bradley-prensado-robusto/",
+      "retailer_key": "nickscigarworld",
+      "feedback": "Product is box of 24, CID is BOX20. Would match a BOX24 CID if one existed.",
+      "timestamp": "2026-03-25T15:29:23.425242"
+    },
+    {
+      "cid": "ALECBRADLEY|ALECBRADLEY|PRENSADO|ROBUSTO|ROBUSTO|5x50|HON|BOX20",
+      "url": "https://www.planetcigars.com/alec-bradley-prensado-robusto-cigars.html",
+      "retailer_key": "planetcigars",
+      "feedback": "Product is box of 24, CID is BOX20. Would match a BOX24 CID if one existed.",
+      "timestamp": "2026-03-25T15:29:23.425314"
+    },
+    {
+      "cid": "ALECBRADLEY|ALECBRADLEY|PRENSADO|ROBUSTO|ROBUSTO|5x50|HON|BOX20",
+      "url": "https://www.smallbatchcigar.com/alec-bradley-prensado-robusto",
+      "retailer_key": "smallbatchcigar",
+      "feedback": "Extractor error, could not validate",
+      "timestamp": "2026-03-25T15:29:23.425359"
+    },
+    {
+      "cid": "ALECBRADLEY|ALECBRADLEY|PRENSADO|ROBUSTO|ROBUSTO|5x50|HON|BOX20",
+      "url": "https://tobaccolocker.com/products/alec-bradley-prensado-lost-art-robusto-cigars-box",
+      "retailer_key": "tobaccolocker",
+      "feedback": "Prensado Lost Art is a different cigar than Prensado",
+      "timestamp": "2026-03-25T15:29:23.425399"
+    }
+  ],
+  "corrections": []
+}

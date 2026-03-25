@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CID Review Batch - Cigar Price Scout</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; color: #333; padding: 20px; }
+  .header { background: #2d2d2d; color: #fff; padding: 24px; border-radius: 12px; margin-bottom: 24px; }
+  .header h1 { font-size: 24px; margin-bottom: 8px; }
+  .header .stats { color: #aaa; font-size: 14px; }
+  .header .stats span { color: #4CAF50; font-weight: 600; }
+  .card { background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+  .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+  .card-num { background: #2d2d2d; color: #fff; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 600; flex-shrink: 0; margin-right: 12px; }
+  .card-title { font-size: 20px; font-weight: 600; }
+  .card-score { background: #e8f5e9; color: #2e7d32; padding: 4px 12px; border-radius: 20px; font-size: 13px; font-weight: 600; white-space: nowrap; }
+  .card-meta { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; font-size: 14px; color: #666; }
+  .card-meta strong { color: #333; }
+  .card-cid { font-family: monospace; font-size: 12px; color: #888; background: #f5f5f5; padding: 4px 8px; border-radius: 4px; margin-bottom: 16px; word-break: break-all; }
+  .url-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 8px; margin-bottom: 6px; background: #fafafa; }
+  .url-row:hover { background: #f0f0f0; }
+  .confidence { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 4px; text-transform: uppercase; flex-shrink: 0; width: 52px; text-align: center; }
+  .confidence.high { background: #c8e6c9; color: #2e7d32; }
+  .confidence.medium { background: #fff3e0; color: #e65100; }
+  .confidence.low { background: #ffcdd2; color: #c62828; }
+  .retailer { font-weight: 600; width: 140px; flex-shrink: 0; font-size: 14px; }
+  .url-link { color: #1565c0; text-decoration: none; font-size: 13px; word-break: break-all; flex: 1; }
+  .url-link:hover { text-decoration: underline; }
+  .reason { font-size: 12px; color: #888; font-style: italic; margin-top: 2px; }
+  .actions { display: flex; gap: 8px; margin-top: 14px; padding-top: 14px; border-top: 1px solid #eee; }
+  .btn { padding: 8px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; border: none; transition: all 0.15s; }
+  .btn-approve { background: #4CAF50; color: #fff; }
+  .btn-approve:hover { background: #388E3C; }
+  .btn-reject { background: #f44336; color: #fff; }
+  .btn-reject:hover { background: #c62828; }
+  .btn-skip { background: #e0e0e0; color: #666; }
+  .btn-skip:hover { background: #bdbdbd; }
+  .btn-approve.selected { box-shadow: 0 0 0 3px rgba(76,175,80,0.4); }
+  .btn-reject.selected { box-shadow: 0 0 0 3px rgba(244,67,54,0.4); }
+  .btn-skip.selected { box-shadow: 0 0 0 3px rgba(158,158,158,0.4); }
+  .url-action { display: flex; gap: 4px; flex-shrink: 0; }
+  .url-btn { padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer; border: 1px solid #ddd; background: #fff; }
+  .url-btn.approve { color: #2e7d32; border-color: #a5d6a7; }
+  .url-btn.approve:hover, .url-btn.approve.selected { background: #c8e6c9; }
+  .url-btn.reject { color: #c62828; border-color: #ef9a9a; }
+  .url-btn.reject:hover, .url-btn.reject.selected { background: #ffcdd2; }
+  .submit-bar { position: sticky; bottom: 0; background: #fff; padding: 16px 24px; border-radius: 12px 12px 0 0; box-shadow: 0 -2px 8px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; margin-top: 24px; }
+  .submit-btn { background: #1565c0; color: #fff; padding: 12px 32px; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; border: none; }
+  .submit-btn:hover { background: #0d47a1; }
+  .submit-btn:disabled { background: #bbb; cursor: not-allowed; }
+  .progress { font-size: 14px; color: #666; }
+  .toast { position: fixed; top: 20px; right: 20px; background: #4CAF50; color: #fff; padding: 16px 24px; border-radius: 8px; font-weight: 600; display: none; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>CID Review Batch</h1>
+  <div class="stats">
+    <span>2</span> CIDs &middot; <span>9</span> URLs to verify &middot;
+    Prioritized by Google Search Console traffic &middot;
+    Generated March 24, 2026 01:00 PM
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<div id="cards">
+
+<div class="card" id="card-0" data-cid="ALECBRADLEY|ALECBRADLEY|PRENSADO|ROBUSTO|ROBUSTO|5x50|HON|BOX20">
+  <div class="card-header">
+    <div style="display:flex;align-items:center;gap:12px;flex:1">
+      <div class="card-num">1</div>
+      <div>
+        <div class="card-title">Alec Bradley - Prensado</div>
+        <div class="card-meta">
+          <span><strong>Wrapper:</strong> Honduran Corojo</span>
+          <span><strong>Vitola:</strong> Robusto</span>
+          <span><strong>Size:</strong> 5x50</span>
+          <span><strong>Box:</strong> 20</span>
+        </div>
+      </div>
+    </div>
+    <div class="card-score">15 pts</div>
+  </div>
+  <div class="card-cid">ALECBRADLEY|ALECBRADLEY|PRENSADO|ROBUSTO|ROBUSTO|5x50|HON|BOX20</div>
+
+  <div class="url-row" id="url-0-0" data-retailer="cigarsdirect" data-url="https://www.cigarsdirect.com/products/alec-bradley-prensado-robusto">
+    <span class="confidence high">HIGH</span>
+    <span class="retailer">cigarsdirect</span>
+    <a href="https://www.cigarsdirect.com/products/alec-bradley-prensado-robusto" target="_blank" rel="noopener" class="url-link">https://www.cigarsdirect.com/products/alec-bradley-prensado-robusto</a>
+    <div class="url-action">
+      <button class="url-btn approve" onclick="setUrlAction(0,0,'approve')" title="Approve">&#10003;</button>
+      <button class="url-btn reject" onclick="setUrlAction(0,0,'reject')" title="Reject">&#10007;</button>
+    </div>
+  </div>
+  <div class="reason" style="margin-left:220px;margin-bottom:8px">Exact match for Alec Bradley Prensado Robusto</div>
+
+  <div class="url-row" id="url-0-1" data-retailer="hilands" data-url="https://www.hilandscigars.com/shop/cigars/alec-bradley/alec-bradley-prensado/alec-bradley-prensado-robusto/">
+    <span class="confidence high">HIGH</span>
+    <span class="retailer">hilands</span>
+    <a href="https://www.hilandscigars.com/shop/cigars/alec-bradley/alec-bradley-prensado/alec-bradley-prensado-robusto/" target="_blank" rel="noopener" class="url-link">https://www.hilandscigars.com/shop/cigars/alec-bradley/alec-bradley-prensado/alec-bradley-prensado-robusto/</a>
+    <div class="url-action">
+      <button class="url-btn approve" onclick="setUrlAction(0,1,'approve')" title="Approve">&#10003;</button>
+      <button class="url-btn reject" onclick="setUrlAction(0,1,'reject')" title="Reject">&#10007;</button>
+    </div>
+  </div>
+  <div class="reason" style="margin-left:220px;margin-bottom:8px">Exact match for Alec Bradley Prensado Robusto 5x50, appears to be box format</div>
+
+  <div class="url-row" id="url-0-2" data-retailer="nickscigarworld" data-url="https://nickscigarworld.com/shop/premium-cigars/alec-bradley-prensado/alec-bradley-prensado-robusto/">
+    <span class="confidence high">HIGH</span>
+    <span class="retailer">nickscigarworld</span>
+    <a href="https://nickscigarworld.com/shop/premium-cigars/alec-bradley-prensado/alec-bradley-prensado-robusto/" target="_blank" rel="noopener" class="url-link">https://nickscigarworld.com/shop/premium-cigars/alec-bradley-prensado/alec-bradley-prensado-robusto/</a>
+    <div class="url-action">
+      <button class="url-btn approve" onclick="setUrlAction(0,2,'approve')" title="Approve">&#10003;</button>
+      <button class="url-btn reject" onclick="setUrlAction(0,2,'reject')" title="Reject">&#10007;</button>
+    </div>
+  </div>
+  <div class="reason" style="margin-left:220px;margin-bottom:8px">Perfect match - Alec Bradley Prensado Robusto, brand, line, and vitola all match</div>
+
+  <div class="url-row" id="url-0-3" data-retailer="smallbatchcigar" data-url="https://www.smallbatchcigar.com/alec-bradley-prensado-robusto">
+    <span class="confidence high">HIGH</span>
+    <span class="retailer">smallbatchcigar</span>
+    <a href="https://www.smallbatchcigar.com/alec-bradley-prensado-robusto" target="_blank" rel="noopener" class="url-link">https://www.smallbatchcigar.com/alec-bradley-prensado-robusto</a>
+    <div class="url-action">
+      <button class="url-btn approve" onclick="setUrlAction(0,3,'approve')" title="Approve">&#10003;</button>
+      <button class="url-btn reject" onclick="setUrlAction(0,3,'reject')" title="Reject">&#10007;</button>
+    </div>
+  </div>
+  <div class="reason" style="margin-left:220px;margin-bottom:8px">Exact match for Alec Bradley Prensado Robusto - brand, line, and vitola all match perfectly</div>
+
+  <div class="url-row" id="url-0-4" data-retailer="bnbtobacco" data-url="https://www.bnbtobacco.com/products/alec-bradley-prensado">
+    <span class="confidence medium">MEDIUM</span>
+    <span class="retailer">bnbtobacco</span>
+    <a href="https://www.bnbtobacco.com/products/alec-bradley-prensado" target="_blank" rel="noopener" class="url-link">https://www.bnbtobacco.com/products/alec-bradley-prensado</a>
+    <div class="url-action">
+      <button class="url-btn approve" onclick="setUrlAction(0,4,'approve')" title="Approve">&#10003;</button>
+      <button class="url-btn reject" onclick="setUrlAction(0,4,'reject')" title="Reject">&#10007;</button>
+    </div>
+  </div>
+  <div class="reason" style="margin-left:220px;margin-bottom:8px">Brand and line match, but need to verify vitola, size, wrapper and box quantity from product page</div>
+
+  <div class="url-row" id="url-0-5" data-retailer="planetcigars" data-url="https://www.planetcigars.com/alec-bradley-prensado-robusto-cigars.html">
+    <span class="confidence medium">MEDIUM</span>
+    <span class="retailer">planetcigars</span>
+    <a href="https://www.planetcigars.com/alec-bradley-prensado-robusto-cigars.html" target="_blank" rel="noopener" class="url-link">https://www.planetcigars.com/alec-bradley-prensado-robusto-cigars.html</a>
+    <div class="url-action">
+      <button class="url-btn approve" onclick="setUrlAction(0,5,'approve')" title="Approve">&#10003;</button>
+      <button class="url-btn reject" onclick="setUrlAction(0,5,'reject')" title="Reject">&#10007;</button>
+    </div>
+  </div>
+  <div class="reason" style="margin-left:220px;margin-bottom:8px">Brand, line, and vitola match perfectly. Wrapper code HON (Honduran) is not explicitly shown but Prensado typically uses Honduran wrapper. Box quantity unclear from URL.</div>
+
+  <div class="url-row" id="url-0-6" data-retailer="tobaccolocker" data-url="https://tobaccolocker.com/products/alec-bradley-prensado-lost-art-robusto-cigars-box">
+    <span class="confidence medium">MEDIUM</span>
+    <span class="retailer">tobaccolocker</span>
+    <a href="https://tobaccolocker.com/products/alec-bradley-prensado-lost-art-robusto-cigars-box" target="_blank" rel="noopener" class="url-link">https://tobaccolocker.com/products/alec-bradley-prensado-lost-art-robusto-cigars-box</a>
+    <div class="url-action">
+      <button class="url-btn approve" onclick="setUrlAction(0,6,'approve')" title="Approve">&#10003;</button>
+      <button class="url-btn reject" onclick="setUrlAction(0,6,'reject')" title="Reject">&#10007;</button>
+    </div>
+  </div>
+  <div class="reason" style="margin-left:220px;margin-bottom:8px">Brand and line match (Alec Bradley Prensado), vitola matches (Robusto), box format, but 'Lost Art' variant may indicate different wrapper than HON</div>
+
+  <div class="actions">
+    <button class="btn btn-approve" onclick="setCidAction(0,'approve')">Approve All</button>
+    <button class="btn btn-reject" onclick="setCidAction(0,'reject')">Reject All</button>
+    <button class="btn btn-skip" onclick="setCidAction(0,'skip')">Skip</button>
+  </div>
+</div>
+
+<div class="card" id="card-1" data-cid="ALECBRADLEY|ALECBRADLEY|PROJECT40MADURO|ROBUSTO|ROBUSTO|5x50|MEX|BOX24">
+  <div class="card-header">
+    <div style="display:flex;align-items:center;gap:12px;flex:1">
+      <div class="card-num">2</div>
+      <div>
+        <div class="card-title">Alec Bradley - Project 40 Maduro</div>
+        <div class="card-meta">
+          <span><strong>Wrapper:</strong> Mexican San Andres</span>
+          <span><strong>Vitola:</strong> Robusto</span>
+          <span><strong>Size:</strong> 5x50</span>
+          <span><strong>Box:</strong> 24</span>
+        </div>
+      </div>
+    </div>
+    <div class="card-score">10 pts</div>
+  </div>
+  <div class="card-cid">ALECBRADLEY|ALECBRADLEY|PROJECT40MADURO|ROBUSTO|ROBUSTO|5x50|MEX|BOX24</div>
+
+  <div class="url-row" id="url-1-0" data-retailer="cigarking" data-url="https://www.cigarking.com/alec-bradley-project-40-maduro-robusto-5x50-box-24/">
+    <span class="confidence high">HIGH</span>
+    <span class="retailer">cigarking</span>
+    <a href="https://www.cigarking.com/alec-bradley-project-40-maduro-robusto-5x50-box-24/" target="_blank" rel="noopener" class="url-link">https://www.cigarking.com/alec-bradley-project-40-maduro-robusto-5x50-box-24/</a>
+    <div class="url-action">
+      <button class="url-btn approve" onclick="setUrlAction(1,0,'approve')" title="Approve">&#10003;</button>
+      <button class="url-btn reject" onclick="setUrlAction(1,0,'reject')" title="Reject">&#10007;</button>
+    </div>
+  </div>
+  <div class="reason" style="margin-left:220px;margin-bottom:8px">Exact match for Alec Bradley Project 40 Maduro Robusto 5x50 in box of 24</div>
+
+  <div class="url-row" id="url-1-1" data-retailer="nickscigarworld" data-url="https://nickscigarworld.com/shop/premium-cigars/alec-bradley-project-40-maduro/alec-bradley-project-40-maduro-robusto/">
+    <span class="confidence high">HIGH</span>
+    <span class="retailer">nickscigarworld</span>
+    <a href="https://nickscigarworld.com/shop/premium-cigars/alec-bradley-project-40-maduro/alec-bradley-project-40-maduro-robusto/" target="_blank" rel="noopener" class="url-link">https://nickscigarworld.com/shop/premium-cigars/alec-bradley-project-40-maduro/alec-bradley-project-40-maduro-robusto/</a>
+    <div class="url-action">
+      <button class="url-btn approve" onclick="setUrlAction(1,1,'approve')" title="Approve">&#10003;</button>
+      <button class="url-btn reject" onclick="setUrlAction(1,1,'reject')" title="Reject">&#10007;</button>
+    </div>
+  </div>
+  <div class="reason" style="margin-left:220px;margin-bottom:8px">Perfect match - Alec Bradley Project 40 Maduro Robusto, brand, line (maduro), and vitola all match</div>
+
+  <div class="actions">
+    <button class="btn btn-approve" onclick="setCidAction(1,'approve')">Approve All</button>
+    <button class="btn btn-reject" onclick="setCidAction(1,'reject')">Reject All</button>
+    <button class="btn btn-skip" onclick="setCidAction(1,'skip')">Skip</button>
+  </div>
+</div>
+
+</div>
+
+<div class="submit-bar">
+  <div class="progress" id="progress">0 of 2 CIDs reviewed</div>
+  <button class="submit-btn" id="submitBtn" onclick="submitDecisions()">Submit Batch</button>
+</div>
+
+<script>
+const decisions = {};
+const urlDecisions = {};
+const totalCids = 2;
+
+function setUrlAction(cardIdx, urlIdx, action) {
+  const key = cardIdx + '-' + urlIdx;
+  urlDecisions[key] = action;
+  document.querySelectorAll('#url-' + cardIdx + '-' + urlIdx + ' .url-btn').forEach(b => b.classList.remove('selected'));
+  const btn = document.querySelector('#url-' + cardIdx + '-' + urlIdx + ' .url-btn.' + action);
+  if (btn) btn.classList.add('selected');
+  updateProgress();
+}
+
+function setCidAction(cardIdx, action) {
+  decisions[cardIdx] = action;
+  const card = document.getElementById('card-' + cardIdx);
+  card.querySelectorAll('.btn').forEach(b => b.classList.remove('selected'));
+  card.querySelector('.btn-' + action).classList.add('selected');
+
+  if (action === 'approve' || action === 'reject') {
+    const urlRows = card.querySelectorAll('.url-row');
+    urlRows.forEach((row, j) => {
+      const key = cardIdx + '-' + j;
+      if (!(key in urlDecisions)) {
+        urlDecisions[key] = action;
+        row.querySelectorAll('.url-btn').forEach(b => b.classList.remove('selected'));
+        const btn = row.querySelector('.url-btn.' + action);
+        if (btn) btn.classList.add('selected');
+      }
+    });
+  }
+  updateProgress();
+}
+
+function updateProgress() {
+  const reviewed = Object.keys(decisions).length;
+  document.getElementById('progress').textContent = reviewed + ' of ' + totalCids + ' CIDs reviewed';
+}
+
+function submitDecisions() {
+  const rows = [];
+
+  {
+    const key = '0-0';
+    const action = urlDecisions[key] || decisions[0] || 'skip';
+    rows.push({
+      cid: 'ALECBRADLEY|ALECBRADLEY|PRENSADO|ROBUSTO|ROBUSTO|5x50|HON|BOX20',
+      retailer_key: 'cigarsdirect',
+      url: 'https://www.cigarsdirect.com/products/alec-bradley-prensado-robusto',
+      action: action
+    });
+  }
+
+  {
+    const key = '0-1';
+    const action = urlDecisions[key] || decisions[0] || 'skip';
+    rows.push({
+      cid: 'ALECBRADLEY|ALECBRADLEY|PRENSADO|ROBUSTO|ROBUSTO|5x50|HON|BOX20',
+      retailer_key: 'hilands',
+      url: 'https://www.hilandscigars.com/shop/cigars/alec-bradley/alec-bradley-prensado/alec-bradley-prensado-robusto/',
+      action: action
+    });
+  }
+
+  {
+    const key = '0-2';
+    const action = urlDecisions[key] || decisions[0] || 'skip';
+    rows.push({
+      cid: 'ALECBRADLEY|ALECBRADLEY|PRENSADO|ROBUSTO|ROBUSTO|5x50|HON|BOX20',
+      retailer_key: 'nickscigarworld',
+      url: 'https://nickscigarworld.com/shop/premium-cigars/alec-bradley-prensado/alec-bradley-prensado-robusto/',
+      action: action
+    });
+  }
+
+  {
+    const key = '0-3';
+    const action = urlDecisions[key] || decisions[0] || 'skip';
+    rows.push({
+      cid: 'ALECBRADLEY|ALECBRADLEY|PRENSADO|ROBUSTO|ROBUSTO|5x50|HON|BOX20',
+      retailer_key: 'smallbatchcigar',
+      url: 'https://www.smallbatchcigar.com/alec-bradley-prensado-robusto',
+      action: action
+    });
+  }
+
+  {
+    const key = '0-4';
+    const action = urlDecisions[key] || decisions[0] || 'skip';
+    rows.push({
+      cid: 'ALECBRADLEY|ALECBRADLEY|PRENSADO|ROBUSTO|ROBUSTO|5x50|HON|BOX20',
+      retailer_key: 'bnbtobacco',
+      url: 'https://www.bnbtobacco.com/products/alec-bradley-prensado',
+      action: action
+    });
+  }
+
+  {
+    const key = '0-5';
+    const action = urlDecisions[key] || decisions[0] || 'skip';
+    rows.push({
+      cid: 'ALECBRADLEY|ALECBRADLEY|PRENSADO|ROBUSTO|ROBUSTO|5x50|HON|BOX20',
+      retailer_key: 'planetcigars',
+      url: 'https://www.planetcigars.com/alec-bradley-prensado-robusto-cigars.html',
+      action: action
+    });
+  }
+
+  {
+    const key = '0-6';
+    const action = urlDecisions[key] || decisions[0] || 'skip';
+    rows.push({
+      cid: 'ALECBRADLEY|ALECBRADLEY|PRENSADO|ROBUSTO|ROBUSTO|5x50|HON|BOX20',
+      retailer_key: 'tobaccolocker',
+      url: 'https://tobaccolocker.com/products/alec-bradley-prensado-lost-art-robusto-cigars-box',
+      action: action
+    });
+  }
+
+  {
+    const key = '1-0';
+    const action = urlDecisions[key] || decisions[1] || 'skip';
+    rows.push({
+      cid: 'ALECBRADLEY|ALECBRADLEY|PROJECT40MADURO|ROBUSTO|ROBUSTO|5x50|MEX|BOX24',
+      retailer_key: 'cigarking',
+      url: 'https://www.cigarking.com/alec-bradley-project-40-maduro-robusto-5x50-box-24/',
+      action: action
+    });
+  }
+
+  {
+    const key = '1-1';
+    const action = urlDecisions[key] || decisions[1] || 'skip';
+    rows.push({
+      cid: 'ALECBRADLEY|ALECBRADLEY|PROJECT40MADURO|ROBUSTO|ROBUSTO|5x50|MEX|BOX24',
+      retailer_key: 'nickscigarworld',
+      url: 'https://nickscigarworld.com/shop/premium-cigars/alec-bradley-project-40-maduro/alec-bradley-project-40-maduro-robusto/',
+      action: action
+    });
+  }
+
+  let csvContent = 'cid,retailer_key,url,action\n';
+  rows.forEach(r => {
+    csvContent += '"' + r.cid + '",' + r.retailer_key + ',"' + r.url + '",' + r.action + '\n';
+  });
+
+  const blob = new Blob([csvContent], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'review_decisions.csv';
+  a.click();
+
+  const toast = document.getElementById('toast');
+  toast.textContent = 'Decisions downloaded as review_decisions.csv — run: python tools/ai/review_batch.py --process-decisions';
+  toast.style.display = 'block';
+  setTimeout(() => { toast.style.display = 'none'; }, 8000);
+}
+</script>
+
+</body>
+</html>

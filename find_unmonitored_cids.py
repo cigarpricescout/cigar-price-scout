@@ -50,19 +50,30 @@ def main():
     unmonitored_df = unmonitored_df.sort_values(['Brand', 'Line', 'Wrapper', 'Vitola'])
     
     # ACTUAL SEARCH QUERIES FROM GOOGLE SEARCH CONSOLE
-    # Format: {search_term: impressions}
+    # Updated: March 2026 — combined impressions across all query variations
+    # Sources: 3-month GSC export (Dec 2025 - Mar 2026) + recent 30-day queries
     search_queries = {
-        'cohiba red dot': 82,  # 10+ related queries
-        'perdomo reserve champagne': 58,  # 26+ related queries combined
-        'perdomo champagne': 58,
-        'norteno cigar': 12,  # "norteno cigars", "herrera esteli norteno", "drew estate norteno"
-        'padron 1964 anniversary': 8,  # "for sale", "series", etc
-        'fuente opus x': 13,  # "price", "for sale", "in stock"
-        'hemingway cigars': 2,  # "price"
-        'ashton vsg': 2,  # "price"
-        'hoyo de monterrey': 4,  # "price", "excalibur price"
-        'romeo y julieta 1875': 8,  # Multiple vitola queries
-        'arturo fuente': 1,  # "cigars price"
+        'cohiba red dot': 82,       # "cohiba red dot price", "prices", "best price", "cigar price" etc.
+        'opus x': 70,               # "fuente opus x price", "opus x price", "arturo fuente opus x" etc.
+        'padron 1964': 75,          # Page impressions — best performing individual cigar page
+        'perdomo champagne': 58,    # "perdomo reserve champagne", "10th anniversary", "champagne noir"
+        'ashton vsg': 33,           # Page impressions, position 8.58
+        'hemingway': 18,            # Page impressions, got clicks
+        'romeo y julieta 1875': 14, # Page impressions
+        'my father the judge': 12,  # Page impressions, position 7.0
+        'herrera esteli norteno': 12,
+        'padron 1926': 8,
+        'cigar price comparison': 84, # Core site query (not cigar-specific)
+        'hoyo de monterrey': 5,
+        'oliva serie v': 5,
+        'liga privada': 5,
+        'le bijou 1922': 5,
+        'undercrown': 4,
+        'montecristo classic': 3,
+        'acid cigars': 3,
+        'padron series': 3,
+        'alec bradley prensado': 2,
+        'cao flathead': 1,
     }
     
     # Create scoring based on ACTUAL search terms
@@ -72,40 +83,63 @@ def main():
         brand_lower = str(row['Brand']).lower()
         line_lower = str(row['Line']).lower()
         
-        # Direct brand+line matches (highest value)
         if 'cohiba' in brand_lower and 'red dot' in line_lower:
-            score += 82  # Highest impressions
+            score += 82
+        elif 'opus x' in line_lower or 'opusx' in line_lower:
+            score += 70
+        elif 'padron' in brand_lower and '1964' in line_lower:
+            score += 75
         elif 'perdomo' in brand_lower and 'champagne' in line_lower:
             score += 58
+        elif 'ashton' in brand_lower and 'vsg' in line_lower:
+            score += 33
+        elif 'hemingway' in line_lower:
+            score += 18
+        elif 'romeo y julieta' in brand_lower or 'romeo and julieta' in brand_lower:
+            score += 14
+        elif 'the judge' in line_lower:
+            score += 12
         elif 'herrera esteli' in line_lower and 'norteno' in line_lower:
             score += 12
-        elif 'padron' in brand_lower and '1964' in line_lower:
+        elif 'padron' in brand_lower and '1926' in line_lower:
             score += 8
-        elif 'opus x' in line_lower or 'opusx' in line_lower:
-            score += 13
-        elif 'hemingway' in line_lower:
-            score += 2
-        elif 'ashton' in brand_lower and 'vsg' in line_lower:
-            score += 2
         elif 'hoyo de monterrey' in brand_lower:
+            score += 5
+        elif 'serie v' in line_lower and 'oliva' in brand_lower:
+            score += 5
+        elif 'liga privada' in line_lower:
+            score += 5
+        elif 'le bijou' in line_lower:
+            score += 5
+        elif 'undercrown' in line_lower:
             score += 4
-        elif 'romeo y julieta' in brand_lower or 'romeo and julieta' in brand_lower:
-            score += 8
-        elif 'arturo fuente' in brand_lower:
+        elif 'montecristo' in brand_lower and 'classic' in line_lower:
+            score += 3
+        elif 'acid' in line_lower and 'drew estate' in brand_lower:
+            score += 3
+        elif 'prensado' in line_lower:
+            score += 2
+        elif 'flathead' in line_lower:
             score += 1
         
         return score
     
-    # Additional factors for SEO value
+    # Brand-level boost for brands with demonstrated organic search presence
     priority_brands = {
-        'Cohiba': 5,
-        'Perdomo': 5,
-        'Drew Estate': 4,
-        'Arturo Fuente': 4,
-        'Padron': 4,
-        'Ashton': 3,
+        'Cohiba': 10,
+        'Arturo Fuente': 10,
+        'Padron': 8,
+        'Perdomo': 8,
+        'Ashton': 6,
+        'My Father': 5,
+        'Drew Estate': 5,
+        'Romeo y Julieta': 4,
+        'Oliva': 4,
         'Hoyo de Monterrey': 3,
-        'Romeo y Julieta': 3,
+        'Montecristo': 3,
+        'Alec Bradley': 2,
+        'CAO': 2,
+        'Foundation': 1,
     }
     
     def calculate_priority(row):

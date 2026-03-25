@@ -521,6 +521,14 @@ class AutomatedCigarPriceSystem:
         try:
             self.logger.info("Starting git commit and push...")
             
+            # Pull latest changes first to avoid conflicts
+            pull_result = subprocess.run(['git', 'pull', '--rebase'],
+                                        capture_output=True, text=True, cwd=self.project_root)
+            if pull_result.returncode == 0:
+                self.logger.info("Git pull successful")
+            else:
+                self.logger.warning(f"Git pull issue (continuing): {pull_result.stderr}")
+            
             # Check if there are changes
             result = subprocess.run(['git', 'status', '--porcelain'], 
                                   capture_output=True, text=True, cwd=self.project_root)
