@@ -1214,6 +1214,18 @@ def compare_all(
         authorized_retailer_keys = {r["key"] for r in RETAILERS if r["authorized"]}
         matching_products = [p for p in matching_products if p.retailer_key in authorized_retailer_keys]
 
+    # Only show variations that have 2+ distinct retailers (otherwise it's not a comparison)
+    from collections import defaultdict
+    variation_retailers = defaultdict(set)
+    for p in matching_products:
+        key = (p.wrapper, p.vitola, p.size, p.box_qty)
+        variation_retailers[key].add(p.retailer_key)
+    comparable_variations = {k for k, v in variation_retailers.items() if len(v) >= 2}
+    matching_products = [
+        p for p in matching_products
+        if (p.wrapper, p.vitola, p.size, p.box_qty) in comparable_variations
+    ]
+
     # Calculate price context (median comparison)
     if len(matching_products) >= 3:
         delivered_prices = []
@@ -2018,6 +2030,36 @@ h1 {{ color:{color}; margin:0 0 4px; font-size:24px; }}
     except Exception as e:
         logger.error(f"Review match error: {e}")
         return HTMLResponse(f"<p>Error processing request</p>", status_code=500)
+
+
+@app.get("/api/admin/pending-matches")
+async def get_pending_matches(request: Request):
+    """Fetch all staged (unreviewed) matches for the daily review email."""
+    admin_key = request.headers.get("X-Admin-Key", "")
+    expected = os.getenv("ADMIN_SECRET_KEY", "")
+    if not expected or admin_key != expected:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+
+    conn = get_analytics_conn()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT match_token, cid, retailer_key, url, confidence, reason,
+               brand, line, vitola, wrapper, size, box_qty, price, in_stock,
+               created_at
+        FROM url_staged_matches WHERE status='staged'
+        ORDER BY created_at DESC
+    """)
+    rows = cur.fetchall()
+    conn.close()
+
+    return {"matches": [
+        {"token": r[0], "cid": r[1], "retailer_key": r[2], "url": r[3],
+         "confidence": r[4], "reason": r[5], "brand": r[6], "line": r[7],
+         "vitola": r[8], "wrapper": r[9], "size": r[10], "box_qty": r[11],
+         "price": float(r[12]) if r[12] else None,
+         "in_stock": r[13], "created_at": str(r[14]) if r[14] else None}
+        for r in rows
+    ]}
 
 
 @app.get("/api/admin/approved-matches")

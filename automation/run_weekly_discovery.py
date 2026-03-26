@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """
-Weekly URL Discovery Runner
+Daily URL Discovery Runner
 
-Runs the URL Discovery Agent, uploads matches to the live site API,
-and sends an HTML email with one-click Approve/Reject links.
+Runs the URL Discovery Agent, uploads new matches to the live site API,
+then fetches ALL pending (unreviewed) matches and sends an HTML email
+with one-click Approve/Reject links. Matches carry over day-to-day
+until reviewed.
 
 Usage:
     python automation/run_weekly_discovery.py
@@ -145,67 +147,97 @@ def upload_matches_to_api(staged_rows: list) -> list:
         return []
 
 
-def build_match_email_html(matches_with_tokens: list) -> str:
-    """Build an HTML email body with approve/reject links for each match."""
-    count = len(matches_with_tokens)
+def fetch_all_pending_from_api() -> list:
+    """Fetch ALL pending (staged) matches from the live API, including old unreviewed ones."""
+    if not ADMIN_SECRET_KEY:
+        logger.warning("ADMIN_SECRET_KEY not set, cannot fetch pending matches")
+        return []
+
+    try:
+        resp = http_requests.get(
+            f"{APP_BASE_URL}/api/admin/pending-matches",
+            headers={"X-Admin-Key": ADMIN_SECRET_KEY},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        matches = resp.json().get("matches", [])
+        logger.info(f"Fetched {len(matches)} total pending matches from API")
+        return matches
+    except Exception as e:
+        logger.error(f"Failed to fetch pending matches: {e}")
+        return []
+
+
+def _render_match_card(i: int, m: dict) -> str:
+    """Render a single match card for the email."""
+    conf = (m.get("confidence") or "MEDIUM").upper()
+    conf_color = "#2e7d32" if conf == "HIGH" else "#e65100" if conf == "MEDIUM" else "#c62828"
+    conf_bg = "#e8f5e9" if conf == "HIGH" else "#fff3e0" if conf == "MEDIUM" else "#ffebee"
+
+    price = m.get("price")
+    price_str = f"${float(price):.2f}" if price else "N/A"
+    in_stock = m.get("in_stock")
+    stock_str = "In Stock" if in_stock else "Out of Stock" if in_stock is False else "Unknown"
+    stock_color = "#2e7d32" if in_stock else "#c62828" if in_stock is False else "#888"
+
+    approve_url = f"{APP_BASE_URL}/admin/match/{m['token']}/approve"
+    reject_url = f"{APP_BASE_URL}/admin/match/{m['token']}/reject"
+    product_url = m.get("url", "")
+
+    reason = m.get("reason", "") or ""
+    if len(reason) > 120:
+        reason = reason[:117] + "..."
+
+    return f"""
+    <tr><td style="padding:8px 0">
+      <table width="100%" cellpadding="0" cellspacing="0" style="background:#fff;border:1px solid #e0e0e0;border-radius:8px;overflow:hidden">
+        <tr><td style="padding:16px 20px">
+          <table width="100%" cellpadding="0" cellspacing="0">
+            <tr>
+              <td style="font-size:16px;font-weight:bold;color:#333">
+                #{i}. {m.get('brand','')} {m.get('line','')} {m.get('vitola','')}
+              </td>
+              <td align="right">
+                <span style="background:{conf_bg};color:{conf_color};padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700">{conf}</span>
+              </td>
+            </tr>
+          </table>
+          <p style="margin:8px 0 4px;color:#666;font-size:13px">
+            {m.get('retailer_key','')} &middot; {m.get('size','')} &middot; Box of {m.get('box_qty','?')} &middot; {m.get('wrapper','')}
+          </p>
+          <table width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0">
+            <tr>
+              <td style="font-size:18px;font-weight:bold;color:#333">{price_str}</td>
+              <td style="font-size:13px;font-weight:600;color:{stock_color}">{stock_str}</td>
+            </tr>
+          </table>
+          <p style="margin:4px 0 12px;color:#888;font-size:12px;font-style:italic">{reason}</p>
+          <table cellpadding="0" cellspacing="0"><tr>
+            <td style="padding-right:8px">
+              <a href="{approve_url}" style="display:inline-block;background:#4CAF50;color:#fff;padding:8px 24px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:14px">Approve</a>
+            </td>
+            <td style="padding-right:12px">
+              <a href="{reject_url}" style="display:inline-block;background:#f44336;color:#fff;padding:8px 24px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:14px">Reject</a>
+            </td>
+            <td>
+              <a href="{product_url}" style="color:#1565c0;font-size:13px;text-decoration:none" target="_blank">View Product &rarr;</a>
+            </td>
+          </tr></table>
+        </td></tr>
+      </table>
+    </td></tr>"""
+
+
+def build_match_email_html(all_pending: list, new_count: int = 0) -> str:
+    """Build an HTML email body with approve/reject links for all pending matches."""
+    total = len(all_pending)
     date_str = datetime.now().strftime("%B %d, %Y")
 
     cards_html = ""
-    for i, m in enumerate(matches_with_tokens, 1):
-        conf = (m.get("confidence") or "MEDIUM").upper()
-        conf_color = "#2e7d32" if conf == "HIGH" else "#e65100" if conf == "MEDIUM" else "#c62828"
-        conf_bg = "#e8f5e9" if conf == "HIGH" else "#fff3e0" if conf == "MEDIUM" else "#ffebee"
+    for i, m in enumerate(all_pending, 1):
+        cards_html += _render_match_card(i, m)
 
-        price_str = f"${m['price']:.2f}" if m.get("price") else "N/A"
-        stock_str = "In Stock" if m.get("in_stock") else "Out of Stock" if m.get("in_stock") is False else "Unknown"
-        stock_color = "#2e7d32" if m.get("in_stock") else "#c62828" if m.get("in_stock") is False else "#888"
-
-        approve_url = f"{APP_BASE_URL}/admin/match/{m['token']}/approve"
-        reject_url = f"{APP_BASE_URL}/admin/match/{m['token']}/reject"
-        product_url = m.get("url", "")
-
-        reason = m.get("reason", "")
-        if len(reason) > 120:
-            reason = reason[:117] + "..."
-
-        cards_html += f"""
-        <tr><td style="padding:8px 0">
-          <table width="100%" cellpadding="0" cellspacing="0" style="background:#fff;border:1px solid #e0e0e0;border-radius:8px;overflow:hidden">
-            <tr><td style="padding:16px 20px">
-              <table width="100%" cellpadding="0" cellspacing="0">
-                <tr>
-                  <td style="font-size:16px;font-weight:bold;color:#333">
-                    #{i}. {m.get('brand','')} {m.get('line','')} {m.get('vitola','')}
-                  </td>
-                  <td align="right">
-                    <span style="background:{conf_bg};color:{conf_color};padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700">{conf}</span>
-                  </td>
-                </tr>
-              </table>
-              <p style="margin:8px 0 4px;color:#666;font-size:13px">
-                {m.get('retailer_key','')} &middot; {m.get('size','')} &middot; Box of {m.get('box_qty','?')} &middot; {m.get('wrapper','')}
-              </p>
-              <table width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0">
-                <tr>
-                  <td style="font-size:18px;font-weight:bold;color:#333">{price_str}</td>
-                  <td style="font-size:13px;font-weight:600;color:{stock_color}">{stock_str}</td>
-                </tr>
-              </table>
-              <p style="margin:4px 0 12px;color:#888;font-size:12px;font-style:italic">{reason}</p>
-              <table cellpadding="0" cellspacing="0"><tr>
-                <td style="padding-right:8px">
-                  <a href="{approve_url}" style="display:inline-block;background:#4CAF50;color:#fff;padding:8px 24px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:14px">Approve</a>
-                </td>
-                <td style="padding-right:12px">
-                  <a href="{reject_url}" style="display:inline-block;background:#f44336;color:#fff;padding:8px 24px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:14px">Reject</a>
-                </td>
-                <td>
-                  <a href="{product_url}" style="color:#1565c0;font-size:13px;text-decoration:none" target="_blank">View Product &rarr;</a>
-                </td>
-              </tr></table>
-            </td></tr>
-          </table>
-        </td></tr>"""
+    new_label = f"<span style='color:#4CAF50;font-weight:600'>{new_count}</span> new today &middot; " if new_count > 0 else ""
 
     return f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"></head>
@@ -215,9 +247,9 @@ def build_match_email_html(matches_with_tokens: list) -> str:
 <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%">
 
   <tr><td style="background:#2d2d2d;padding:24px 24px 20px;border-radius:12px 12px 0 0">
-    <h1 style="margin:0;color:#fff;font-size:22px">Weekly Discovery Digest</h1>
+    <h1 style="margin:0;color:#fff;font-size:22px">Daily Discovery Digest</h1>
     <p style="margin:8px 0 0;color:#aaa;font-size:14px">
-      <span style="color:#4CAF50;font-weight:600">{count}</span> new matches found &middot; {date_str}
+      {new_label}<span style="color:#fff;font-weight:600">{total}</span> total pending &middot; {date_str}
     </p>
   </td></tr>
 
@@ -225,6 +257,7 @@ def build_match_email_html(matches_with_tokens: list) -> str:
     <p style="color:#666;font-size:14px;margin:0 0 16px">
       Click <strong style="color:#4CAF50">Approve</strong> or <strong style="color:#f44336">Reject</strong> for each match.
       Approved matches will be published in the next daily price update.
+      Anything you skip will appear again tomorrow.
     </p>
 
     <table width="100%" cellpadding="0" cellspacing="0">
@@ -242,27 +275,28 @@ def build_match_email_html(matches_with_tokens: list) -> str:
 </body></html>"""
 
 
-def send_digest_email(config: dict, matches_with_tokens: list, report_text: str = "", queue_report: str = ""):
-    """Send the weekly discovery HTML email with approve/reject links."""
+def send_digest_email(config: dict, all_pending: list, new_count: int = 0):
+    """Send the daily discovery HTML email with approve/reject links for all pending matches."""
     email_config = config.get("email_notifications", {})
     if not email_config.get("enabled") or not email_config.get("sender_email"):
         logger.info("Email notifications disabled, skipping digest email")
         return
 
-    count = len(matches_with_tokens)
-    subject = f"Cigar Price Scout - {count} New URL Matches to Review - {datetime.now().strftime('%Y-%m-%d')}"
+    total = len(all_pending)
+    date_str = datetime.now().strftime("%Y-%m-%d")
 
-    if count > 0:
-        html_body = build_match_email_html(matches_with_tokens)
+    if total > 0:
+        subject = f"Cigar Price Scout - {total} URL Matches to Review - {date_str}"
+        html_body = build_match_email_html(all_pending, new_count)
     else:
-        html_body = f"""<html><body style="font-family:sans-serif;background:#f5f5f5;padding:40px">
+        subject = f"Cigar Price Scout - No Pending Matches - {date_str}"
+        html_body = """<html><body style="font-family:sans-serif;background:#f5f5f5;padding:40px">
         <div style="max-width:500px;margin:0 auto;background:#fff;border-radius:12px;padding:32px;text-align:center">
-        <h2>Weekly Discovery Digest</h2>
-        <p style="color:#666">No new matches found this week.</p>
-        <pre style="text-align:left;font-size:12px;color:#888;background:#f5f5f5;padding:16px;border-radius:8px">{report_text}</pre>
+        <h2>Daily Discovery Digest</h2>
+        <p style="color:#666">No pending matches to review. New discoveries will appear here automatically.</p>
         </div></body></html>"""
 
-    plain_body = f"Weekly Discovery: {count} new matches. Open this email in an HTML-capable client to review."
+    plain_body = f"Daily Discovery: {total} matches pending review ({new_count} new). Open in an HTML client to approve/reject."
 
     try:
         msg = MIMEMultipart("alternative")
@@ -281,7 +315,7 @@ def send_digest_email(config: dict, matches_with_tokens: list, report_text: str 
             msg.as_string(),
         )
         server.quit()
-        logger.info(f"Weekly digest email sent ({count} matches)")
+        logger.info(f"Daily digest email sent ({total} pending, {new_count} new)")
 
     except Exception as e:
         logger.error(f"Failed to send digest email: {e}")
@@ -354,15 +388,16 @@ def enrich_with_prices(matches: list) -> list:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Weekly URL Discovery Runner")
+    parser = argparse.ArgumentParser(description="Daily URL Discovery Runner")
     parser.add_argument("--top-cids", type=int, default=50, help="Number of CIDs to search for")
     parser.add_argument("--dry-run", action="store_true", help="Run without sending email")
     parser.add_argument("--skip-queue", action="store_true", help="Skip extractor generator queue")
-    parser.add_argument("--skip-prices", action="store_true", help="Skip live price fetching")
+    parser.add_argument("--skip-prices", action="store_true", help="Skip live price fetching for new matches")
+    parser.add_argument("--email-only", action="store_true", help="Skip discovery, just send pending matches email")
     args = parser.parse_args()
 
     print(f"\n{'='*70}")
-    print(f"WEEKLY URL DISCOVERY - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"DAILY URL DISCOVERY - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"{'='*70}\n")
 
     config = load_config()
@@ -378,52 +413,46 @@ def main():
     else:
         logger.warning(f"Git pull issue (continuing): {pull_result.stderr}")
 
-    # 1. Run URL discovery
-    logger.info(f"Running URL discovery for top {args.top_cids} CIDs...")
-    try:
-        run_discovery(top_n_cids=args.top_cids)
-    except Exception as e:
-        logger.error(f"URL discovery failed: {e}")
+    new_count = 0
 
-    report_text = ""
-    if REPORT_FILE.exists():
-        with open(REPORT_FILE, "r") as f:
-            report_text = f.read()
+    if not args.email_only:
+        # 1. Run URL discovery (finds new matches)
+        logger.info(f"Running URL discovery for top {args.top_cids} CIDs...")
+        try:
+            run_discovery(top_n_cids=args.top_cids)
+        except Exception as e:
+            logger.error(f"URL discovery failed: {e}")
 
-    # 2. Process extractor generator queue
-    queue_report = ""
-    if not args.skip_queue:
-        logger.info("Checking extractor generator queue...")
-        queue_report = run_queue_processor()
+        # 2. Process extractor generator queue
+        if not args.skip_queue:
+            logger.info("Checking extractor generator queue...")
+            run_queue_processor()
 
-    # 3. Read staged matches and enrich with prices
-    staged = read_staged_matches()
-    logger.info(f"Found {len(staged)} staged matches")
+        # 3. Read NEW staged matches from local CSV and upload to API
+        staged = read_staged_matches()
+        logger.info(f"Found {len(staged)} new staged matches in local CSV")
 
-    if staged and not args.skip_prices:
-        staged = enrich_with_prices(staged)
+        if staged and not args.skip_prices:
+            staged = enrich_with_prices(staged)
 
-    # 4. Upload matches to the live API
-    matches_with_tokens = []
-    if staged:
-        tokens = upload_matches_to_api(staged)
-        token_map = {(t["cid"], t["retailer_key"]): t["token"] for t in tokens}
+        if staged:
+            tokens = upload_matches_to_api(staged)
+            new_count = len(tokens)
+            logger.info(f"{new_count} new matches uploaded to API")
 
-        for m in staged:
-            key = (m["cid"], m["retailer_key"])
-            token = token_map.get(key)
-            if token:
-                m["token"] = token
-                matches_with_tokens.append(m)
+    # 4. Fetch ALL pending matches from API (new + old unreviewed)
+    all_pending = fetch_all_pending_from_api()
+    logger.info(f"Total pending matches for review: {len(all_pending)}")
 
-        logger.info(f"{len(matches_with_tokens)} matches uploaded with tokens")
-
-    # 5. Send HTML email with approve/reject links
+    # 5. Send daily email with the full pending queue
     if not args.dry_run:
-        send_digest_email(config, matches_with_tokens, report_text, queue_report)
+        if all_pending or new_count > 0:
+            send_digest_email(config, all_pending, new_count)
+        else:
+            logger.info("No pending matches and no new discoveries, skipping email")
 
     print(f"\n{'='*70}")
-    print("WEEKLY DISCOVERY COMPLETE")
+    print(f"DAILY DISCOVERY COMPLETE - {len(all_pending)} pending, {new_count} new")
     print(f"{'='*70}")
 
 
