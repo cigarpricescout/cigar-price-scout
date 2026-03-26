@@ -42,6 +42,9 @@
     }
   }
   </script>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
   
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -217,6 +220,31 @@
             </div>
           </div>
         </a>
+
+        <!-- Price History Toggle -->
+        <div id="priceHistoryToggle" class="text-center my-5" style="display: none;">
+          <button 
+            id="price-history-btn"
+            onclick="togglePriceHistory()"
+            class="inline-flex items-center gap-2 px-6 py-3 border border-brand-500 rounded-xl bg-white text-brand-500 font-semibold hover:bg-brand-50 transition-all"
+          >
+            <svg id="chart-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+            <span id="price-history-btn-text">View Price History</span>
+            <span id="price-history-arrow" class="text-sm">&#9660;</span>
+          </button>
+        </div>
+
+        <!-- Price History Chart (collapsed by default) -->
+        <div id="priceHistorySection" style="display: none;" class="my-5">
+          <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+            <h3 id="priceHistoryTitle" class="font-display font-semibold text-xl text-brand-500 text-center mb-1"></h3>
+            <p class="text-center text-sm text-muted italic mb-4">Based on retailers currently monitored by Cigar Price Scout. Prices at other retailers may vary.</p>
+            <p id="priceHistoryPrompt" class="text-center text-muted py-8" style="display: none;">Select a wrapper and vitola above to view price history.</p>
+            <div id="priceHistoryChart" style="display: none; position: relative; max-height: 320px;">
+              <canvas id="historyCanvas"></canvas>
+            </div>
+          </div>
+        </div>
 
           <!-- Desktop Table -->
         <div class="desktop-table overflow-x-auto">
@@ -396,6 +424,8 @@
         renderTable(data.results);
         renderMobileCards(data.results);
         updateAnswerBlock(data.results);
+
+        document.getElementById('priceHistoryToggle').style.display = 'block';
     }
       
       function populateFilters(results) {
@@ -429,6 +459,7 @@
         renderTable(filtered);
         renderMobileCards(filtered);
         updateAnswerBlock(filtered);
+        if (historyExpanded) loadPriceHistory();
       }
       
       function clearFilters() {
@@ -437,6 +468,7 @@
         renderTable(allResults);
         renderMobileCards(allResults);
         updateAnswerBlock(allResults);
+        if (historyExpanded) loadPriceHistory();
       }
       
       function updateAnswerBlock(results) {
@@ -559,6 +591,185 @@
         showAgeModal();
         loadPrices();
       });
+
+      // Price History
+      let historyChart = null;
+      let historyExpanded = false;
+      let historyLoaded = false;
+
+      function togglePriceHistory() {
+        const section = document.getElementById('priceHistorySection');
+        const btnText = document.getElementById('price-history-btn-text');
+        const arrow = document.getElementById('price-history-arrow');
+
+        if (historyExpanded) {
+          section.style.display = 'none';
+          btnText.textContent = 'View Price History';
+          arrow.innerHTML = '&#9660;';
+          historyExpanded = false;
+        } else {
+          section.style.display = 'block';
+          btnText.textContent = 'Hide Price History';
+          arrow.innerHTML = '&#9650;';
+          historyExpanded = true;
+          gtag('event', 'price_history_expand', { cigar: brand + ' ' + line });
+          loadPriceHistory();
+        }
+      }
+
+      function loadPriceHistory() {
+        const wrapperVal = document.getElementById('wrapperFilter').value;
+        const vitolaVal = document.getElementById('vitolaFilter').value;
+        const titleEl = document.getElementById('priceHistoryTitle');
+        const promptEl = document.getElementById('priceHistoryPrompt');
+        const chartEl = document.getElementById('priceHistoryChart');
+
+        if (!wrapperVal || !vitolaVal) {
+          promptEl.style.display = 'block';
+          chartEl.style.display = 'none';
+          titleEl.textContent = 'Price History';
+          if (historyChart) { historyChart.destroy(); historyChart = null; }
+          return;
+        }
+
+        promptEl.style.display = 'none';
+        chartEl.style.display = 'block';
+        titleEl.textContent = 'Loading...';
+
+        const params = new URLSearchParams({ brand, line, wrapper: wrapperVal, vitola: vitolaVal });
+        fetch('/api/price-history?' + params.toString())
+          .then(r => r.json())
+          .then(data => renderPriceChart(data))
+          .catch(() => {
+            titleEl.textContent = 'Price History Unavailable';
+            chartEl.style.display = 'none';
+          });
+      }
+
+      const CHART_COLORS = [
+        '#4682B4', '#2E7D32', '#D4A017', '#7B5EA7', '#C75B39',
+        '#1E88E5', '#43A047', '#FB8C00', '#8E24AA', '#E53935'
+      ];
+
+      function renderPriceChart(data) {
+        const titleEl = document.getElementById('priceHistoryTitle');
+
+        if (!data.retailers || Object.keys(data.retailers).length === 0 || data.days < 14) {
+          titleEl.textContent = 'Not enough history yet';
+          document.getElementById('priceHistoryChart').style.display = 'none';
+          document.getElementById('priceHistoryPrompt').textContent = 'Price history will appear here once we have at least 14 days of data for this variation.';
+          document.getElementById('priceHistoryPrompt').style.display = 'block';
+          return;
+        }
+
+        titleEl.textContent = data.days + '-Day Price History';
+
+        if (historyChart) { historyChart.destroy(); historyChart = null; }
+
+        const retailers = Object.keys(data.retailers);
+        const allDates = data.dates;
+        const dateLabels = allDates.map(d => {
+          const dt = new Date(d + 'T00:00:00');
+          return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        });
+
+        const datasets = retailers.map((name, i) => {
+          const points = data.retailers[name];
+          const priceMap = {};
+          points.forEach(p => { priceMap[p.date] = p.price; });
+          const values = allDates.map(d => priceMap[d] !== undefined ? priceMap[d] : null);
+
+          return {
+            label: name,
+            data: values,
+            borderColor: CHART_COLORS[i % CHART_COLORS.length],
+            backgroundColor: CHART_COLORS[i % CHART_COLORS.length] + '20',
+            borderWidth: 2,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            tension: 0.3,
+            spanGaps: true,
+          };
+        });
+
+        // Average line
+        const avgValues = allDates.map(() => data.avg_price);
+        datasets.push({
+          label: 'Avg $' + data.avg_price.toFixed(0),
+          data: avgValues,
+          borderColor: '#9CA3AF',
+          borderWidth: 1.5,
+          borderDash: [6, 4],
+          pointRadius: 0,
+          pointHoverRadius: 0,
+          fill: false,
+        });
+
+        // All-time low point
+        if (data.low_date && data.low_price) {
+          const lowIdx = allDates.indexOf(data.low_date);
+          if (lowIdx >= 0) {
+            const lowData = allDates.map(() => null);
+            lowData[lowIdx] = data.low_price;
+            datasets.push({
+              label: 'Low: $' + data.low_price.toFixed(2),
+              data: lowData,
+              borderColor: '#DC2626',
+              backgroundColor: '#DC2626',
+              pointRadius: 6,
+              pointHoverRadius: 8,
+              pointStyle: 'circle',
+              showLine: false,
+            });
+          }
+        }
+
+        const ctx = document.getElementById('historyCanvas').getContext('2d');
+        historyChart = new Chart(ctx, {
+          type: 'line',
+          data: { labels: dateLabels, datasets },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+              legend: {
+                position: 'right',
+                labels: {
+                  boxWidth: 12,
+                  padding: 12,
+                  font: { family: "'Cormorant Garamond', Georgia, serif", size: 12 },
+                  usePointStyle: false,
+                },
+              },
+              tooltip: {
+                callbacks: {
+                  label: function(ctx) {
+                    if (ctx.parsed.y === null) return null;
+                    return ctx.dataset.label + ': $' + ctx.parsed.y.toFixed(2);
+                  }
+                }
+              }
+            },
+            scales: {
+              x: {
+                grid: { color: '#f3f4f6' },
+                ticks: {
+                  maxTicksLimit: 8,
+                  font: { size: 11 },
+                },
+              },
+              y: {
+                grid: { color: '#f3f4f6' },
+                ticks: {
+                  callback: function(v) { return '$' + v; },
+                  font: { size: 11 },
+                },
+              }
+            }
+          }
+        });
+      }
 
       // SEO Content Toggle
       function toggleSEO() {

@@ -614,7 +614,7 @@ RETAILERS = [
 
 # Enhanced CSV loader with wrapper and vitola support
 class Product:
-    def __init__(self, retailer_key, retailer_name, title, url, brand, line, wrapper, vitola, size, box_qty, price, in_stock=True, current_promotions_applied=''):
+    def __init__(self, retailer_key, retailer_name, title, url, brand, line, wrapper, vitola, size, box_qty, price, in_stock=True, current_promotions_applied='', cigar_id=''):
         self.retailer_key = retailer_key
         self.retailer_name = retailer_name
         self.title = title
@@ -628,6 +628,7 @@ class Product:
         self.price_cents = int(float(price) * 100) if price else 0
         self.in_stock = str(in_stock).lower() not in ('false', '0', 'no', '')
         self.current_promotions_applied = current_promotions_applied
+        self.cigar_id = cigar_id
 
 def load_csv(csv_path, retailer_key, retailer_name):
     """Load products from a CSV file with enhanced format"""
@@ -655,7 +656,8 @@ def load_csv(csv_path, retailer_key, retailer_name):
                         box_qty=row.get('box_qty', 25),
                         price=row.get('price', 0),
                         in_stock=row.get('in_stock', True),
-                        current_promotions_applied=row.get('current_promotions_applied', '')
+                        current_promotions_applied=row.get('current_promotions_applied', ''),
+                        cigar_id=row.get('cigar_id', ''),
                     )
                     # Only include products with valid URLs and prices (exclude empty/zero)
                     if product.brand and product.line and product.size and product.url and product.price_cents > 0:
@@ -1346,7 +1348,95 @@ def compare_all(
         "results": results
     }
 
-# Legal page routes
+RETAILER_KEY_TO_NAME = {r["key"]: r["name"] for r in RETAILERS}
+
+@app.get("/api/price-history")
+def price_history(
+    brand: str = Query(...),
+    line: str = Query(...),
+    wrapper: str = Query(""),
+    vitola: str = Query(""),
+):
+    """Return historical price data for a specific cigar variation, grouped by retailer."""
+    all_products = load_all_products()
+    matching_cids = set()
+
+    for p in all_products:
+        if p.brand.lower() != brand.lower() or p.line.lower() != line.lower():
+            continue
+        if wrapper and p.wrapper.lower() != wrapper.lower():
+            continue
+        if vitola and p.vitola.lower() != vitola.lower():
+            continue
+        matching_cids.add(p.cigar_id)
+
+    if not matching_cids:
+        return {"days": 0, "retailers": {}}
+
+    hist_db_path = Path("data/historical_prices.db")
+    if not hist_db_path.exists():
+        return {"days": 0, "retailers": {}}
+
+    conn = sqlite3.connect(str(hist_db_path))
+    cur = conn.cursor()
+
+    placeholders = ",".join("?" for _ in matching_cids)
+    cur.execute(f"""
+        SELECT retailer, date, price
+        FROM price_history
+        WHERE cigar_id IN ({placeholders}) AND price > 0
+        ORDER BY date ASC
+    """, list(matching_cids))
+    rows = cur.fetchall()
+    conn.close()
+
+    if not rows:
+        return {"days": 0, "retailers": {}}
+
+    retailers_data = {}
+    all_dates = set()
+
+    for retailer_key, date_str, price in rows:
+        name = RETAILER_KEY_TO_NAME.get(retailer_key, retailer_key)
+        if name not in retailers_data:
+            retailers_data[name] = {}
+        retailers_data[name][date_str] = price
+        all_dates.add(date_str)
+
+    sorted_dates = sorted(all_dates)
+    num_days = max(1, (datetime.strptime(sorted_dates[-1], "%Y-%m-%d") - datetime.strptime(sorted_dates[0], "%Y-%m-%d")).days)
+
+    all_prices = [p for r in retailers_data.values() for p in r.values()]
+    avg_price = round(sum(all_prices) / len(all_prices), 2) if all_prices else 0
+
+    low_price = min(all_prices) if all_prices else 0
+    low_date = None
+    low_retailer = None
+    for name, dates in retailers_data.items():
+        for d, p in dates.items():
+            if p == low_price and low_date is None:
+                low_date = d
+                low_retailer = name
+
+    retailer_series = {}
+    for name, date_prices in retailers_data.items():
+        points = [{"date": d, "price": date_prices[d]} for d in sorted_dates if d in date_prices]
+        if len(points) >= 7:
+            retailer_series[name] = points
+
+    top_retailers = sorted(retailer_series.keys(), key=lambda n: min(p["price"] for p in retailer_series[n]))[:5]
+    filtered_series = {n: retailer_series[n] for n in top_retailers}
+
+    return {
+        "days": num_days,
+        "dates": sorted_dates,
+        "avg_price": avg_price,
+        "low_price": low_price,
+        "low_date": low_date,
+        "low_retailer": low_retailer,
+        "retailers": filtered_series,
+    }
+
 
 # Legal page routes
 @app.get("/about.html")
