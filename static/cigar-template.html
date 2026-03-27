@@ -75,9 +75,12 @@
     [x-cloak] { display: none !important; }
     /* Mobile cards hidden by default, table visible */
     .mobile-cards { display: none; }
+    .history-mobile { display: none !important; }
     @media (max-width: 480px) {
       .desktop-table { display: none !important; }
       .mobile-cards { display: block !important; }
+      .history-desktop { display: none !important; }
+      .history-mobile { display: block !important; }
       }
     
     /* SEO Content Styling */
@@ -240,8 +243,31 @@
             <h3 id="priceHistoryTitle" class="font-display font-semibold text-xl text-brand-500 text-center mb-1"></h3>
             <p class="text-center text-sm text-muted italic mb-4">Based on retailers currently monitored by Cigar Price Scout. Prices at other retailers may vary.</p>
             <p id="priceHistoryPrompt" class="text-center text-muted py-8" style="display: none;">Select a wrapper and vitola above to view price history.</p>
-            <div id="priceHistoryChart" style="display: none; position: relative; max-height: 320px;">
+
+            <!-- Desktop: interactive chart -->
+            <div id="priceHistoryChart" class="history-desktop" style="display: none; position: relative; max-height: 320px;">
               <canvas id="historyCanvas"></canvas>
+            </div>
+
+            <!-- Mobile: metrics summary card -->
+            <div id="priceHistoryMobile" class="history-mobile" style="display: none;">
+              <div class="grid grid-cols-3 gap-3 text-center">
+                <div class="bg-emerald-50 rounded-lg p-4">
+                  <div class="text-xs text-muted uppercase tracking-wide mb-1">Lowest</div>
+                  <div id="mobile-low-price" class="text-xl font-bold text-emerald-600">--</div>
+                  <div id="mobile-low-retailer" class="text-xs text-muted mt-1"></div>
+                </div>
+                <div class="bg-gray-50 rounded-lg p-4">
+                  <div class="text-xs text-muted uppercase tracking-wide mb-1">Average</div>
+                  <div id="mobile-avg-price" class="text-xl font-bold text-gray-700">--</div>
+                  <div class="text-xs text-muted mt-1">across retailers</div>
+                </div>
+                <div class="bg-red-50 rounded-lg p-4">
+                  <div class="text-xs text-muted uppercase tracking-wide mb-1">Highest</div>
+                  <div id="mobile-high-price" class="text-xl font-bold text-red-500">--</div>
+                  <div id="mobile-high-retailer" class="text-xs text-muted mt-1"></div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -623,17 +649,18 @@
         const titleEl = document.getElementById('priceHistoryTitle');
         const promptEl = document.getElementById('priceHistoryPrompt');
         const chartEl = document.getElementById('priceHistoryChart');
+        const mobileEl = document.getElementById('priceHistoryMobile');
 
         if (!wrapperVal || !vitolaVal) {
           promptEl.style.display = 'block';
           chartEl.style.display = 'none';
+          mobileEl.style.display = 'none';
           titleEl.textContent = 'Price History';
           if (historyChart) { historyChart.destroy(); historyChart = null; }
           return;
         }
 
         promptEl.style.display = 'none';
-        chartEl.style.display = 'block';
         titleEl.textContent = 'Loading...';
 
         const params = new URLSearchParams({ brand, line, wrapper: wrapperVal, vitola: vitolaVal });
@@ -643,6 +670,7 @@
           .catch(() => {
             titleEl.textContent = 'Price History Unavailable';
             chartEl.style.display = 'none';
+            mobileEl.style.display = 'none';
           });
       }
 
@@ -657,6 +685,7 @@
         if (!data.retailers || Object.keys(data.retailers).length === 0 || data.days < 14) {
           titleEl.textContent = 'Not enough history yet';
           document.getElementById('priceHistoryChart').style.display = 'none';
+          document.getElementById('priceHistoryMobile').style.display = 'none';
           document.getElementById('priceHistoryPrompt').textContent = 'Price history will appear here once we have at least 14 days of data for this variation.';
           document.getElementById('priceHistoryPrompt').style.display = 'block';
           return;
@@ -664,6 +693,15 @@
 
         titleEl.textContent = data.days + '-Day Price History';
 
+        // Populate mobile metrics card
+        document.getElementById('mobile-low-price').textContent = '$' + data.low_price.toFixed(2);
+        document.getElementById('mobile-low-retailer').textContent = data.low_retailer || '';
+        document.getElementById('mobile-avg-price').textContent = '$' + data.avg_price.toFixed(2);
+        document.getElementById('mobile-high-price').textContent = '$' + (data.high_price || 0).toFixed(2);
+        document.getElementById('mobile-high-retailer').textContent = data.high_retailer || '';
+        document.getElementById('priceHistoryMobile').style.display = 'block';
+
+        // Desktop chart
         if (historyChart) { historyChart.destroy(); historyChart = null; }
 
         const retailers = Object.keys(data.retailers);
@@ -692,10 +730,10 @@
           };
         });
 
-        // Average line
+        // Average line (hidden from legend, labeled on chart via plugin)
         const avgValues = allDates.map(() => data.avg_price);
         datasets.push({
-          label: 'Avg $' + data.avg_price.toFixed(0),
+          label: '_avg',
           data: avgValues,
           borderColor: '#9CA3AF',
           borderWidth: 1.5,
@@ -705,14 +743,15 @@
           fill: false,
         });
 
-        // All-time low point
+        // Low point (hidden from legend, labeled on chart via plugin)
+        let lowIdx = -1;
         if (data.low_date && data.low_price) {
-          const lowIdx = allDates.indexOf(data.low_date);
+          lowIdx = allDates.indexOf(data.low_date);
           if (lowIdx >= 0) {
             const lowData = allDates.map(() => null);
             lowData[lowIdx] = data.low_price;
             datasets.push({
-              label: 'Low: $' + data.low_price.toFixed(2),
+              label: '_low',
               data: lowData,
               borderColor: '#DC2626',
               backgroundColor: '#DC2626',
@@ -724,10 +763,45 @@
           }
         }
 
+        const avgPrice = data.avg_price;
+        const lowPrice = data.low_price;
+        const chartLabelPlugin = {
+          id: 'chartLabels',
+          afterDraw(chart) {
+            const { ctx, chartArea, scales } = chart;
+            const yScale = scales.y;
+            const right = chartArea.right;
+
+            // Draw "Avg $X" label at the right edge of the avg line
+            const avgY = yScale.getPixelForValue(avgPrice);
+            ctx.save();
+            ctx.font = '600 11px -apple-system, BlinkMacSystemFont, sans-serif';
+            ctx.fillStyle = '#6B7280';
+            ctx.textAlign = 'right';
+            ctx.fillText('Avg $' + avgPrice.toFixed(0), right - 4, avgY - 6);
+            ctx.restore();
+
+            // Draw "Low $X" label near the red dot
+            if (lowIdx >= 0) {
+              const xScale = scales.x;
+              const lowX = xScale.getPixelForValue(lowIdx);
+              const lowY = yScale.getPixelForValue(lowPrice);
+              ctx.save();
+              ctx.font = '600 11px -apple-system, BlinkMacSystemFont, sans-serif';
+              ctx.fillStyle = '#DC2626';
+              ctx.textAlign = 'center';
+              ctx.fillText('Low $' + lowPrice.toFixed(2), lowX, lowY + 18);
+              ctx.restore();
+            }
+          }
+        };
+
         const ctx = document.getElementById('historyCanvas').getContext('2d');
+        document.getElementById('priceHistoryChart').style.display = 'block';
         historyChart = new Chart(ctx, {
           type: 'line',
           data: { labels: dateLabels, datasets },
+          plugins: [chartLabelPlugin],
           options: {
             responsive: true,
             maintainAspectRatio: false,
@@ -738,11 +812,17 @@
                 labels: {
                   boxWidth: 12,
                   padding: 12,
-                  font: { family: "'Cormorant Garamond', Georgia, serif", size: 12 },
+                  font: { family: "'Cormorant Garamond', Georgia, serif", size: 13 },
                   usePointStyle: false,
+                  filter: function(item) {
+                    return !item.text.startsWith('_');
+                  },
                 },
               },
               tooltip: {
+                filter: function(item) {
+                  return !item.dataset.label.startsWith('_');
+                },
                 callbacks: {
                   label: function(ctx) {
                     if (ctx.parsed.y === null) return null;

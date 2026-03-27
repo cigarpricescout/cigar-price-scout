@@ -1410,13 +1410,17 @@ def price_history(
     avg_price = round(sum(all_prices) / len(all_prices), 2) if all_prices else 0
 
     low_price = min(all_prices) if all_prices else 0
+    high_price = max(all_prices) if all_prices else 0
     low_date = None
     low_retailer = None
+    high_retailer = None
     for name, dates in retailers_data.items():
         for d, p in dates.items():
             if p == low_price and low_date is None:
                 low_date = d
                 low_retailer = name
+            if p == high_price and high_retailer is None:
+                high_retailer = name
 
     retailer_series = {}
     for name, date_prices in retailers_data.items():
@@ -1434,6 +1438,8 @@ def price_history(
         "low_price": low_price,
         "low_date": low_date,
         "low_retailer": low_retailer,
+        "high_price": high_price,
+        "high_retailer": high_retailer,
         "retailers": filtered_series,
     }
 
