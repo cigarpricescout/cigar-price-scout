@@ -241,7 +241,21 @@
         <div id="priceHistorySection" style="display: none;" class="my-5">
           <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
             <h3 id="priceHistoryTitle" class="font-display font-semibold text-xl text-brand-500 text-center mb-1"></h3>
-            <p class="text-center text-sm text-muted italic mb-4">Based on retailers currently monitored by Cigar Price Scout. Prices at other retailers may vary.</p>
+            <p class="text-center text-sm text-muted italic mb-3">Based on retailers currently monitored by Cigar Price Scout. Prices at other retailers may vary.</p>
+            
+            <!-- Summary badges above chart -->
+            <div id="priceHistoryBadges" style="display: none;" class="flex justify-center gap-4 mb-4">
+              <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gray-100 text-sm font-semibold text-gray-600">
+                <span class="w-3 h-0.5 bg-gray-400 inline-block" style="border-top: 2px dashed #9CA3AF;"></span>
+                Avg: <span id="badge-avg-price" class="text-gray-800">--</span>
+              </span>
+              <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-50 text-sm font-semibold text-red-600">
+                <span class="w-2 h-2 bg-red-500 rounded-full inline-block"></span>
+                Low: <span id="badge-low-price">--</span>
+                <span id="badge-low-retailer" class="text-red-400 font-normal text-xs"></span>
+              </span>
+            </div>
+
             <p id="priceHistoryPrompt" class="text-center text-muted py-8" style="display: none;">Select a wrapper and vitola above to view price history.</p>
 
             <!-- Desktop: interactive chart -->
@@ -655,6 +669,7 @@
           promptEl.style.display = 'block';
           chartEl.style.display = 'none';
           mobileEl.style.display = 'none';
+          document.getElementById('priceHistoryBadges').style.display = 'none';
           titleEl.textContent = 'Price History';
           if (historyChart) { historyChart.destroy(); historyChart = null; }
           return;
@@ -686,6 +701,7 @@
           titleEl.textContent = 'Not enough history yet';
           document.getElementById('priceHistoryChart').style.display = 'none';
           document.getElementById('priceHistoryMobile').style.display = 'none';
+          document.getElementById('priceHistoryBadges').style.display = 'none';
           document.getElementById('priceHistoryPrompt').textContent = 'Price history will appear here once we have at least 14 days of data for this variation.';
           document.getElementById('priceHistoryPrompt').style.display = 'block';
           return;
@@ -700,6 +716,12 @@
         document.getElementById('mobile-high-price').textContent = '$' + (data.high_price || 0).toFixed(2);
         document.getElementById('mobile-high-retailer').textContent = data.high_retailer || '';
         document.getElementById('priceHistoryMobile').style.display = 'block';
+
+        // Populate summary badges above chart
+        document.getElementById('badge-avg-price').textContent = '$' + data.avg_price.toFixed(2);
+        document.getElementById('badge-low-price').textContent = '$' + data.low_price.toFixed(2);
+        document.getElementById('badge-low-retailer').textContent = data.low_retailer ? '(' + data.low_retailer + ')' : '';
+        document.getElementById('priceHistoryBadges').style.display = 'flex';
 
         // Desktop chart
         if (historyChart) { historyChart.destroy(); historyChart = null; }
@@ -763,45 +785,11 @@
           }
         }
 
-        const avgPrice = data.avg_price;
-        const lowPrice = data.low_price;
-        const chartLabelPlugin = {
-          id: 'chartLabels',
-          afterDraw(chart) {
-            const { ctx, chartArea, scales } = chart;
-            const yScale = scales.y;
-            const right = chartArea.right;
-
-            // Draw "Avg $X" label at the right edge of the avg line
-            const avgY = yScale.getPixelForValue(avgPrice);
-            ctx.save();
-            ctx.font = '600 11px -apple-system, BlinkMacSystemFont, sans-serif';
-            ctx.fillStyle = '#6B7280';
-            ctx.textAlign = 'right';
-            ctx.fillText('Avg $' + avgPrice.toFixed(0), right - 4, avgY - 6);
-            ctx.restore();
-
-            // Draw "Low $X" label near the red dot
-            if (lowIdx >= 0) {
-              const xScale = scales.x;
-              const lowX = xScale.getPixelForValue(lowIdx);
-              const lowY = yScale.getPixelForValue(lowPrice);
-              ctx.save();
-              ctx.font = '600 11px -apple-system, BlinkMacSystemFont, sans-serif';
-              ctx.fillStyle = '#DC2626';
-              ctx.textAlign = 'center';
-              ctx.fillText('Low $' + lowPrice.toFixed(2), lowX, lowY + 18);
-              ctx.restore();
-            }
-          }
-        };
-
         const ctx = document.getElementById('historyCanvas').getContext('2d');
         document.getElementById('priceHistoryChart').style.display = 'block';
         historyChart = new Chart(ctx, {
           type: 'line',
           data: { labels: dateLabels, datasets },
-          plugins: [chartLabelPlugin],
           options: {
             responsive: true,
             maintainAspectRatio: false,
