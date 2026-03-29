@@ -389,10 +389,87 @@ def get_active_retailers() -> List[Dict]:
     return retailers
 
 
+PRIORITY_LINES = {
+    "opus x": 100,
+    "opus x angel's share": 95,
+    "opus x lost city": 95,
+    "opus x forbidden x": 95,
+    "opus x oro oscuro": 90,
+    "opus x 20th anniversary": 85,
+    "opus x 25th anniversary": 85,
+    "padron 1964 anniversary": 90,
+    "padron 1926 anniversary": 85,
+    "padron family reserve": 80,
+    "padron damaso": 70,
+    "cohiba red dot": 80,
+    "cohiba riviera": 70,
+    "perdomo reserve 10th anniversary champagne": 75,
+    "ashton vsg": 70,
+    "ashton esg": 65,
+    "hemingway": 60,
+    "liga privada no. 9": 60,
+    "liga privada t52": 60,
+    "undercrown": 55,
+    "my father the judge": 55,
+    "le bijou 1922": 55,
+    "oliva serie v": 55,
+    "herrera esteli": 50,
+}
+
+PRIORITY_BRANDS = {
+    "Arturo Fuente": 15,
+    "Padron": 12,
+    "Cohiba": 10,
+    "Perdomo": 8,
+    "Ashton": 7,
+    "My Father": 6,
+    "Drew Estate": 6,
+    "Oliva": 5,
+    "Romeo y Julieta": 4,
+    "Hoyo de Monterrey": 3,
+    "Montecristo": 3,
+    "Foundation": 3,
+    "Alec Bradley": 2,
+    "CAO": 2,
+}
+
+POPULAR_VITOLAS = {"Robusto", "Toro", "Churchill", "Gordo", "Corona", "Belicoso"}
+
+
+def _calculate_priority(row: pd.Series) -> int:
+    """Score a CID by search demand, brand value, and popular sizing."""
+    score = 0
+    brand = str(row.get("Brand", "")).strip()
+    line = str(row.get("Line", "")).strip().lower()
+
+    for pattern, pts in PRIORITY_LINES.items():
+        if pattern in line or (brand.lower() + " " + line).startswith(pattern):
+            score += pts
+            break
+
+    score += PRIORITY_BRANDS.get(brand, 0)
+
+    vitola = str(row.get("Vitola", ""))
+    if vitola in POPULAR_VITOLAS:
+        score += 3
+
+    box_qty = row.get("Box Quantity", 0)
+    if pd.notna(box_qty):
+        try:
+            if int(box_qty) >= 20:
+                score += 2
+        except (ValueError, TypeError):
+            pass
+
+    return score
+
+
 def get_unmonitored_cids(top_n: int = 50) -> pd.DataFrame:
     """
-    Get unmonitored CIDs prioritized by search demand.
-    Mirrors find_unmonitored_cids.py logic.
+    Get unmonitored CIDs ranked by search demand and brand priority.
+
+    Uses PRIORITY_LINES and PRIORITY_BRANDS to surface high-demand cigars
+    (e.g. Opus X, Padron 1964) before lower-demand ones.
     """
     if not MASTER_CSV.exists():
         logger.error(f"Master CSV not found: {MASTER_CSV}")
@@ -418,8 +495,21 @@ def get_unmonitored_cids(top_n: int = 50) -> pd.DataFrame:
     if unmonitored_df.empty:
         return unmonitored_df
 
-    unmonitored_df = unmonitored_df.sort_values("Brand")
-    return unmonitored_df.head(top_n)
+    unmonitored_df["_priority"] = unmonitored_df.apply(_calculate_priority, axis=1)
+    unmonitored_df = unmonitored_df.sort_values("_priority", ascending=False)
+
+    top = unmonitored_df.head(top_n)
+    if not top.empty:
+        high = top[top["_priority"] > 0]
+        if not high.empty:
+            logger.info(
+                f"Top priority CIDs: "
+                + ", ".join(
+                    f"{r['Brand']} {r['Line']} {r['Vitola']} ({r['_priority']}pts)"
+                    for _, r in high.head(10).iterrows()
+                )
+            )
+    return top.drop(columns=["_priority"])
 
 
 # ── Claude API matching ───────────────────────────────────────────────

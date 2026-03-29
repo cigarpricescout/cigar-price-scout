@@ -2,22 +2,99 @@
 """
 Find CIDs from master_cigars.csv that don't appear in ANY retailer CSV.
 Then prioritize them based on search demand data.
+
+Priority scoring matches tools/ai/url_discoverer.py so the daily discovery
+agent researches the same high-demand cigars surfaced here.
 """
 
 import pandas as pd
 import os
 from pathlib import Path
 
+# ── Shared priority tables (keep in sync with url_discoverer.py) ──────
+
+PRIORITY_LINES = {
+    "opus x": 100,
+    "opus x angel's share": 95,
+    "opus x lost city": 95,
+    "opus x forbidden x": 95,
+    "opus x oro oscuro": 90,
+    "opus x 20th anniversary": 85,
+    "opus x 25th anniversary": 85,
+    "padron 1964 anniversary": 90,
+    "padron 1926 anniversary": 85,
+    "padron family reserve": 80,
+    "padron damaso": 70,
+    "cohiba red dot": 80,
+    "cohiba riviera": 70,
+    "perdomo reserve 10th anniversary champagne": 75,
+    "ashton vsg": 70,
+    "ashton esg": 65,
+    "hemingway": 60,
+    "liga privada no. 9": 60,
+    "liga privada t52": 60,
+    "undercrown": 55,
+    "my father the judge": 55,
+    "le bijou 1922": 55,
+    "oliva serie v": 55,
+    "herrera esteli": 50,
+}
+
+PRIORITY_BRANDS = {
+    "Arturo Fuente": 15,
+    "Padron": 12,
+    "Cohiba": 10,
+    "Perdomo": 8,
+    "Ashton": 7,
+    "My Father": 6,
+    "Drew Estate": 6,
+    "Oliva": 5,
+    "Romeo y Julieta": 4,
+    "Hoyo de Monterrey": 3,
+    "Montecristo": 3,
+    "Foundation": 3,
+    "Alec Bradley": 2,
+    "CAO": 2,
+}
+
+POPULAR_VITOLAS = {"Robusto", "Toro", "Churchill", "Gordo", "Corona", "Belicoso"}
+
+
+def calculate_priority(row):
+    """Score a CID by line-level search demand, brand value, and popular sizing."""
+    score = 0
+    brand = str(row.get("Brand", "")).strip()
+    line = str(row.get("Line", "")).strip().lower()
+
+    for pattern, pts in PRIORITY_LINES.items():
+        if pattern in line or (brand.lower() + " " + line).startswith(pattern):
+            score += pts
+            break
+
+    score += PRIORITY_BRANDS.get(brand, 0)
+
+    vitola = str(row.get("Vitola", ""))
+    if vitola in POPULAR_VITOLAS:
+        score += 3
+
+    box_qty = row.get("Box Quantity", 0)
+    if pd.notna(box_qty):
+        try:
+            if int(box_qty) >= 20:
+                score += 2
+        except (ValueError, TypeError):
+            pass
+
+    return score
+
+
 def main():
-    # Load master cigars
     master_df = pd.read_csv('data/master_cigars.csv')
     print(f"Total CIDs in master file: {len(master_df)}")
     
-    # Get all CIDs from master
     master_cids = set(master_df['cigar_id'].dropna().unique())
     print(f"Unique CIDs in master: {len(master_cids)}")
     
-    # Get all retailer CSVs (exclude DORMANT and backups)
     retailer_dir = Path('static/data')
     retailer_csvs = [
         f for f in retailer_dir.glob('*.csv')
@@ -26,7 +103,6 @@ def main():
     
     print(f"\nActive retailer CSVs: {len(retailer_csvs)}")
     
-    # Collect all CIDs that appear in at least one retailer CSV
     monitored_cids = set()
     for csv_file in retailer_csvs:
         try:
@@ -39,135 +115,10 @@ def main():
     
     print(f"\nUnique CIDs being monitored across all retailers: {len(monitored_cids)}")
     
-    # Find CIDs not being monitored
     unmonitored_cids = master_cids - monitored_cids
     print(f"CIDs NOT being monitored: {len(unmonitored_cids)}")
     
-    # Get the full records for unmonitored CIDs
     unmonitored_df = master_df[master_df['cigar_id'].isin(unmonitored_cids)].copy()
-    
-    # Sort by Brand, Line, Wrapper, Vitola for readability
-    unmonitored_df = unmonitored_df.sort_values(['Brand', 'Line', 'Wrapper', 'Vitola'])
-    
-    # ACTUAL SEARCH QUERIES FROM GOOGLE SEARCH CONSOLE
-    # Updated: March 2026 — combined impressions across all query variations
-    # Sources: 3-month GSC export (Dec 2025 - Mar 2026) + recent 30-day queries
-    search_queries = {
-        'cohiba red dot': 82,       # "cohiba red dot price", "prices", "best price", "cigar price" etc.
-        'opus x': 70,               # "fuente opus x price", "opus x price", "arturo fuente opus x" etc.
-        'padron 1964': 75,          # Page impressions — best performing individual cigar page
-        'perdomo champagne': 58,    # "perdomo reserve champagne", "10th anniversary", "champagne noir"
-        'ashton vsg': 33,           # Page impressions, position 8.58
-        'hemingway': 18,            # Page impressions, got clicks
-        'romeo y julieta 1875': 14, # Page impressions
-        'my father the judge': 12,  # Page impressions, position 7.0
-        'herrera esteli norteno': 12,
-        'padron 1926': 8,
-        'cigar price comparison': 84, # Core site query (not cigar-specific)
-        'hoyo de monterrey': 5,
-        'oliva serie v': 5,
-        'liga privada': 5,
-        'le bijou 1922': 5,
-        'undercrown': 4,
-        'montecristo classic': 3,
-        'acid cigars': 3,
-        'padron series': 3,
-        'alec bradley prensado': 2,
-        'cao flathead': 1,
-    }
-    
-    # Create scoring based on ACTUAL search terms
-    def get_search_score(row):
-        """Match CID against actual search queries and return impression-based score"""
-        score = 0
-        brand_lower = str(row['Brand']).lower()
-        line_lower = str(row['Line']).lower()
-        
-        if 'cohiba' in brand_lower and 'red dot' in line_lower:
-            score += 82
-        elif 'opus x' in line_lower or 'opusx' in line_lower:
-            score += 70
-        elif 'padron' in brand_lower and '1964' in line_lower:
-            score += 75
-        elif 'perdomo' in brand_lower and 'champagne' in line_lower:
-            score += 58
-        elif 'ashton' in brand_lower and 'vsg' in line_lower:
-            score += 33
-        elif 'hemingway' in line_lower:
-            score += 18
-        elif 'romeo y julieta' in brand_lower or 'romeo and julieta' in brand_lower:
-            score += 14
-        elif 'the judge' in line_lower:
-            score += 12
-        elif 'herrera esteli' in line_lower and 'norteno' in line_lower:
-            score += 12
-        elif 'padron' in brand_lower and '1926' in line_lower:
-            score += 8
-        elif 'hoyo de monterrey' in brand_lower:
-            score += 5
-        elif 'serie v' in line_lower and 'oliva' in brand_lower:
-            score += 5
-        elif 'liga privada' in line_lower:
-            score += 5
-        elif 'le bijou' in line_lower:
-            score += 5
-        elif 'undercrown' in line_lower:
-            score += 4
-        elif 'montecristo' in brand_lower and 'classic' in line_lower:
-            score += 3
-        elif 'acid' in line_lower and 'drew estate' in brand_lower:
-            score += 3
-        elif 'prensado' in line_lower:
-            score += 2
-        elif 'flathead' in line_lower:
-            score += 1
-        
-        return score
-    
-    # Brand-level boost for brands with demonstrated organic search presence
-    priority_brands = {
-        'Cohiba': 10,
-        'Arturo Fuente': 10,
-        'Padron': 8,
-        'Perdomo': 8,
-        'Ashton': 6,
-        'My Father': 5,
-        'Drew Estate': 5,
-        'Romeo y Julieta': 4,
-        'Oliva': 4,
-        'Hoyo de Monterrey': 3,
-        'Montecristo': 3,
-        'Alec Bradley': 2,
-        'CAO': 2,
-        'Foundation': 1,
-    }
-    
-    def calculate_priority(row):
-        """Calculate priority based on search impressions and SEO factors"""
-        # Start with search impression score (most important)
-        score = get_search_score(row)
-        
-        # Add brand bonus
-        score += priority_brands.get(row['Brand'], 0)
-        
-        # Popular sizes that people search for (Robusto, Toro, Churchill)
-        popular_sizes = ['Robusto', 'Toro', 'Churchill', 'Epicure', 'Corona']
-        if row['Vitola'] in popular_sizes:
-            score += 3
-        
-        # Box quantity bonus (25+ boxes = deal hunters)
-        box_qty = row.get('Box Quantity', 0)
-        if pd.notna(box_qty):
-            try:
-                box_qty_int = int(box_qty)
-                if box_qty_int >= 25:
-                    score += 2
-                elif box_qty_int >= 20:
-                    score += 1
-            except (ValueError, TypeError):
-                pass  # Skip if box_qty is not convertible to int
-            
-        return score
     
     unmonitored_df['Priority_Score'] = unmonitored_df.apply(calculate_priority, axis=1)
     unmonitored_df = unmonitored_df.sort_values('Priority_Score', ascending=False)
@@ -177,18 +128,16 @@ def main():
     unmonitored_df.to_csv(output_file, index=False)
     print(f"\nFull report saved to: {output_file}")
     
-    # Show top 20 priorities
     print("\n" + "="*80)
-    print("TOP 10 UNMONITORED CIDs (Based on Google Search Console Traffic)")
+    print("TOP 10 UNMONITORED CIDs (Prioritized by Search Demand)")
     print("="*80)
-    print("These cigars are driving actual search impressions but you're NOT monitoring them")
+    print("These cigars are driving actual search traffic but you're NOT monitoring them")
     print("="*80)
     
     top_10 = unmonitored_df.head(10)
     for idx, row in top_10.iterrows():
-        search_score = get_search_score(row)
         box_qty = row.get('Box Quantity', 'N/A')
-        print(f"\n{int(row['Priority_Score']):3d} pts (Search: {int(search_score)}) | {row['Brand']} - {row['Line']}")
+        print(f"\n{int(row['Priority_Score']):3d} pts | {row['Brand']} - {row['Line']}")
         print(f"     Wrapper: {row['Wrapper']} | {row['Vitola']} ({row['Length']}x{row['Ring Gauge']}) | Box of {box_qty}")
         print(f"     CID: {row['cigar_id']}")
     
@@ -198,9 +147,8 @@ def main():
     
     next_10 = unmonitored_df.iloc[10:20]
     for idx, row in next_10.iterrows():
-        search_score = get_search_score(row)
         box_qty = row.get('Box Quantity', 'N/A')
-        print(f"\n{int(row['Priority_Score']):3d} pts (Search: {int(search_score)}) | {row['Brand']} - {row['Line']}")
+        print(f"\n{int(row['Priority_Score']):3d} pts | {row['Brand']} - {row['Line']}")
         print(f"     {row['Wrapper']} | {row['Vitola']} | Box of {box_qty}")
         print(f"     CID: {row['cigar_id']}")
     

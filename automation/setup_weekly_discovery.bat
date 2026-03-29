@@ -43,6 +43,9 @@ schtasks /create ^
     /ru %USERNAME% ^
     /f
 
+REM Configure task to work reliably on laptops (battery, sleep, missed runs)
+powershell -Command "$t = Get-ScheduledTask 'CigarPriceScout_DailyDiscovery'; $s = $t.Settings; $s.DisallowStartIfOnBatteries = $false; $s.StopIfGoingOnBatteries = $false; $s.StartWhenAvailable = $true; $s.WakeToRun = $true; Set-ScheduledTask -TaskName 'CigarPriceScout_DailyDiscovery' -Settings $s | Out-Null"
+
 if %errorlevel%==0 (
     echo.
     echo SUCCESS: Daily discovery task created!
