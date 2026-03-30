@@ -51,6 +51,9 @@ except Exception:
     
     def estimate_shipping_cents(base_cents, retailer_key, state=None):
         base_dollars = base_cents / 100
+
+        if retailer_key.startswith("community_free_"):
+            return 0
     
         # Free shipping thresholds
         if retailer_key == 'smallbatchcigar':
@@ -667,6 +670,45 @@ CACHE_TTL_SECONDS = 300  # 5 minutes
 
 COMMUNITY_DOWNVOTE_THRESHOLD = 3
 
+def _ensure_community_tables(conn):
+    """Create community tables if they don't exist (safe for first deploy)."""
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS community_prices (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cid TEXT NOT NULL,
+            url TEXT NOT NULL,
+            price_cents INTEGER NOT NULL,
+            retailer_name TEXT NOT NULL,
+            submitted_at TEXT NOT NULL DEFAULT (datetime('now')),
+            active INTEGER NOT NULL DEFAULT 1,
+            downvotes INTEGER NOT NULL DEFAULT 0,
+            voter_hash TEXT DEFAULT '',
+            brand TEXT DEFAULT '',
+            line TEXT DEFAULT '',
+            wrapper TEXT DEFAULT '',
+            vitola TEXT DEFAULT '',
+            size TEXT DEFAULT '',
+            box_qty INTEGER DEFAULT 20,
+            free_shipping INTEGER DEFAULT 0
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS community_votes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            community_price_id INTEGER NOT NULL,
+            reason TEXT NOT NULL,
+            voter_hash TEXT NOT NULL,
+            voted_at TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (community_price_id) REFERENCES community_prices(id)
+        )
+    """)
+    try:
+        cur.execute("ALTER TABLE community_prices ADD COLUMN free_shipping INTEGER DEFAULT 0")
+    except Exception:
+        pass
+    conn.commit()
+
 def _load_community_products():
     """Load active community-submitted prices from the DB as Product objects."""
     hist_db = Path("data/historical_prices.db")
@@ -676,17 +718,19 @@ def _load_community_products():
     products = []
     try:
         conn = sqlite3.connect(str(hist_db))
+        _ensure_community_tables(conn)
         cur = conn.cursor()
         cur.execute("""
             SELECT id, cid, url, price_cents, retailer_name,
-                   brand, line, wrapper, vitola, size, box_qty
+                   brand, line, wrapper, vitola, size, box_qty, free_shipping
             FROM community_prices
             WHERE active = 1
         """)
         for row in cur.fetchall():
-            cp_id, cid, url, price_cents, retailer_name, brand, line, wrapper, vitola, size, box_qty = row
+            cp_id, cid, url, price_cents, retailer_name, brand, line, wrapper, vitola, size, box_qty, free_ship = row
+            key_prefix = "community_free_" if free_ship else "community_"
             products.append(Product(
-                retailer_key=f"community_{cp_id}",
+                retailer_key=f"{key_prefix}{cp_id}",
                 retailer_name=retailer_name or "Community",
                 title=f"{brand} {line} {wrapper} {vitola}".strip(),
                 url=url,
@@ -2472,11 +2516,14 @@ async def submit_community_price(request: Request):
         if price_cents <= 0:
             return {"status": "error", "message": "Price must be greater than zero."}
 
+        free_shipping = 1 if data.get("free_shipping") else 0
+
         ip = request.client.host if request.client else ""
         voter_hash = hashlib.sha256(ip.encode()).hexdigest() if ip else ""
 
         hist_db = Path("data/historical_prices.db")
         conn = sqlite3.connect(str(hist_db))
+        _ensure_community_tables(conn)
         cur = conn.cursor()
 
         cur.execute(
@@ -2489,9 +2536,9 @@ async def submit_community_price(request: Request):
 
         cur.execute(
             """INSERT INTO community_prices
-               (cid, url, price_cents, retailer_name, voter_hash, brand, line, wrapper, vitola, size, box_qty)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (cid, url, price_cents, retailer_name, voter_hash, brand, line, wrapper, vitola, size, box_qty),
+               (cid, url, price_cents, retailer_name, voter_hash, brand, line, wrapper, vitola, size, box_qty, free_shipping)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (cid, url, price_cents, retailer_name, voter_hash, brand, line, wrapper, vitola, size, box_qty, free_shipping),
         )
 
         today = datetime.now().strftime("%Y-%m-%d")
@@ -2534,6 +2581,7 @@ async def report_row(request: Request):
 
         hist_db = Path("data/historical_prices.db")
         conn = sqlite3.connect(str(hist_db))
+        _ensure_community_tables(conn)
         cur = conn.cursor()
 
         cur.execute(

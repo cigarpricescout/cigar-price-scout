@@ -172,6 +172,14 @@
         <label class="block text-sm font-semibold mb-1">Box Price ($) <span class="text-red-500">*</span></label>
         <input type="number" id="communityPrice" step="0.01" min="1" placeholder="149.99" class="w-full p-2.5 border border-gray-200 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500" />
       </div>
+      <div class="mb-4">
+        <label class="block text-sm font-semibold mb-2">Shipping</label>
+        <div class="flex gap-2">
+          <button type="button" id="freeShipBtn" onclick="setFreeShipping(true)" class="flex-1 py-2 rounded-lg text-sm font-semibold border-2 border-emerald-400 bg-emerald-50 text-emerald-700 transition-all">Free Shipping</button>
+          <button type="button" id="paidShipBtn" onclick="setFreeShipping(false)" class="flex-1 py-2 rounded-lg text-sm font-semibold border-2 border-gray-200 bg-white text-gray-500 transition-all">Paid Shipping</button>
+        </div>
+        <p id="shippingNote" class="text-xs text-muted mt-1 text-center">Paid shipping will be estimated at ~$9.99</p>
+      </div>
       <div id="communityMsg" class="mb-3 text-center text-sm" style="display: none;"></div>
       <div class="flex gap-3 justify-center">
         <button onclick="submitCommunityPrice()" class="px-6 py-2.5 bg-brand-500 hover:bg-brand-600 text-white rounded-lg font-semibold transition-all text-sm">Submit</button>
@@ -367,7 +375,7 @@
                 <th class="p-4 border-b border-gray-200 text-center font-display font-semibold">Retailer</th>
                 <th class="p-4 border-b border-gray-200 text-left font-display font-semibold">Product Details</th>
                 <th class="p-4 border-b border-gray-200 text-center font-display font-semibold">Advertised Price</th>
-                <th class="p-4 border-b border-gray-200 text-center font-display font-semibold">Source</th>
+                <th class="p-4 border-b border-gray-200 text-center font-display font-semibold">Stock Status</th>
                 </tr>
               </thead>
               <tbody id="tableBody">
@@ -1018,13 +1026,30 @@
       }
 
       // Community: Missing Price Modal
+      let communityFreeShipping = true;
       function openMissingPriceModal() {
         document.getElementById('missingPriceModal').style.display = 'flex';
         document.getElementById('communityMsg').style.display = 'none';
+        setFreeShipping(true);
         gtag('event', 'missing_price_open', { cigar: brand + ' ' + line });
       }
       function closeMissingPriceModal() {
         document.getElementById('missingPriceModal').style.display = 'none';
+      }
+      function setFreeShipping(isFree) {
+        communityFreeShipping = isFree;
+        const freeBtn = document.getElementById('freeShipBtn');
+        const paidBtn = document.getElementById('paidShipBtn');
+        const note = document.getElementById('shippingNote');
+        if (isFree) {
+          freeBtn.className = 'flex-1 py-2 rounded-lg text-sm font-semibold border-2 border-emerald-400 bg-emerald-50 text-emerald-700 transition-all';
+          paidBtn.className = 'flex-1 py-2 rounded-lg text-sm font-semibold border-2 border-gray-200 bg-white text-gray-500 transition-all';
+          note.textContent = '';
+        } else {
+          paidBtn.className = 'flex-1 py-2 rounded-lg text-sm font-semibold border-2 border-amber-400 bg-amber-50 text-amber-700 transition-all';
+          freeBtn.className = 'flex-1 py-2 rounded-lg text-sm font-semibold border-2 border-gray-200 bg-white text-gray-500 transition-all';
+          note.textContent = 'Paid shipping will be estimated at ~$9.99';
+        }
       }
 
       function submitCommunityPrice() {
@@ -1060,6 +1085,7 @@
           vitola: vitolaVal || (matchingResult ? matchingResult.vitola : ''),
           size: matchingResult ? matchingResult.size : '',
           box_qty: matchingResult ? matchingResult.box_qty : 20,
+          free_shipping: communityFreeShipping,
         };
 
         msgEl.style.display = 'block';
