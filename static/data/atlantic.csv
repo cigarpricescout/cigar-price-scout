@@ -1,5 +1,5 @@
 cigar_id,title,url,brand,line,wrapper,vitola,size,box_qty,price,in_stock,current_promotions_applied
-ARTUROFUENTE|ARTUROFUENTE|HEMINGWAY|CLASSIC|CLASSIC|7x48|CAM|BOX25,Classic,https://atlanticcigar.com/arturo-fuente-hemingway-classic-natural/,Arturo Fuente,Hemingway,Cameroon,Classic,7x48,25,272.95,True,
+ARTUROFUENTE|ARTUROFUENTE|HEMINGWAY|CLASSIC|CLASSIC|7x48|CAM|BOX25,Classic,https://atlanticcigar.com/arturo-fuente-hemingway-classic-natural/,Arturo Fuente,Hemingway,Cameroon,Classic,7x48,25,272.95,False,
 HOYODEMONTERREY|HOYODEMONTERREY|EXCALIBUR|EPICURE|EPICURE|5.25x50|CT|BOX20,Epicure,https://atlanticcigar.com/hoyo-de-monterrey-excalibur-epicures-natural/,Hoyo de Monterrey,Excalibur,Connecticut Shade,Epicure,5.25x50,20,136.85,True,
 PADRON|PADRON|1964ANNIVERSARY|DIPLOMATICO|DIPLOMATICO|7x50|MAD|BOX25,Diplomatico,https://atlanticcigar.com/padron-1964-anniversary-diplomatico-maduro/,Padron,1964 Anniversary,Maduro,Diplomatico,7x50,25,467.5,True,
 ROMEOYJULIETA|ROMEOYJULIETA|1875|CHURCHILL|CHURCHILL|7x50|IND|BOX25,Churchill,https://atlanticcigar.com/romeo-y-julieta-1875-churchill/,Romeo y Julieta,1875,Indonesian Shade Grown TBN,Churchill,7x50,25,174.04,True,
@@ -18,7 +18,7 @@ PADRON|PADRON|1964ANNIVERSARY|EXCLUSIVO|EXCLUSIVO|5.5x50|MAD|BOX25,Exclusivo,htt
 PADRON|PADRON|1964ANNIVERSARY|PRINCIPE|PRINCIPE|4.5x46|NAT|BOX25,Principe,https://atlanticcigar.com/padron-1964-anniversary-principe-natural/,Padron,1964 Anniversary,Natural,Principe,4.5x46,25,351.25,True,
 PADRON|PADRON|1964ANNIVERSARY|PRINCIPE|PRINCIPE|4.5x46|MAD|BOX25,Principe,https://atlanticcigar.com/padron-1964-anniversary-principe-maduro/,Padron,1964 Anniversary,Maduro,Principe,4.5x46,25,351.25,True,
 PADRON|PADRON|1964ANNIVERSARY|CORONA|CORONA|6x42|NAT|BOX25,Corona,https://atlanticcigar.com/padron-1964-anniversary-corona-natural/,Padron,1964 Anniversary,Natural,Corona,6x42,25,372.52,True,
-PADRON|PADRON|1964ANNIVERSARY|CORONA|CORONA|6x42|MAD|BOX25,Corona,https://atlanticcigar.com/padron-1964-anniversary-corona-maduro/,Padron,1964 Anniversary,Maduro,Corona,6x42,25,372.52,True,
+PADRON|PADRON|1964ANNIVERSARY|CORONA|CORONA|6x42|MAD|BOX25,Corona,https://atlanticcigar.com/padron-1964-anniversary-corona-maduro/,Padron,1964 Anniversary,Maduro,Corona,6x42,25,372.52,False,
 PADRON|PADRON|1926SERIE|NO.9|NO.9|5.25x56|NAT|BOX24,No. 9,https://atlanticcigar.com/padron-1926-series-no-9-natural/,Padron,1926 Serie,Natural,No. 9,5.25x56,24,588.0,True,
 PADRON|PADRON|1926SERIE|NO.9|NO.9|5.25x56|MAD|BOX24,No. 9,https://atlanticcigar.com/padron-1926-series-no-9-maduro/,Padron,1926 Serie,Maduro,No. 9,5.25x56,24,588.0,False,
 ASHTON|ASHTON|VSG|ENCHANTMENT|ENCHANTMENT|5.5x48|ECU|BOX22,Enchantment,https://atlanticcigar.com/ashton-vsg-enchantment/,Ashton,VSG,Ecuadorian Sun Grown,Enchantment,5.5x48,22,351.45,True,
