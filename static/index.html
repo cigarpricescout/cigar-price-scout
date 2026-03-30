@@ -986,7 +986,9 @@
         return;
       }
 
-      const appData = document.querySelector('[x-data]').__x.$data;
+      const el = document.querySelector('[x-data]');
+      const appData = Alpine.$data(el);
+      const actualWrapper = appData.extractActualWrapper ? appData.extractActualWrapper(appData.selection?.wrapper || '') : (appData.selection?.wrapper || '');
       const payload = {
         cid: '',
         url: url,
@@ -994,7 +996,7 @@
         retailer_name: retailerName,
         brand: appData.selection?.brand || '',
         line: appData.selection?.line || '',
-        wrapper: appData.selection?.wrapper || '',
+        wrapper: actualWrapper,
         vitola: appData.selection?.vitola || '',
         size: appData.selection?.size || '',
         box_qty: appData.selection?.box_qty ? parseInt(appData.selection.box_qty) : 20,
