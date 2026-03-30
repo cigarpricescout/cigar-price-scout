@@ -152,6 +152,34 @@
     </div>
   </div>
 
+  <!-- Missing Price Modal -->
+  <div id="missingPriceModal" class="fixed inset-0 bg-black/60 z-50 items-center justify-center" style="display: none;">
+    <div class="bg-white rounded-xl p-8 max-w-md mx-auto shadow-2xl text-left" style="margin-top: 15vh;">
+      <div class="flex justify-between items-center mb-5">
+        <h3 class="font-display font-semibold text-xl text-brand-500">Submit Missing Price</h3>
+        <button onclick="closeMissingPriceModal()" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+      </div>
+      <p class="text-sm text-muted mb-5">Know a retailer selling this cigar that we're not tracking? Add it below and it will appear in the comparison immediately.</p>
+      <div class="mb-3">
+        <label class="block text-sm font-semibold mb-1">Retailer Name <span class="text-red-500">*</span></label>
+        <input type="text" id="communityRetailerName" placeholder="e.g. CigarPage" class="w-full p-2.5 border border-gray-200 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500" />
+      </div>
+      <div class="mb-3">
+        <label class="block text-sm font-semibold mb-1">Product Page URL <span class="text-red-500">*</span></label>
+        <input type="url" id="communityUrl" placeholder="https://www.cigarpage.com/..." class="w-full p-2.5 border border-gray-200 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500" />
+      </div>
+      <div class="mb-4">
+        <label class="block text-sm font-semibold mb-1">Box Price ($) <span class="text-red-500">*</span></label>
+        <input type="number" id="communityPrice" step="0.01" min="1" placeholder="149.99" class="w-full p-2.5 border border-gray-200 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500" />
+      </div>
+      <div id="communityMsg" class="mb-3 text-center text-sm" style="display: none;"></div>
+      <div class="flex gap-3 justify-center">
+        <button onclick="submitCommunityPrice()" class="px-6 py-2.5 bg-brand-500 hover:bg-brand-600 text-white rounded-lg font-semibold transition-all text-sm">Submit</button>
+        <button onclick="closeMissingPriceModal()" class="px-6 py-2.5 border border-gray-300 rounded-lg font-semibold text-gray-600 hover:bg-gray-50 transition-all text-sm">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <div class="max-w-5xl mx-auto px-5">
     
     <!-- Header -->
@@ -224,16 +252,32 @@
           </div>
         </a>
 
-        <!-- Price History Toggle -->
-        <div id="priceHistoryToggle" class="text-center my-5" style="display: none;">
+        <!-- Action Buttons Row -->
+        <div id="actionButtonsRow" class="flex justify-center gap-3 my-5 flex-wrap" style="display: none;">
           <button 
             id="price-history-btn"
             onclick="togglePriceHistory()"
-            class="inline-flex items-center gap-2 px-6 py-3 border border-brand-500 rounded-xl bg-white text-brand-500 font-semibold hover:bg-brand-50 transition-all"
+            class="inline-flex items-center gap-2 px-5 py-2.5 border border-brand-500 rounded-xl bg-white text-brand-500 font-semibold hover:bg-brand-50 transition-all text-sm"
           >
-            <svg id="chart-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
-            <span id="price-history-btn-text">View Price History</span>
-            <span id="price-history-arrow" class="text-sm">&#9660;</span>
+            <svg id="chart-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+            <span id="price-history-btn-text">Price History</span>
+            <span id="price-history-arrow" class="text-xs">&#9660;</span>
+          </button>
+          <button 
+            id="buying-guide-btn"
+            onclick="toggleBuyingGuide()"
+            class="inline-flex items-center gap-2 px-5 py-2.5 border border-brand-500 rounded-xl bg-white text-brand-500 font-semibold hover:bg-brand-50 transition-all text-sm"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            <span id="buying-guide-btn-text">Buying Guide</span>
+            <span id="buying-guide-arrow" class="text-xs">&#9660;</span>
+          </button>
+          <button 
+            onclick="openMissingPriceModal()"
+            class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand-500 text-white font-semibold hover:bg-brand-600 transition-all text-sm"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Missing Price
           </button>
         </div>
 
@@ -287,19 +331,6 @@
           </div>
         </div>
 
-        <!-- Buying Guide Toggle -->
-        <div id="buyingGuideToggle" class="text-center my-5" style="display: none;">
-          <button 
-            id="buying-guide-btn"
-            onclick="toggleBuyingGuide()"
-            class="inline-flex items-center gap-2 px-6 py-3 border border-brand-500 rounded-xl bg-white text-brand-500 font-semibold hover:bg-brand-50 transition-all"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-            <span id="buying-guide-btn-text">View Buying Guide</span>
-            <span id="buying-guide-arrow" class="text-sm">&#9660;</span>
-          </button>
-        </div>
-
         <!-- Buying Guide Section (collapsed by default) -->
         <div id="buyingGuideSection" style="display: none;" class="my-5">
           <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
@@ -345,34 +376,6 @@
             </table>
           </div>
 
-          <!-- Add a Retailer -->
-          <div id="addRetailerSection" class="text-center my-5" style="display: none;">
-            <button id="addRetailerBtn" onclick="toggleAddRetailer()" class="inline-flex items-center gap-2 px-5 py-2.5 border border-blue-500 rounded-xl bg-white text-blue-600 font-semibold hover:bg-blue-50 transition-all text-sm">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              Know a retailer we're missing? Add it
-            </button>
-            <div id="addRetailerForm" style="display: none;" class="mt-4 max-w-lg mx-auto bg-white border border-gray-200 rounded-xl p-6 shadow-sm text-left">
-              <h4 class="font-display font-semibold text-lg text-brand-500 mb-4 text-center">Add a Retailer</h4>
-              <p class="text-sm text-muted mb-4 text-center">Contribute a price from a retailer not listed above. Your submission will appear immediately.</p>
-              <div class="mb-3">
-                <label class="block text-sm font-semibold mb-1">Retailer Name <span class="text-red-500">*</span></label>
-                <input type="text" id="communityRetailerName" placeholder="e.g. CigarPage" class="w-full p-2.5 border border-gray-200 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
-              </div>
-              <div class="mb-3">
-                <label class="block text-sm font-semibold mb-1">Product Page URL <span class="text-red-500">*</span></label>
-                <input type="url" id="communityUrl" placeholder="https://www.cigarpage.com/..." class="w-full p-2.5 border border-gray-200 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
-              </div>
-              <div class="mb-4">
-                <label class="block text-sm font-semibold mb-1">Box Price ($) <span class="text-red-500">*</span></label>
-                <input type="number" id="communityPrice" step="0.01" min="1" placeholder="149.99" class="w-full p-2.5 border border-gray-200 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
-              </div>
-              <div id="communityMsg" class="mb-3 text-center text-sm" style="display: none;"></div>
-              <div class="flex gap-3 justify-center">
-                <button onclick="submitCommunityPrice()" class="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-all text-sm">Submit</button>
-                <button onclick="toggleAddRetailer()" class="px-6 py-2.5 border border-gray-300 rounded-lg font-semibold text-gray-600 hover:bg-gray-50 transition-all text-sm">Cancel</button>
-              </div>
-            </div>
-          </div>
           
           <!-- Mobile Cards -->
         <div id="mobileCards" class="mobile-cards space-y-4">
@@ -536,9 +539,7 @@
         renderMobileCards(data.results);
         updateAnswerBlock(data.results);
 
-        document.getElementById('priceHistoryToggle').style.display = 'block';
-        document.getElementById('buyingGuideToggle').style.display = 'block';
-        document.getElementById('addRetailerSection').style.display = 'block';
+        document.getElementById('actionButtonsRow').style.display = 'flex';
     }
       
       function populateFilters(results) {
@@ -1016,12 +1017,14 @@
         }
       }
 
-      // Community: Add a Retailer
-      let addRetailerOpen = false;
-      function toggleAddRetailer() {
-        const form = document.getElementById('addRetailerForm');
-        addRetailerOpen = !addRetailerOpen;
-        form.style.display = addRetailerOpen ? 'block' : 'none';
+      // Community: Missing Price Modal
+      function openMissingPriceModal() {
+        document.getElementById('missingPriceModal').style.display = 'flex';
+        document.getElementById('communityMsg').style.display = 'none';
+        gtag('event', 'missing_price_open', { cigar: brand + ' ' + line });
+      }
+      function closeMissingPriceModal() {
+        document.getElementById('missingPriceModal').style.display = 'none';
       }
 
       function submitCommunityPrice() {

@@ -241,11 +241,6 @@
            class="inline-block bg-brand-500 hover:bg-brand-600 text-white py-3 px-6 rounded-lg font-semibold text-lg transition-all duration-200 shadow-md hover:shadow-lg hover:-translate-y-0.5">
           Request a Box to Scout
         </a>
-        <a href="#" 
-           @click.prevent="reportIssue()"
-           class="inline-block bg-red-600 hover:bg-red-700 text-white py-3 px-6 rounded-lg font-semibold text-lg transition-all duration-200 shadow-md hover:shadow-lg hover:-translate-y-0.5">
-          Report a Data Issue
-        </a>
       </div>
       
       <!-- Filter Chips -->
@@ -366,7 +361,7 @@
                         </div>
                       </template>
                       <template x-if="!result.community">
-                        <div>
+                        <div class="flex flex-col items-center gap-1">
                           <span x-show="result.authorized" 
                                 class="inline-block px-2 py-1 rounded text-xs font-semibold uppercase bg-emerald-100 text-emerald-700 border border-emerald-300">
                             Authorized Dealer
@@ -375,7 +370,7 @@
                                 class="inline-block px-2 py-1 rounded text-xs font-semibold uppercase bg-red-50 text-red-600 border border-red-200">
                             Marketplace
                           </span>
-                          <span x-show="!result.authorized" class="text-xs text-red-600 font-medium">Buy at own risk</span>
+                          <span x-show="!result.authorized" class="block text-xs text-red-600 font-medium">Buy at own risk</span>
                         </div>
                       </template>
                     </div>
@@ -812,17 +807,6 @@
           return `/go?retailer=${encodeURIComponent(result.retailer)}&cid=${encodeURIComponent(cid)}&url=${encodeURIComponent(result.url)}`;
         },
         
-        reportIssue() {
-          const searchContext = this.buildSearchContext();
-          sessionStorage.setItem('reportIssueContext', JSON.stringify({
-            searchContext,
-            currentUrl: window.location.href,
-            timestamp: new Date().toISOString(),
-            currentResults: this.results
-          }));
-          window.location.href = '/report-data-issue.html';
-        },
-
         reportCommunityRow(communityId) {
           const reason = prompt('Why are you reporting this listing?\n\n1 - Price has changed\n2 - Out of stock\n3 - Link is broken\n\nEnter 1, 2, or 3:');
           if (!reason) return;
@@ -839,19 +823,6 @@
             .catch(() => alert('Network error. Please try again.'));
         },
         
-        buildSearchContext() {
-          if (!this.selection.brand || !this.selection.line) {
-            return 'General website feedback (no specific search active)';
-          }
-          
-          let context = `${this.selection.brand} ${this.selection.line}`;
-          if (this.selection.wrapper) context += ` (${this.selection.wrapper} wrapper)`;
-          if (this.selection.vitola) context += ` ${this.selection.vitola}`;
-          if (this.selection.zip) context += ` - ZIP: ${this.selection.zip}`;
-          if (this.authorizedOnly) context += ' (Authorized dealers only)';
-          
-          return context;
-        }
       };
     }
   </script>

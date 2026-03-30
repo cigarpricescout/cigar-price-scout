@@ -258,15 +258,6 @@ class BoxPricingRequest(BaseModel):
     zip: str
     notes: str = ""
 
-# Data Issue Report Model
-class DataIssueReport(BaseModel):
-    search_context: str = ""
-    retailer: str = ""
-    issue_type: str
-    problem_description: str
-    recommended_solution: str
-    name: str
-    email: str
     current_url: str = ""
     timestamp: str = ""
 
@@ -1553,10 +1544,6 @@ async def contact():
 async def request_box_pricing():
     return FileResponse(f"{STATIC_PATH}/request-box-pricing.html")
 
-@app.get("/report-data-issue.html")
-async def report_data_issue():
-    return FileResponse(f"{STATIC_PATH}/report-data-issue.html")
-
 @app.get("/deals.html")
 async def deals_page():
     return FileResponse(f"{STATIC_PATH}/deals.html")
@@ -1581,7 +1568,6 @@ async def sitemap():
         {"url": "/privacy-policy.html", "priority": "0.5", "changefreq": "yearly"},
         {"url": "/terms-of-service.html", "priority": "0.5", "changefreq": "yearly"},
         {"url": "/request-box-pricing.html", "priority": "0.7", "changefreq": "monthly"},
-        {"url": "/report-data-issue.html", "priority": "0.6", "changefreq": "monthly"},
         {"url": "/deals.html", "priority": "0.9", "changefreq": "daily"},
         {"url": "/submit-deal.html", "priority": "0.6", "changefreq": "monthly"},
     ]
@@ -1693,50 +1679,6 @@ Submitted: {datetime.now().strftime('%Y-%m-%d at %H:%M:%S')}
     except Exception as e:
         logger.error(f"Error processing contact form: {e}")
         return {"status": "error", "message": "There was an error sending your message. Please try again."}
-
-@app.post("/api/data-issue-report")
-async def submit_data_issue_report(request: Request):
-    try:
-        # LOAD THE JSON DATA FIRST
-        data = await request.json()
-        
-        # DEFINE SUBJECT VARIABLE
-        subject = f"Data Issue Report: {data.get('issue_type', 'General Issue')}"
-        
-        full_report = f"""
-========== NEW DATA ISSUE REPORT ==========
-SEARCH CONTEXT: {data.get('search_context', 'Not specified')}
-RETAILER: {data.get('retailer', 'Not specified')}
-ISSUE TYPE: {data.get('issue_type', 'Not specified')}
-
-PROBLEM DESCRIPTION:
-{data.get('problem_description', 'No description provided')}
-
-RECOMMENDED SOLUTION:
-{data.get('recommended_solution', 'No solution provided')}
-
-REPORTER INFO:
-- Name: {data.get('name', 'Not provided')}
-- Email: {data.get('email', 'Not provided')}
-
-TECHNICAL INFO:
-- URL: {data.get('current_url', 'Not provided')}
-- Timestamp: {data.get('timestamp', 'Not provided')}
-
-Submitted: {datetime.now().strftime('%Y-%m-%d at %H:%M:%S')}
-==========================================
-"""
-        
-        logger.info(full_report)
-        
-        # SEND EMAIL NOTIFICATION
-        send_notification_email(subject, full_report, "info@cigarpricescout.com")
-        
-        return {"status": "success", "message": "Your data issue report has been submitted successfully!"}
-        
-    except Exception as e:
-        logger.error(f"Error processing data issue report: {e}")
-        return {"status": "error", "message": "There was an error submitting your report. Please try again."}
 
 @app.get("/cigars/{brand}/{line}", response_class=HTMLResponse)
 async def cigar_landing_page(brand: str, line: str):
@@ -2554,7 +2496,7 @@ async def submit_community_price(request: Request):
 
         today = datetime.now().strftime("%Y-%m-%d")
         cur.execute(
-            """INSERT INTO price_history (cid, retailer, url, price, in_stock, date)
+            """INSERT INTO price_history (cigar_id, retailer, url, price, in_stock, date)
                VALUES (?, ?, ?, ?, ?, ?)""",
             (cid, retailer_name.lower().replace(" ", ""), url, price_cents / 100, 1, today),
         )
