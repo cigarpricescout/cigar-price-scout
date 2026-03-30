@@ -1057,6 +1057,7 @@ def compare(
     wrapper: Optional[str] = Query(None),
     vitola: Optional[str] = Query(None),
     size: Optional[str] = Query(None),
+    box_qty: Optional[int] = Query(None, description="Box quantity filter"),
     zip: str = Query("", description="ZIP code for shipping/tax estimates"),
     authorized_only: bool = Query(False, description="Show only authorized dealers"),
     request: Request = None,
@@ -1120,14 +1121,15 @@ def compare(
             if p.vitola.lower() != vitola.lower():
                 continue
         
-        # Size filter (optional, but at least one selection criteria needed)
+        # Size filter (optional)
         if size and size.strip():
             if p.size.lower() != size.lower():
                 continue
         
-        # Size matching is handled by the compare endpoint naturally
-        # Wrapper and vitola are optional filters
-        pass
+        # Box quantity filter
+        if box_qty is not None:
+            if p.box_qty != box_qty:
+                continue
         
         matching_products.append(p)
 

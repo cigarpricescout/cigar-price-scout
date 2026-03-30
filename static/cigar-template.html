@@ -188,6 +188,36 @@
     </div>
   </div>
 
+  <!-- Report Modal -->
+  <div id="reportModal" class="fixed inset-0 bg-black/60 z-50 items-center justify-center" style="display: none;">
+    <div class="bg-white rounded-xl p-8 max-w-sm mx-auto shadow-2xl text-left" style="margin-top: 20vh;">
+      <div class="flex justify-between items-center mb-5">
+        <h3 class="font-display font-semibold text-xl text-red-600">Report Listing</h3>
+        <button onclick="closeReportModal()" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+      </div>
+      <p class="text-sm text-muted mb-4">Why are you reporting this listing?</p>
+      <div class="space-y-3 mb-5">
+        <label class="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+          <input type="radio" name="reportReason" value="price_changed" class="accent-red-600" />
+          <span class="text-sm font-medium">Price has changed</span>
+        </label>
+        <label class="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+          <input type="radio" name="reportReason" value="out_of_stock" class="accent-red-600" />
+          <span class="text-sm font-medium">Out of stock</span>
+        </label>
+        <label class="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+          <input type="radio" name="reportReason" value="link_broken" class="accent-red-600" />
+          <span class="text-sm font-medium">Link is broken</span>
+        </label>
+      </div>
+      <div id="reportMsg" class="mb-3 text-center text-sm" style="display: none;"></div>
+      <div class="flex gap-3 justify-center">
+        <button onclick="submitReport()" class="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold transition-all text-sm">Submit Report</button>
+        <button onclick="closeReportModal()" class="px-6 py-2.5 border border-gray-300 rounded-lg font-semibold text-gray-600 hover:bg-gray-50 transition-all text-sm">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <div class="max-w-5xl mx-auto px-5">
     
     <!-- Header -->
@@ -220,6 +250,9 @@
             </select>
           <select id="vitolaFilter" class="p-3 border border-gray-200 rounded-xl bg-white font-serif text-base focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500">
               <option value="">All Vitolas</option>
+            </select>
+          <select id="boxQtyFilter" class="p-3 border border-gray-200 rounded-xl bg-white font-serif text-base focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500">
+              <option value="">All Box Qty</option>
             </select>
           <button onclick="clearFilters()" class="px-5 py-3 border border-brand-500 rounded-xl bg-white text-brand-500 font-semibold hover:bg-brand-50 transition-all">
             Clear Filters
@@ -523,9 +556,11 @@
 
         const wrappers = new Set();
         const vitolas = new Set();
+        const boxQtys = new Set();
         data.results.forEach(r => {
             if (r.wrapper) wrappers.add(r.wrapper);
             if (r.vitola) vitolas.add(r.vitola);
+            if (r.box_qty) boxQtys.add(r.box_qty);
         });
 
       // Update summary
@@ -536,7 +571,7 @@
             let summary = `We found ${data.results.length} ${data.brand} ${data.line} box listings`;
             if (wrapperList) summary += ` in wrappers such as ${wrapperList}`;
             if (vitolaList) summary += ` and vitolas like ${vitolaList}`;
-        summary += `. Use the filters below to explore wrappers and vitolas.`;
+        summary += `. Use the filters below to explore wrappers, vitolas, and box quantities.`;
             summaryEl.textContent = summary;
         }
 
@@ -553,28 +588,35 @@
       function populateFilters(results) {
         const wrappers = new Set();
         const vitolas = new Set();
+        const boxQtys = new Set();
         results.forEach(r => {
           if (r.wrapper) wrappers.add(r.wrapper);
           if (r.vitola) vitolas.add(r.vitola);
+          if (r.box_qty) boxQtys.add(Number(r.box_qty));
         });
         
         const wrapperFilter = document.getElementById('wrapperFilter');
         const vitolaFilter = document.getElementById('vitolaFilter');
+        const boxQtyFilter = document.getElementById('boxQtyFilter');
         
       wrapperFilter.innerHTML = '<option value="">All Wrappers</option>' + Array.from(wrappers).sort().map(w => `<option value="${w}">${w}</option>`).join('');
       vitolaFilter.innerHTML = '<option value="">All Vitolas</option>' + Array.from(vitolas).sort().map(v => `<option value="${v}">${v}</option>`).join('');
+      boxQtyFilter.innerHTML = '<option value="">All Box Qty</option>' + Array.from(boxQtys).sort((a,b) => a-b).map(q => `<option value="${q}">Box of ${q}</option>`).join('');
         
         wrapperFilter.addEventListener('change', applyFilters);
         vitolaFilter.addEventListener('change', applyFilters);
+        boxQtyFilter.addEventListener('change', applyFilters);
       }
       
       function applyFilters() {
         const wrapperVal = document.getElementById('wrapperFilter').value;
         const vitolaVal = document.getElementById('vitolaFilter').value;
+        const boxQtyVal = document.getElementById('boxQtyFilter').value;
         
         const filtered = allResults.filter(r => {
           if (wrapperVal && r.wrapper !== wrapperVal) return false;
           if (vitolaVal && r.vitola !== vitolaVal) return false;
+          if (boxQtyVal && String(r.box_qty) !== boxQtyVal) return false;
           return true;
         });
         
@@ -588,6 +630,7 @@
       function clearFilters() {
         document.getElementById('wrapperFilter').value = '';
         document.getElementById('vitolaFilter').value = '';
+        document.getElementById('boxQtyFilter').value = '';
         renderTable(allResults);
         renderMobileCards(allResults);
         updateAnswerBlock(allResults);
@@ -776,10 +819,12 @@
       function loadBuyingGuide() {
         const wrapperVal = document.getElementById('wrapperFilter').value;
         const vitolaVal = document.getElementById('vitolaFilter').value;
+        const boxQtyVal = document.getElementById('boxQtyFilter').value;
         const promptEl = document.getElementById('buyingGuidePrompt');
         const cardsEl = document.getElementById('buyingGuideCards');
 
-        if (!wrapperVal || !vitolaVal) {
+        if (!wrapperVal || !vitolaVal || !boxQtyVal) {
+          promptEl.textContent = 'Select a wrapper, vitola, and box quantity above to see buying recommendations.';
           promptEl.style.display = 'block';
           cardsEl.style.display = 'none';
           return;
@@ -814,12 +859,14 @@
       function loadPriceHistory() {
         const wrapperVal = document.getElementById('wrapperFilter').value;
         const vitolaVal = document.getElementById('vitolaFilter').value;
+        const boxQtyVal = document.getElementById('boxQtyFilter').value;
         const titleEl = document.getElementById('priceHistoryTitle');
         const promptEl = document.getElementById('priceHistoryPrompt');
         const chartEl = document.getElementById('priceHistoryChart');
         const mobileEl = document.getElementById('priceHistoryMobile');
 
-        if (!wrapperVal || !vitolaVal) {
+        if (!wrapperVal || !vitolaVal || !boxQtyVal) {
+          promptEl.textContent = 'Select a wrapper, vitola, and box quantity above to view price history.';
           promptEl.style.display = 'block';
           chartEl.style.display = 'none';
           mobileEl.style.display = 'none';
@@ -1067,10 +1114,12 @@
 
         const wrapperVal = document.getElementById('wrapperFilter').value;
         const vitolaVal = document.getElementById('vitolaFilter').value;
+        const boxQtyVal = document.getElementById('boxQtyFilter').value;
 
         const matchingResult = allResults.find(r => {
           if (wrapperVal && r.wrapper !== wrapperVal) return false;
           if (vitolaVal && r.vitola !== vitolaVal) return false;
+          if (boxQtyVal && String(r.box_qty) !== boxQtyVal) return false;
           return true;
         });
 
@@ -1084,7 +1133,7 @@
           wrapper: wrapperVal || (matchingResult ? matchingResult.wrapper : ''),
           vitola: vitolaVal || (matchingResult ? matchingResult.vitola : ''),
           size: matchingResult ? matchingResult.size : '',
-          box_qty: matchingResult ? matchingResult.box_qty : 20,
+          box_qty: boxQtyVal ? parseInt(boxQtyVal) : (matchingResult ? matchingResult.box_qty : 20),
           free_shipping: communityFreeShipping,
         };
 
@@ -1119,27 +1168,50 @@
       }
 
       // Community: Report / Downvote
+      let reportTargetId = null;
       function reportRow(communityId) {
-        const reason = prompt('Why are you reporting this listing?\n\n1 - Price has changed\n2 - Out of stock\n3 - Link is broken\n\nEnter 1, 2, or 3:');
-        if (!reason) return;
-
-        const reasonMap = { '1': 'price_changed', '2': 'out_of_stock', '3': 'link_broken' };
-        const mappedReason = reasonMap[reason.trim()];
-        if (!mappedReason) { alert('Invalid selection.'); return; }
+        reportTargetId = communityId;
+        document.getElementById('reportModal').style.display = 'flex';
+        document.getElementById('reportMsg').style.display = 'none';
+        document.querySelectorAll('input[name="reportReason"]').forEach(r => r.checked = false);
+      }
+      function closeReportModal() {
+        document.getElementById('reportModal').style.display = 'none';
+        reportTargetId = null;
+      }
+      function submitReport() {
+        const selected = document.querySelector('input[name="reportReason"]:checked');
+        if (!selected) {
+          const msg = document.getElementById('reportMsg');
+          msg.style.display = 'block';
+          msg.className = 'mb-3 text-center text-sm text-red-600';
+          msg.textContent = 'Please select a reason.';
+          return;
+        }
+        const reason = selected.value;
+        const msg = document.getElementById('reportMsg');
+        msg.style.display = 'block';
+        msg.className = 'mb-3 text-center text-sm text-gray-500';
+        msg.textContent = 'Submitting...';
 
         fetch('/api/report-row', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ community_id: communityId, reason: mappedReason }),
+          body: JSON.stringify({ community_id: reportTargetId, reason }),
         })
           .then(r => r.json())
           .then(data => {
-            alert(data.message);
+            msg.className = data.status === 'success' ? 'mb-3 text-center text-sm text-emerald-600 font-semibold' : 'mb-3 text-center text-sm text-red-600';
+            msg.textContent = data.message;
             if (data.status === 'success') {
-              gtag('event', 'community_report', { community_id: communityId, reason: mappedReason });
+              gtag('event', 'community_report', { community_id: reportTargetId, reason });
+              setTimeout(() => { closeReportModal(); location.reload(); }, 1500);
             }
           })
-          .catch(() => alert('Network error. Please try again.'));
+          .catch(() => {
+            msg.className = 'mb-3 text-center text-sm text-red-600';
+            msg.textContent = 'Network error. Please try again.';
+          });
       }
     </script>
   </body>

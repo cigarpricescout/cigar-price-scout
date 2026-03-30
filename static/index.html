@@ -198,12 +198,15 @@
           </template>
         </select>
         
-        <!-- Box Qty (Read-only) -->
-        <input type="text" 
-               :value="boxQtyDisplay" 
-               readonly 
-               placeholder="Box Qty"
-               class="p-3 border border-gray-200 rounded-xl bg-gray-100 font-serif text-lg text-muted cursor-not-allowed" />
+        <!-- Box Qty Select -->
+        <select x-model="selection.box_qty"
+                :disabled="!selection.vitola"
+                class="col-span-1 p-3 border border-gray-200 rounded-xl bg-white font-serif text-lg focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-400 transition-all disabled:bg-gray-100 disabled:cursor-not-allowed">
+          <option value="">Box Qty...</option>
+          <template x-for="qty in availableBoxQtys" :key="qty">
+            <option :value="qty" x-text="'Box of ' + qty"></option>
+          </template>
+        </select>
         
         <!-- ZIP Input -->
         <input type="text" 
@@ -562,6 +565,36 @@
         </div>
       </div>
     </div>
+
+    <!-- Report Modal (Home) -->
+    <div id="homeReportModal" class="fixed inset-0 bg-black/60 z-50 items-center justify-center" style="display: none;">
+      <div class="bg-white rounded-xl p-8 max-w-sm mx-auto shadow-2xl text-left" style="margin-top: 20vh;">
+        <div class="flex justify-between items-center mb-5">
+          <h3 class="font-display font-semibold text-xl text-red-600">Report Listing</h3>
+          <button @click="closeHomeReportModal()" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+        </div>
+        <p class="text-sm text-muted mb-4">Why are you reporting this listing?</p>
+        <div class="space-y-3 mb-5">
+          <label class="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+            <input type="radio" name="homeReportReason" value="price_changed" class="accent-red-600" />
+            <span class="text-sm font-medium">Price has changed</span>
+          </label>
+          <label class="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+            <input type="radio" name="homeReportReason" value="out_of_stock" class="accent-red-600" />
+            <span class="text-sm font-medium">Out of stock</span>
+          </label>
+          <label class="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+            <input type="radio" name="homeReportReason" value="link_broken" class="accent-red-600" />
+            <span class="text-sm font-medium">Link is broken</span>
+          </label>
+        </div>
+        <div id="homeReportMsg" class="mb-3 text-center text-sm" style="display: none;"></div>
+        <div class="flex gap-3 justify-center">
+          <button @click="submitHomeReport()" class="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold transition-all text-sm">Submit Report</button>
+          <button @click="closeHomeReportModal()" class="px-6 py-2.5 border border-gray-300 rounded-lg font-semibold text-gray-600 hover:bg-gray-50 transition-all text-sm">Cancel</button>
+        </div>
+      </div>
+    </div>
     
     <!-- Footer -->
     <footer class="mt-10 py-5 border-t border-gray-200 text-center text-muted">
@@ -604,6 +637,7 @@
           line: '',
           wrapper: '',
           vitola: '',
+          box_qty: '',
           zip: ''
         },
         authorizedOnly: false,
@@ -611,6 +645,7 @@
         showResults: false,
         results: [],
         resultsTitle: '',
+        reportTargetId: null,
         
         // Computed
         get availableLines() {
@@ -652,13 +687,13 @@
           return Array.from(vitolas).sort();
         },
         
-        get boxQtyDisplay() {
-          if (!this.selection.brand || !this.selection.line) return '';
+        get availableBoxQtys() {
+          if (!this.selection.brand || !this.selection.line) return [];
           
           const brand = this.options.find(b => b.brand === this.selection.brand);
-          if (!brand) return '';
+          if (!brand) return [];
           const line = brand.lines.find(l => l.line === this.selection.line);
-          if (!line) return '';
+          if (!line) return [];
           
           const qtys = new Set();
           line.wrappers.forEach(w => {
@@ -671,14 +706,11 @@
             }
           });
           
-          const sorted = Array.from(qtys).sort((a, b) => a - b);
-          if (sorted.length === 1) return `Box of ${sorted[0]}`;
-          if (sorted.length > 1) return `Box of ${sorted.join(', ')}`;
-          return '';
+          return Array.from(qtys).sort((a, b) => a - b);
         },
         
         get canSearch() {
-          return this.selection.brand && this.selection.line && this.selection.zip;
+          return this.selection.brand && this.selection.line && this.selection.box_qty && this.selection.zip;
         },
         
         get hasFilters() {
@@ -735,19 +767,27 @@
           this.selection.line = '';
           this.selection.wrapper = '';
           this.selection.vitola = '';
+          this.selection.box_qty = '';
         },
         
         onLineChange() {
           this.selection.wrapper = '';
           this.selection.vitola = '';
+          this.selection.box_qty = '';
         },
         
         onWrapperChange() {
           this.selection.vitola = '';
+          this.selection.box_qty = '';
         },
         
         onVitolaChange() {
-          // Could trigger auto-search or other actions
+          this.selection.box_qty = '';
+          this.$nextTick(() => {
+            if (this.availableBoxQtys.length === 1) {
+              this.selection.box_qty = String(this.availableBoxQtys[0]);
+            }
+          });
         },
         
         formatWrapperDisplay(wrapper, alias) {
@@ -788,6 +828,9 @@
             if (this.selection.vitola) {
               params.append('vitola', this.selection.vitola);
             }
+            if (this.selection.box_qty) {
+              params.append('box_qty', this.selection.box_qty);
+            }
             if (this.authorizedOnly) {
               params.append('authorized_only', 'true');
             }
@@ -805,8 +848,8 @@
             let titleParts = [data.brand, data.line];
             if (data.wrapper) titleParts.push(data.wrapper);
             if (data.vitola) titleParts.push(data.vitola);
-            if (this.results.length > 0) {
-              titleParts.push(`Box of ${this.results[0].box_qty}`);
+            if (this.selection.box_qty) {
+              titleParts.push(`Box of ${this.selection.box_qty}`);
             }
             this.resultsTitle = `${titleParts.join(', ')} - Price Comparison`;
             
@@ -859,19 +902,50 @@
         },
 
         reportCommunityRow(communityId) {
-          const reason = prompt('Why are you reporting this listing?\n\n1 - Price has changed\n2 - Out of stock\n3 - Link is broken\n\nEnter 1, 2, or 3:');
-          if (!reason) return;
-          const reasonMap = { '1': 'price_changed', '2': 'out_of_stock', '3': 'link_broken' };
-          const mapped = reasonMap[reason.trim()];
-          if (!mapped) { alert('Invalid selection.'); return; }
+          this.reportTargetId = communityId;
+          document.getElementById('homeReportModal').style.display = 'flex';
+          document.getElementById('homeReportMsg').style.display = 'none';
+          document.querySelectorAll('input[name="homeReportReason"]').forEach(r => r.checked = false);
+        },
+
+        closeHomeReportModal() {
+          document.getElementById('homeReportModal').style.display = 'none';
+          this.reportTargetId = null;
+        },
+
+        submitHomeReport() {
+          const selected = document.querySelector('input[name="homeReportReason"]:checked');
+          if (!selected) {
+            const msg = document.getElementById('homeReportMsg');
+            msg.style.display = 'block';
+            msg.className = 'mb-3 text-center text-sm text-red-600';
+            msg.textContent = 'Please select a reason.';
+            return;
+          }
+          const reason = selected.value;
+          const msg = document.getElementById('homeReportMsg');
+          msg.style.display = 'block';
+          msg.className = 'mb-3 text-center text-sm text-gray-500';
+          msg.textContent = 'Submitting...';
+
           fetch('/api/report-row', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ community_id: communityId, reason: mapped }),
+            body: JSON.stringify({ community_id: this.reportTargetId, reason }),
           })
             .then(r => r.json())
-            .then(data => alert(data.message))
-            .catch(() => alert('Network error. Please try again.'));
+            .then(data => {
+              msg.className = data.status === 'success' ? 'mb-3 text-center text-sm text-emerald-600 font-semibold' : 'mb-3 text-center text-sm text-red-600';
+              msg.textContent = data.message;
+              if (data.status === 'success') {
+                gtag('event', 'community_report', { community_id: this.reportTargetId, reason });
+                setTimeout(() => { this.closeHomeReportModal(); location.reload(); }, 1500);
+              }
+            })
+            .catch(() => {
+              msg.className = 'mb-3 text-center text-sm text-red-600';
+              msg.textContent = 'Network error. Please try again.';
+            });
         },
         
       };
@@ -920,7 +994,7 @@
         wrapper: appData.selection?.wrapper || '',
         vitola: appData.selection?.vitola || '',
         size: appData.selection?.size || '',
-        box_qty: 20,
+        box_qty: appData.selection?.box_qty ? parseInt(appData.selection.box_qty) : 20,
         free_shipping: homeFreeShipping,
       };
 
