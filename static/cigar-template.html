@@ -153,8 +153,8 @@
   </div>
 
   <!-- Missing Price Modal -->
-  <div id="missingPriceModal" class="fixed inset-0 bg-black/60 z-50 items-center justify-center" style="display: none;">
-    <div class="bg-white rounded-xl p-8 max-w-md mx-auto shadow-2xl text-left" style="margin-top: 15vh;">
+  <div id="missingPriceModal" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center" style="display: none;">
+    <div class="bg-white rounded-xl p-8 max-w-md mx-auto shadow-2xl text-left relative z-10" style="margin-top: 15vh;">
       <div class="flex justify-between items-center mb-5">
         <h3 class="font-display font-semibold text-xl text-brand-500">Submit Missing Price</h3>
         <button onclick="closeMissingPriceModal()" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
@@ -189,8 +189,8 @@
   </div>
 
   <!-- Report Modal -->
-  <div id="reportModal" class="fixed inset-0 bg-black/60 z-50 items-center justify-center" style="display: none;">
-    <div class="bg-white rounded-xl p-8 max-w-sm mx-auto shadow-2xl text-left" style="margin-top: 20vh;">
+  <div id="reportModal" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center" style="display: none;">
+    <div class="bg-white rounded-xl p-8 max-w-sm mx-auto shadow-2xl text-left relative z-10" style="margin-top: 20vh;">
       <div class="flex justify-between items-center mb-5">
         <h3 class="font-display font-semibold text-xl text-red-600">Report Listing</h3>
         <button onclick="closeReportModal()" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
@@ -314,8 +314,11 @@
             <span id="buying-guide-arrow" class="text-xs">&#9660;</span>
           </button>
           <button 
+            id="missingPriceBtn"
             onclick="openMissingPriceModal()"
-            class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand-500 text-white font-semibold hover:bg-brand-600 transition-all text-sm"
+            class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gray-300 text-white font-semibold cursor-not-allowed transition-all text-sm"
+            disabled
+            title="Select a wrapper, vitola, and box quantity first"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Missing Price
@@ -640,6 +643,7 @@
         renderTable(filtered);
         renderMobileCards(filtered);
         updateAnswerBlock(filtered);
+        updateMissingPriceBtn();
         if (historyExpanded) loadPriceHistory();
         if (guideExpanded) loadBuyingGuide();
       }
@@ -651,8 +655,27 @@
         renderTable(allResults);
         renderMobileCards(allResults);
         updateAnswerBlock(allResults);
+        updateMissingPriceBtn();
         if (historyExpanded) loadPriceHistory();
         if (guideExpanded) loadBuyingGuide();
+      }
+
+      function updateMissingPriceBtn() {
+        const btn = document.getElementById('missingPriceBtn');
+        if (!btn) return;
+        const w = document.getElementById('wrapperFilter').value;
+        const v = document.getElementById('vitolaFilter').value;
+        const q = document.getElementById('boxQtyFilter').value;
+        if (w && v && q) {
+          btn.disabled = false;
+          btn.className = 'inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand-500 text-white font-semibold hover:bg-brand-600 transition-all text-sm';
+          btn.style.cursor = 'pointer';
+          btn.title = '';
+        } else {
+          btn.disabled = true;
+          btn.className = 'inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gray-300 text-white font-semibold cursor-not-allowed transition-all text-sm';
+          btn.title = 'Select a wrapper, vitola, and box quantity first';
+        }
       }
       
       function updateAnswerBlock(results) {
