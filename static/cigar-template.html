@@ -729,7 +729,7 @@
         }
         
       tbody.innerHTML = results.map(result => `
-        <tr class="hover:bg-gray-50 transition-colors">
+        <tr class="hover:bg-gray-50 transition-colors" ${result.community_id ? `data-community-id="${result.community_id}"` : ''}>
           <td class="p-4 border-b border-gray-200 text-center">
             <a href="${result.url}" target="_blank" class="text-brand-500 hover:underline font-semibold text-lg" onclick="gtag('event','retailer_click',{retailer:'${result.retailer}',cigar:brand+' '+line,price:'${result.base}',source:'table'})">${result.retailer}</a>
           </td>
@@ -760,7 +760,7 @@
         }
         
       mobileContainer.innerHTML = results.map(result => `
-        <div class="bg-white border ${result.community ? 'border-blue-200' : 'border-gray-200'} rounded-xl p-5 shadow-sm">
+        <div class="bg-white border ${result.community ? 'border-blue-200' : 'border-gray-200'} rounded-xl p-5 shadow-sm" ${result.community_id ? `data-community-id="${result.community_id}"` : ''}>
           <div class="flex justify-between items-center pb-4 mb-4 border-b border-gray-200">
             <div>
               <span class="font-display font-semibold text-lg">${result.retailer}</span>
@@ -1245,7 +1245,12 @@
             msg.textContent = data.message;
             if (data.status === 'success') {
               gtag('event', 'community_report', { community_id: reportTargetId, reason });
-              setTimeout(() => { closeReportModal(); location.reload(); }, 1500);
+              // Fade out the reported row instead of reloading
+              document.querySelectorAll(`[data-community-id="${reportTargetId}"]`).forEach(el => {
+                el.style.opacity = '0.3';
+                el.style.pointerEvents = 'none';
+              });
+              setTimeout(() => closeReportModal(), 1500);
             }
           })
           .catch(() => {

@@ -2525,6 +2525,25 @@ async def submit_community_price(request: Request):
 
         free_shipping = 1 if data.get("free_shipping") else 0
 
+        # Match to existing products to fill in size and CID if missing
+        if brand and line and (not size or not cid):
+            all_prods = load_all_products()
+            for p in all_prods:
+                if p.brand.lower() != brand.lower() or p.line.lower() != line.lower():
+                    continue
+                if wrapper and p.wrapper.lower() != wrapper.lower():
+                    continue
+                if vitola and p.vitola.lower() != vitola.lower():
+                    continue
+                if box_qty and p.box_qty != box_qty:
+                    continue
+                if not size and p.size:
+                    size = p.size
+                if not cid and p.cigar_id:
+                    cid = p.cigar_id
+                if size and cid:
+                    break
+
         ip = request.client.host if request.client else ""
         voter_hash = hashlib.sha256(ip.encode()).hexdigest() if ip else ""
 

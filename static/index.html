@@ -350,7 +350,7 @@
             </thead>
             <tbody>
               <template x-for="(result, index) in results" :key="index">
-                <tr class="hover:bg-gray-50 transition-colors">
+                <tr class="hover:bg-gray-50 transition-colors" :data-community-id="result.community_id || ''">
                   <!-- Retailer -->
                   <td class="p-3 border-b border-gray-200">
                     <a :href="getTrackingUrl(result)" 
@@ -430,7 +430,7 @@
         <!-- Mobile Cards -->
         <div class="mobile-cards space-y-4">
           <template x-for="(result, index) in results" :key="'mobile-' + index">
-            <div class="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+            <div class="bg-white border border-gray-200 rounded-xl p-5 shadow-sm" :data-community-id="result.community_id || ''">
               <!-- Card Header -->
               <div class="flex justify-between items-center pb-4 mb-4 border-b border-gray-200">
                 <span class="font-display font-semibold text-lg" x-text="result.retailer"></span>
@@ -937,7 +937,11 @@
               msg.textContent = data.message;
               if (data.status === 'success') {
                 gtag('event', 'community_report', { community_id: this.reportTargetId, reason });
-                setTimeout(() => { this.closeHomeReportModal(); location.reload(); }, 1500);
+                document.querySelectorAll(`[data-community-id="${this.reportTargetId}"]`).forEach(el => {
+                  el.style.opacity = '0.3';
+                  el.style.pointerEvents = 'none';
+                });
+                setTimeout(() => this.closeHomeReportModal(), 1500);
               }
             })
             .catch(() => {
