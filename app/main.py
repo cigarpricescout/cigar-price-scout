@@ -1455,6 +1455,19 @@ def price_history(
     top_retailers = sorted(retailer_series.keys(), key=lambda n: min(p["price"] for p in retailer_series[n]))[:5]
     filtered_series = {n: retailer_series[n] for n in top_retailers}
 
+    # Buying recommendation thresholds (25th / 75th percentile)
+    recommendation = None
+    if len(all_prices) >= 20:
+        sorted_prices = sorted(all_prices)
+        n = len(sorted_prices)
+        p25 = sorted_prices[int(n * 0.25)]
+        p75 = sorted_prices[int(n * 0.75)]
+        recommendation = {
+            "buy_below": round(p25, 2),
+            "fair_up_to": round(p75, 2),
+            "data_points": n,
+        }
+
     return {
         "days": num_days,
         "dates": sorted_dates,
@@ -1465,6 +1478,7 @@ def price_history(
         "high_price": high_price,
         "high_retailer": high_retailer,
         "retailers": filtered_series,
+        "recommendation": recommendation,
     }
 
 
