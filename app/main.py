@@ -862,52 +862,64 @@ def generate_faq_answers(brand, line, seo_data):
     
     return faq_1, faq_2, faq_3
 
+MIN_RETAILERS_FOR_COMPARISON = 3
+
 def build_options_tree():
-    """Build the brand -> line -> wrapper -> vitola/size tree for dropdowns with wrapper alias support"""
+    """Build the brand -> line -> wrapper -> vitola/size tree for dropdowns with wrapper alias support.
+    
+    Only includes brand/line combinations carried by at least MIN_RETAILERS_FOR_COMPARISON
+    distinct retailers so every dropdown selection leads to a meaningful comparison.
+    """
     products = load_all_products()
-    wrapper_aliases = load_master_wrapper_aliases()  # Load wrapper aliases
+    wrapper_aliases = load_master_wrapper_aliases()
     
     print(f"Building options tree with {len(products)} products and {len(wrapper_aliases)} wrapper aliases")
     
+    # Pre-compute retailer counts per brand/line
+    line_retailers: dict[tuple, set] = {}
+    for p in products:
+        if p.brand:
+            key = (p.brand, p.line)
+            line_retailers.setdefault(key, set()).add(p.retailer_key)
+    
     tree = {}
     aliases_used = 0
+    skipped_lines = 0
     
     for product in products:
         if not product.brand:
             continue
         
-        # Initialize brand if not exists
+        if len(line_retailers.get((product.brand, product.line), set())) < MIN_RETAILERS_FOR_COMPARISON:
+            skipped_lines += 1
+            continue
+        
         if product.brand not in tree:
             tree[product.brand] = {}
         
-        # Initialize line if not exists
         if product.line not in tree[product.brand]:
             tree[product.brand][product.line] = {}
         
-        # Get wrapper alias for this wrapper
         wrapper_alias = get_wrapper_alias(product.wrapper, product.brand, product.line, wrapper_aliases)
         if wrapper_alias:
             aliases_used += 1
         
-        # Initialize wrapper if not exists (allow empty wrapper)
         wrapper_key = product.wrapper or "No Wrapper Specified"
         if wrapper_key not in tree[product.brand][product.line]:
             tree[product.brand][product.line][wrapper_key] = {
                 'vitolas': set(),
                 'sizes': set(),
                 'box_qtys': set(),
-                'wrapper_alias': wrapper_alias  # Store wrapper alias
+                'wrapper_alias': wrapper_alias
             }
         
-        # Add vitola, size, and box_qty
         if product.vitola:
             tree[product.brand][product.line][wrapper_key]['vitolas'].add(product.vitola)
         tree[product.brand][product.line][wrapper_key]['sizes'].add(product.size)
-        tree[product.brand][product.line][wrapper_key]['box_qtys'].add(product.box_qty)  # Add this line
+        tree[product.brand][product.line][wrapper_key]['box_qtys'].add(product.box_qty)
     
-    print(f"Aliases used during tree building: {aliases_used}")
+    print(f"Aliases used during tree building: {aliases_used}, products skipped (< {MIN_RETAILERS_FOR_COMPARISON} retailers): {skipped_lines}")
     
-    # Convert to the format expected by frontend
     brands = []
     wrappers_with_aliases = 0
     for brand_name in sorted(tree.keys()):
@@ -925,11 +937,10 @@ def build_options_tree():
                 
                 wrappers.append({
                     "wrapper": wrapper_name if wrapper_name != "No Wrapper Specified" else "",
-                    "wrapper_alias": wrapper_alias_value,  # Include wrapper alias
+                    "wrapper_alias": wrapper_alias_value,
                     "vitolas": vitolas,
                     "sizes": sizes,
-                    "box_qtys": sorted(list(wrapper_data['box_qtys']))  # Add this line
-
+                    "box_qtys": sorted(list(wrapper_data['box_qtys']))
                 })
             
             lines.append({
@@ -1046,8 +1057,22 @@ def compare(
         authorized_retailer_keys = {r["key"] for r in RETAILERS if r["authorized"]}
         matching_products = [p for p in matching_products if p.retailer_key in authorized_retailer_keys]
 
+    # Require minimum distinct retailers for a meaningful comparison
+    distinct_retailers = {p.retailer_key for p in matching_products}
+    if len(distinct_retailers) < MIN_RETAILERS_FOR_COMPARISON:
+        return {
+            "brand": brand,
+            "line": line,
+            "wrapper": wrapper,
+            "vitola": vitola,
+            "size": size,
+            "state": state,
+            "results": [],
+            "reason": f"Only {len(distinct_retailers)} retailer(s) carry this cigar. At least {MIN_RETAILERS_FOR_COMPARISON} are needed for a comparison."
+        }
+
     # Calculate price context (median comparison) - AFTER filtering
-    if len(matching_products) >= 3:  # Need at least 3 prices for meaningful comparison
+    if len(matching_products) >= 3:
         delivered_prices = []
         for product in matching_products:
             base_cents = product.price_cents
@@ -1216,13 +1241,12 @@ def compare_all(
         authorized_retailer_keys = {r["key"] for r in RETAILERS if r["authorized"]}
         matching_products = [p for p in matching_products if p.retailer_key in authorized_retailer_keys]
 
-    # Only show variations that have 2+ distinct retailers (otherwise it's not a comparison)
     from collections import defaultdict
     variation_retailers = defaultdict(set)
     for p in matching_products:
         key = (p.wrapper, p.vitola, p.size, p.box_qty)
         variation_retailers[key].add(p.retailer_key)
-    comparable_variations = {k for k, v in variation_retailers.items() if len(v) >= 2}
+    comparable_variations = {k for k, v in variation_retailers.items() if len(v) >= MIN_RETAILERS_FOR_COMPARISON}
     matching_products = [
         p for p in matching_products
         if (p.wrapper, p.vitola, p.size, p.box_qty) in comparable_variations
@@ -2231,8 +2255,9 @@ def get_best_deals(limit: int = Query(50, description="Max number of deals to re
     deals = []
     
     for key, products in product_groups.items():
-        if len(products) < 2:
-            continue  # Need multiple retailers to compare
+        distinct = {p.retailer_key for p in products}
+        if len(distinct) < MIN_RETAILERS_FOR_COMPARISON:
+            continue
         
         # Calculate prices for all offerings
         prices = []
