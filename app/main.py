@@ -520,10 +520,11 @@ def init_analytics_tables():
 
 @app.on_event("startup")
 def startup_event():
-    """Initialize analytics tables on app startup."""
+    """Initialize analytics and community tables on app startup."""
     try:
         init_analytics_tables()
-        logger.info("✓ Analytics tables initialized")
+        _ensure_community_tables_pg()
+        logger.info("✓ Analytics and community tables initialized")
     except Exception as e:
         logger.warning(f"⚠ Analytics DB not available (local dev mode): {e}")
     # Later, if you re-enable the scheduler, you can also call start_scheduler() here.
@@ -670,55 +671,50 @@ CACHE_TTL_SECONDS = 300  # 5 minutes
 
 COMMUNITY_DOWNVOTE_THRESHOLD = 3
 
-def _ensure_community_tables(conn):
-    """Create community tables if they don't exist (safe for first deploy)."""
-    cur = conn.cursor()
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS community_prices (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            cid TEXT NOT NULL,
-            url TEXT NOT NULL,
-            price_cents INTEGER NOT NULL,
-            retailer_name TEXT NOT NULL,
-            submitted_at TEXT NOT NULL DEFAULT (datetime('now')),
-            active INTEGER NOT NULL DEFAULT 1,
-            downvotes INTEGER NOT NULL DEFAULT 0,
-            voter_hash TEXT DEFAULT '',
-            brand TEXT DEFAULT '',
-            line TEXT DEFAULT '',
-            wrapper TEXT DEFAULT '',
-            vitola TEXT DEFAULT '',
-            size TEXT DEFAULT '',
-            box_qty INTEGER DEFAULT 20,
-            free_shipping INTEGER DEFAULT 0
-        )
-    """)
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS community_votes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            community_price_id INTEGER NOT NULL,
-            reason TEXT NOT NULL,
-            voter_hash TEXT NOT NULL,
-            voted_at TEXT NOT NULL DEFAULT (datetime('now')),
-            FOREIGN KEY (community_price_id) REFERENCES community_prices(id)
-        )
-    """)
+def _ensure_community_tables_pg():
+    """Create community tables in PostgreSQL analytics DB (persists across deploys)."""
     try:
-        cur.execute("ALTER TABLE community_prices ADD COLUMN free_shipping INTEGER DEFAULT 0")
-    except Exception:
-        pass
-    conn.commit()
+        conn = get_analytics_conn()
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS community_prices (
+                id SERIAL PRIMARY KEY,
+                cid TEXT NOT NULL,
+                url TEXT NOT NULL,
+                price_cents INTEGER NOT NULL,
+                retailer_name TEXT NOT NULL,
+                submitted_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                active INTEGER NOT NULL DEFAULT 1,
+                downvotes INTEGER NOT NULL DEFAULT 0,
+                voter_hash TEXT DEFAULT '',
+                brand TEXT DEFAULT '',
+                line TEXT DEFAULT '',
+                wrapper TEXT DEFAULT '',
+                vitola TEXT DEFAULT '',
+                size TEXT DEFAULT '',
+                box_qty INTEGER DEFAULT 20,
+                free_shipping INTEGER DEFAULT 0
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS community_votes (
+                id SERIAL PRIMARY KEY,
+                community_price_id INTEGER NOT NULL REFERENCES community_prices(id),
+                reason TEXT NOT NULL,
+                voter_hash TEXT NOT NULL,
+                voted_at TIMESTAMP NOT NULL DEFAULT NOW()
+            )
+        """)
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.error(f"Error ensuring community tables in PG: {e}")
 
 def _load_community_products():
-    """Load active community-submitted prices from the DB as Product objects."""
-    hist_db = Path("data/historical_prices.db")
-    if not hist_db.exists():
-        return []
-
+    """Load active community-submitted prices from PostgreSQL as Product objects."""
     products = []
     try:
-        conn = sqlite3.connect(str(hist_db))
-        _ensure_community_tables(conn)
+        conn = get_analytics_conn()
         cur = conn.cursor()
         cur.execute("""
             SELECT id, cid, url, price_cents, retailer_name,
@@ -747,7 +743,7 @@ def _load_community_products():
             ))
         conn.close()
     except Exception as e:
-        logger.error(f"Error loading community prices: {e}")
+        logger.error(f"Error loading community prices from PG: {e}")
     return products
 
 def load_all_products():
@@ -2532,13 +2528,11 @@ async def submit_community_price(request: Request):
         ip = request.client.host if request.client else ""
         voter_hash = hashlib.sha256(ip.encode()).hexdigest() if ip else ""
 
-        hist_db = Path("data/historical_prices.db")
-        conn = sqlite3.connect(str(hist_db))
-        _ensure_community_tables(conn)
+        conn = get_analytics_conn()
         cur = conn.cursor()
 
         cur.execute(
-            "SELECT id FROM community_prices WHERE cid = ? AND url = ? AND active = 1",
+            "SELECT id FROM community_prices WHERE cid = %s AND url = %s AND active = 1",
             (cid, url),
         )
         if cur.fetchone():
@@ -2548,19 +2542,27 @@ async def submit_community_price(request: Request):
         cur.execute(
             """INSERT INTO community_prices
                (cid, url, price_cents, retailer_name, voter_hash, brand, line, wrapper, vitola, size, box_qty, free_shipping)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
             (cid, url, price_cents, retailer_name, voter_hash, brand, line, wrapper, vitola, size, box_qty, free_shipping),
-        )
-
-        today = datetime.now().strftime("%Y-%m-%d")
-        cur.execute(
-            """INSERT INTO price_history (cigar_id, retailer, url, price, in_stock, date)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (cid, retailer_name.lower().replace(" ", ""), url, price_cents / 100, 1, today),
         )
 
         conn.commit()
         conn.close()
+
+        # Also log to local historical DB if available
+        try:
+            hist_db = Path("data/historical_prices.db")
+            if hist_db.exists():
+                hist_conn = sqlite3.connect(str(hist_db))
+                today = datetime.now().strftime("%Y-%m-%d")
+                hist_conn.execute(
+                    "INSERT INTO price_history (cigar_id, retailer, url, price, in_stock, date) VALUES (?, ?, ?, ?, ?, ?)",
+                    (cid, retailer_name.lower().replace(" ", ""), url, price_cents / 100, 1, today),
+                )
+                hist_conn.commit()
+                hist_conn.close()
+        except Exception as hist_err:
+            logger.warning(f"Could not write community price to local history: {hist_err}")
 
         _product_cache["data"] = None
         _product_cache["timestamp"] = 0
@@ -2590,13 +2592,11 @@ async def report_row(request: Request):
         ip = request.client.host if request.client else ""
         voter_hash = hashlib.sha256(ip.encode()).hexdigest() if ip else ""
 
-        hist_db = Path("data/historical_prices.db")
-        conn = sqlite3.connect(str(hist_db))
-        _ensure_community_tables(conn)
+        conn = get_analytics_conn()
         cur = conn.cursor()
 
         cur.execute(
-            "SELECT id FROM community_votes WHERE community_price_id = ? AND voter_hash = ?",
+            "SELECT id FROM community_votes WHERE community_price_id = %s AND voter_hash = %s",
             (community_id, voter_hash),
         )
         if cur.fetchone():
@@ -2604,20 +2604,20 @@ async def report_row(request: Request):
             return {"status": "error", "message": "You have already reported this listing."}
 
         cur.execute(
-            "INSERT INTO community_votes (community_price_id, reason, voter_hash) VALUES (?, ?, ?)",
+            "INSERT INTO community_votes (community_price_id, reason, voter_hash) VALUES (%s, %s, %s)",
             (community_id, reason, voter_hash),
         )
 
         cur.execute(
-            "UPDATE community_prices SET downvotes = downvotes + 1 WHERE id = ?",
+            "UPDATE community_prices SET downvotes = downvotes + 1 WHERE id = %s",
             (community_id,),
         )
 
-        cur.execute("SELECT downvotes FROM community_prices WHERE id = ?", (community_id,))
+        cur.execute("SELECT downvotes FROM community_prices WHERE id = %s", (community_id,))
         row = cur.fetchone()
         deactivated = False
         if row and row[0] >= COMMUNITY_DOWNVOTE_THRESHOLD:
-            cur.execute("UPDATE community_prices SET active = 0 WHERE id = ?", (community_id,))
+            cur.execute("UPDATE community_prices SET active = 0 WHERE id = %s", (community_id,))
             deactivated = True
             _product_cache["data"] = None
             _product_cache["timestamp"] = 0
