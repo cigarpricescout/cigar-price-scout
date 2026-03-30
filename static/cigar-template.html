@@ -304,22 +304,25 @@
         <div id="buyingGuideSection" style="display: none;" class="my-5">
           <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
             <h3 class="font-display font-semibold text-xl text-brand-500 text-center mb-1">Buying Guide</h3>
-            <p class="text-center text-xs text-muted italic mb-4">Based on <span id="rec-data-points"></span> historical price observations across all monitored retailers</p>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div class="rounded-xl border-2 border-emerald-200 bg-emerald-50 p-4 text-center">
-                <div class="text-xs uppercase tracking-wider text-emerald-600 font-bold mb-1">Great Deal</div>
-                <div class="text-lg font-bold text-emerald-700">Below $<span id="rec-buy-below"></span></div>
-                <p class="text-xs text-emerald-600 mt-2">This price is in the bottom 25% historically. Buy now before it goes back up.</p>
-              </div>
-              <div class="rounded-xl border-2 border-amber-200 bg-amber-50 p-4 text-center">
-                <div class="text-xs uppercase tracking-wider text-amber-600 font-bold mb-1">Fair Price</div>
-                <div class="text-lg font-bold text-amber-700" style="white-space: nowrap;">$<span id="rec-fair-low"></span> – $<span id="rec-fair-high"></span></div>
-                <p class="text-xs text-amber-600 mt-2">Typical market range. A decent price, but discounts come around if you can wait.</p>
-              </div>
-              <div class="rounded-xl border-2 border-rose-200 bg-rose-50 p-4 text-center">
-                <div class="text-xs uppercase tracking-wider text-rose-600 font-bold mb-1">Premium Pricing</div>
-                <div class="text-lg font-bold text-rose-700">Above $<span id="rec-premium-above"></span></div>
-                <p class="text-xs text-rose-600 mt-2">Higher than most retailers. Better deals are available — check the comparison below.</p>
+            <p id="buyingGuidePrompt" class="text-center text-muted py-8" style="display: none;">Select a wrapper and vitola above to view buying recommendations.</p>
+            <div id="buyingGuideCards" style="display: none;">
+              <p class="text-center text-sm text-muted italic mb-4">Based on <span id="rec-data-points"></span> historical price observations across all monitored retailers</p>
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div class="rounded-xl border-2 border-emerald-200 bg-emerald-50 p-4 text-center">
+                  <div class="text-sm uppercase tracking-wider text-emerald-600 font-bold mb-1">Great Deal</div>
+                  <div class="text-xl font-bold text-emerald-700">Below $<span id="rec-buy-below"></span></div>
+                  <p class="text-sm text-emerald-600 mt-2">This price is in the bottom 25% historically. Buy now before it goes back up.</p>
+                </div>
+                <div class="rounded-xl border-2 border-amber-200 bg-amber-50 p-4 text-center">
+                  <div class="text-sm uppercase tracking-wider text-amber-600 font-bold mb-1">Fair Price</div>
+                  <div class="text-lg font-bold text-amber-700" style="white-space: nowrap;">$<span id="rec-fair-low"></span> – $<span id="rec-fair-high"></span></div>
+                  <p class="text-sm text-amber-600 mt-2">Typical market range. A decent price, but discounts come around if you can wait.</p>
+                </div>
+                <div class="rounded-xl border-2 border-rose-200 bg-rose-50 p-4 text-center">
+                  <div class="text-sm uppercase tracking-wider text-rose-600 font-bold mb-1">Premium Pricing</div>
+                  <div class="text-xl font-bold text-rose-700">Above $<span id="rec-premium-above"></span></div>
+                  <p class="text-sm text-rose-600 mt-2">Higher than most retailers. Better deals are available — check the comparison below.</p>
+                </div>
               </div>
             </div>
           </div>
@@ -505,6 +508,7 @@
         updateAnswerBlock(data.results);
 
         document.getElementById('priceHistoryToggle').style.display = 'block';
+        document.getElementById('buyingGuideToggle').style.display = 'block';
     }
       
       function populateFilters(results) {
@@ -539,6 +543,7 @@
         renderMobileCards(filtered);
         updateAnswerBlock(filtered);
         if (historyExpanded) loadPriceHistory();
+        if (guideExpanded) loadBuyingGuide();
       }
       
       function clearFilters() {
@@ -548,6 +553,7 @@
         renderMobileCards(allResults);
         updateAnswerBlock(allResults);
         if (historyExpanded) loadPriceHistory();
+        if (guideExpanded) loadBuyingGuide();
       }
       
       function updateAnswerBlock(results) {
@@ -715,7 +721,46 @@
           arrow.innerHTML = '&#9650;';
           guideExpanded = true;
           gtag('event', 'buying_guide_expand', { cigar: brand + ' ' + line });
+          loadBuyingGuide();
         }
+      }
+
+      function loadBuyingGuide() {
+        const wrapperVal = document.getElementById('wrapperFilter').value;
+        const vitolaVal = document.getElementById('vitolaFilter').value;
+        const promptEl = document.getElementById('buyingGuidePrompt');
+        const cardsEl = document.getElementById('buyingGuideCards');
+
+        if (!wrapperVal || !vitolaVal) {
+          promptEl.style.display = 'block';
+          cardsEl.style.display = 'none';
+          return;
+        }
+
+        promptEl.style.display = 'none';
+        const params = new URLSearchParams({ brand, line, wrapper: wrapperVal, vitola: vitolaVal });
+        fetch('/api/price-history?' + params.toString())
+          .then(r => r.json())
+          .then(data => {
+            if (data.recommendation) {
+              const rec = data.recommendation;
+              document.getElementById('rec-buy-below').textContent = rec.buy_below.toFixed(2);
+              document.getElementById('rec-fair-low').textContent = rec.buy_below.toFixed(2);
+              document.getElementById('rec-fair-high').textContent = rec.fair_up_to.toFixed(2);
+              document.getElementById('rec-premium-above').textContent = rec.fair_up_to.toFixed(2);
+              document.getElementById('rec-data-points').textContent = rec.data_points;
+              cardsEl.style.display = 'block';
+            } else {
+              promptEl.textContent = 'Not enough historical data yet for buying recommendations on this variation.';
+              promptEl.style.display = 'block';
+              cardsEl.style.display = 'none';
+            }
+          })
+          .catch(() => {
+            promptEl.textContent = 'Unable to load buying guide at this time.';
+            promptEl.style.display = 'block';
+            cardsEl.style.display = 'none';
+          });
       }
 
       function loadPriceHistory() {
@@ -763,10 +808,13 @@
           document.getElementById('priceHistoryChart').style.display = 'none';
           document.getElementById('priceHistoryMobile').style.display = 'none';
           document.getElementById('priceHistoryBadges').style.display = 'none';
-          document.getElementById('buyingGuideToggle').style.display = 'none';
-          document.getElementById('buyingGuideSection').style.display = 'none';
           document.getElementById('priceHistoryPrompt').textContent = 'Price history will appear here once we have at least 14 days of data for this variation.';
           document.getElementById('priceHistoryPrompt').style.display = 'block';
+          if (guideExpanded) {
+            document.getElementById('buyingGuidePrompt').textContent = 'Not enough historical data yet for buying recommendations on this variation.';
+            document.getElementById('buyingGuidePrompt').style.display = 'block';
+            document.getElementById('buyingGuideCards').style.display = 'none';
+          }
           return;
         }
 
@@ -901,18 +949,16 @@
           }
         });
 
-        // Buying guide (separate collapsible section)
-        if (data.recommendation) {
+        // If buying guide is expanded, update its cards with the same data
+        if (guideExpanded && data.recommendation) {
           const rec = data.recommendation;
           document.getElementById('rec-buy-below').textContent = rec.buy_below.toFixed(2);
           document.getElementById('rec-fair-low').textContent = rec.buy_below.toFixed(2);
           document.getElementById('rec-fair-high').textContent = rec.fair_up_to.toFixed(2);
           document.getElementById('rec-premium-above').textContent = rec.fair_up_to.toFixed(2);
           document.getElementById('rec-data-points').textContent = rec.data_points;
-          document.getElementById('buyingGuideToggle').style.display = 'block';
-        } else {
-          document.getElementById('buyingGuideToggle').style.display = 'none';
-          document.getElementById('buyingGuideSection').style.display = 'none';
+          document.getElementById('buyingGuidePrompt').style.display = 'none';
+          document.getElementById('buyingGuideCards').style.display = 'block';
         }
       }
 
