@@ -757,7 +757,26 @@ def load_all_products():
         products = load_csv(retailer["csv"], retailer["key"], retailer["name"])
         all_products.extend(products)
     
-    all_products.extend(_load_community_products())
+    community_products = _load_community_products()
+
+    # Backfill missing size/CID on community products from CSV data
+    if community_products:
+        csv_lookup = {}
+        for p in all_products:
+            if p.brand and p.line and p.wrapper and p.vitola and p.size:
+                key = (p.brand.lower(), p.line.lower(), p.wrapper.lower(), p.vitola.lower(), p.box_qty)
+                if key not in csv_lookup:
+                    csv_lookup[key] = p
+        for cp in community_products:
+            key = (cp.brand.lower(), cp.line.lower(), cp.wrapper.lower(), cp.vitola.lower(), cp.box_qty)
+            match = csv_lookup.get(key)
+            if match:
+                if not cp.size:
+                    cp.size = match.size
+                if not cp.cigar_id:
+                    cp.cigar_id = match.cigar_id
+
+    all_products.extend(community_products)
     
     _product_cache["data"] = all_products
     _product_cache["timestamp"] = now
