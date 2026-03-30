@@ -614,7 +614,7 @@ RETAILERS = [
 
 # Enhanced CSV loader with wrapper and vitola support
 class Product:
-    def __init__(self, retailer_key, retailer_name, title, url, brand, line, wrapper, vitola, size, box_qty, price, in_stock=True, current_promotions_applied='', cigar_id=''):
+    def __init__(self, retailer_key, retailer_name, title, url, brand, line, wrapper, vitola, size, box_qty, price, in_stock=True, current_promotions_applied='', cigar_id='', community_id=None):
         self.retailer_key = retailer_key
         self.retailer_name = retailer_name
         self.title = title
@@ -629,6 +629,7 @@ class Product:
         self.in_stock = str(in_stock).lower() not in ('false', '0', 'no', '')
         self.current_promotions_applied = current_promotions_applied
         self.cigar_id = cigar_id
+        self.community_id = community_id
 
 def load_csv(csv_path, retailer_key, retailer_name):
     """Load products from a CSV file with enhanced format"""
@@ -673,8 +674,49 @@ def load_csv(csv_path, retailer_key, retailer_name):
 _product_cache = {"data": None, "timestamp": 0}
 CACHE_TTL_SECONDS = 300  # 5 minutes
 
+COMMUNITY_DOWNVOTE_THRESHOLD = 3
+
+def _load_community_products():
+    """Load active community-submitted prices from the DB as Product objects."""
+    hist_db = Path("data/historical_prices.db")
+    if not hist_db.exists():
+        return []
+
+    products = []
+    try:
+        conn = sqlite3.connect(str(hist_db))
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT id, cid, url, price_cents, retailer_name,
+                   brand, line, wrapper, vitola, size, box_qty
+            FROM community_prices
+            WHERE active = 1
+        """)
+        for row in cur.fetchall():
+            cp_id, cid, url, price_cents, retailer_name, brand, line, wrapper, vitola, size, box_qty = row
+            products.append(Product(
+                retailer_key=f"community_{cp_id}",
+                retailer_name=retailer_name or "Community",
+                title=f"{brand} {line} {wrapper} {vitola}".strip(),
+                url=url,
+                brand=brand or "",
+                line=line or "",
+                wrapper=wrapper or "",
+                vitola=vitola or "",
+                size=size or "",
+                box_qty=box_qty or 20,
+                price=price_cents / 100 if price_cents else 0,
+                in_stock=True,
+                cigar_id=cid,
+                community_id=cp_id,
+            ))
+        conn.close()
+    except Exception as e:
+        logger.error(f"Error loading community prices: {e}")
+    return products
+
 def load_all_products():
-    """Load all products from all retailer CSV files, with in-memory caching"""
+    """Load all products from all retailer CSV files + community submissions, with in-memory caching"""
     now = time.time()
     if _product_cache["data"] is not None and (now - _product_cache["timestamp"]) < CACHE_TTL_SECONDS:
         return _product_cache["data"]
@@ -683,6 +725,8 @@ def load_all_products():
     for retailer in RETAILERS:
         products = load_csv(retailer["csv"], retailer["key"], retailer["name"])
         all_products.extend(products)
+    
+    all_products.extend(_load_community_products())
     
     _product_cache["data"] = all_products
     _product_cache["timestamp"] = now
@@ -1166,6 +1210,7 @@ def compare(
 
         result = {
             "retailer": product.retailer_name,
+            "retailer_key": product.retailer_key,
             "product": product_name,
             "wrapper": product.wrapper,
             "vitola": product.vitola,
@@ -1182,6 +1227,8 @@ def compare(
             "oos": not product.in_stock,
             "cheapest": False,
             "authorized": is_authorized,
+            "community": product.community_id is not None,
+            "community_id": product.community_id,
             "price_context": price_context,
             "current_promotions_applied": product.current_promotions_applied,
         }
@@ -1333,6 +1380,7 @@ def compare_all(
 
         result = {
             "retailer": product.retailer_name,
+            "retailer_key": product.retailer_key,
             "product": product_name,
             "wrapper": product.wrapper,
             "vitola": product.vitola,
@@ -1349,6 +1397,8 @@ def compare_all(
             "oos": not product.in_stock,
             "cheapest": False,
             "authorized": is_authorized,
+            "community": product.community_id is not None,
+            "community_id": product.community_id,
             "price_context": price_context,
             "current_promotions_applied": product.current_promotions_applied,
         }
@@ -2312,15 +2362,16 @@ def get_best_deals(limit: int = Query(50, description="Max number of deals to re
                 "box_qty": cheapest_product.box_qty,
                 "retailer": cheapest_product.retailer_name,
                 "retailer_key": cheapest_product.retailer_key,
-                "advertised_price": f"${base_cents / 100:.2f}",  # Base price at retailer
+                "advertised_price": f"${base_cents / 100:.2f}",
                 "advertised_price_cents": base_cents,
-                "price": f"${cheapest_price / 100:.2f}",  # Price used for comparison
+                "price": f"${cheapest_price / 100:.2f}",
                 "price_cents": cheapest_price,
                 "median_price": f"${median / 100:.2f}",
                 "savings": f"${savings_vs_median / 100:.2f}",
                 "savings_percent": round(savings_percent, 1),
                 "url": cheapest_product.url,
-                "num_retailers": len(products)
+                "num_retailers": len(products),
+                "community": cheapest_product.community_id is not None,
             }
             
             # Add promo info if applicable
@@ -2437,6 +2488,150 @@ async def submit_deal_page():
     
     with open(template_path, 'r', encoding='utf-8') as f:
         return HTMLResponse(content=f.read())
+
+
+# ── Community Contributions ──────────────────────────────────────────
+
+class CommunityPriceSubmission(BaseModel):
+    cid: str
+    url: str
+    price: float
+    retailer_name: str
+    brand: str
+    line: str
+    wrapper: str = ""
+    vitola: str = ""
+    size: str = ""
+    box_qty: int = 20
+
+@app.post("/api/community-price")
+async def submit_community_price(request: Request):
+    """Accept a community-submitted retailer price for a known CID."""
+    try:
+        data = await request.json()
+        cid = data.get("cid", "").strip()
+        url = data.get("url", "").strip()
+        price = data.get("price")
+        retailer_name = data.get("retailer_name", "").strip()
+        brand = data.get("brand", "").strip()
+        line = data.get("line", "").strip()
+        wrapper = data.get("wrapper", "").strip()
+        vitola = data.get("vitola", "").strip()
+        size = data.get("size", "").strip()
+        box_qty = int(data.get("box_qty", 20))
+
+        if not url or not price or not retailer_name:
+            return {"status": "error", "message": "URL, price, and retailer name are required."}
+
+        if not url.startswith("http"):
+            return {"status": "error", "message": "Please enter a valid URL starting with http."}
+
+        price_cents = int(float(price) * 100)
+        if price_cents <= 0:
+            return {"status": "error", "message": "Price must be greater than zero."}
+
+        ip = request.client.host if request.client else ""
+        voter_hash = hashlib.sha256(ip.encode()).hexdigest() if ip else ""
+
+        hist_db = Path("data/historical_prices.db")
+        conn = sqlite3.connect(str(hist_db))
+        cur = conn.cursor()
+
+        cur.execute(
+            "SELECT id FROM community_prices WHERE cid = ? AND url = ? AND active = 1",
+            (cid, url),
+        )
+        if cur.fetchone():
+            conn.close()
+            return {"status": "error", "message": "This URL is already listed for this cigar."}
+
+        cur.execute(
+            """INSERT INTO community_prices
+               (cid, url, price_cents, retailer_name, voter_hash, brand, line, wrapper, vitola, size, box_qty)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (cid, url, price_cents, retailer_name, voter_hash, brand, line, wrapper, vitola, size, box_qty),
+        )
+
+        today = datetime.now().strftime("%Y-%m-%d")
+        cur.execute(
+            """INSERT INTO price_history (cid, retailer, url, price, in_stock, date)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (cid, retailer_name.lower().replace(" ", ""), url, price_cents / 100, 1, today),
+        )
+
+        conn.commit()
+        conn.close()
+
+        _product_cache["data"] = None
+        _product_cache["timestamp"] = 0
+
+        logger.info(f"Community price submitted: {retailer_name} ${price_cents/100:.2f} for {cid}")
+        return {"status": "success", "message": "Retailer added successfully! It will appear in the comparison table shortly."}
+
+    except Exception as e:
+        logger.error(f"Error processing community price: {e}")
+        return {"status": "error", "message": "There was an error submitting your price. Please try again."}
+
+
+@app.post("/api/report-row")
+async def report_row(request: Request):
+    """Downvote a community-submitted row. After threshold, it gets deactivated."""
+    try:
+        data = await request.json()
+        community_id = data.get("community_id")
+        reason = data.get("reason", "").strip()
+
+        if not community_id or not reason:
+            return {"status": "error", "message": "Missing community_id or reason."}
+
+        if reason not in ("price_changed", "out_of_stock", "link_broken"):
+            return {"status": "error", "message": "Invalid reason."}
+
+        ip = request.client.host if request.client else ""
+        voter_hash = hashlib.sha256(ip.encode()).hexdigest() if ip else ""
+
+        hist_db = Path("data/historical_prices.db")
+        conn = sqlite3.connect(str(hist_db))
+        cur = conn.cursor()
+
+        cur.execute(
+            "SELECT id FROM community_votes WHERE community_price_id = ? AND voter_hash = ?",
+            (community_id, voter_hash),
+        )
+        if cur.fetchone():
+            conn.close()
+            return {"status": "error", "message": "You have already reported this listing."}
+
+        cur.execute(
+            "INSERT INTO community_votes (community_price_id, reason, voter_hash) VALUES (?, ?, ?)",
+            (community_id, reason, voter_hash),
+        )
+
+        cur.execute(
+            "UPDATE community_prices SET downvotes = downvotes + 1 WHERE id = ?",
+            (community_id,),
+        )
+
+        cur.execute("SELECT downvotes FROM community_prices WHERE id = ?", (community_id,))
+        row = cur.fetchone()
+        deactivated = False
+        if row and row[0] >= COMMUNITY_DOWNVOTE_THRESHOLD:
+            cur.execute("UPDATE community_prices SET active = 0 WHERE id = ?", (community_id,))
+            deactivated = True
+            _product_cache["data"] = None
+            _product_cache["timestamp"] = 0
+
+        conn.commit()
+        conn.close()
+
+        if deactivated:
+            return {"status": "success", "message": "This listing has been removed due to multiple reports. Thank you for helping keep data accurate."}
+        return {"status": "success", "message": "Thank you for your report!"}
+
+    except Exception as e:
+        logger.error(f"Error processing row report: {e}")
+        return {"status": "error", "message": "There was an error processing your report. Please try again."}
+
 
 if __name__ == "__main__":
     import uvicorn

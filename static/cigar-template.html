@@ -336,13 +336,42 @@
                 <th class="p-4 border-b border-gray-200 text-center font-display font-semibold">Retailer</th>
                 <th class="p-4 border-b border-gray-200 text-left font-display font-semibold">Product Details</th>
                 <th class="p-4 border-b border-gray-200 text-center font-display font-semibold">Advertised Price</th>
-                <th class="p-4 border-b border-gray-200 text-center font-display font-semibold">Stock Status</th>
+                <th class="p-4 border-b border-gray-200 text-center font-display font-semibold">Source</th>
                 </tr>
               </thead>
               <tbody id="tableBody">
               {{SSR_PRODUCT_ROWS}}
               </tbody>
             </table>
+          </div>
+
+          <!-- Add a Retailer -->
+          <div id="addRetailerSection" class="text-center my-5" style="display: none;">
+            <button id="addRetailerBtn" onclick="toggleAddRetailer()" class="inline-flex items-center gap-2 px-5 py-2.5 border border-blue-500 rounded-xl bg-white text-blue-600 font-semibold hover:bg-blue-50 transition-all text-sm">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Know a retailer we're missing? Add it
+            </button>
+            <div id="addRetailerForm" style="display: none;" class="mt-4 max-w-lg mx-auto bg-white border border-gray-200 rounded-xl p-6 shadow-sm text-left">
+              <h4 class="font-display font-semibold text-lg text-brand-500 mb-4 text-center">Add a Retailer</h4>
+              <p class="text-sm text-muted mb-4 text-center">Contribute a price from a retailer not listed above. Your submission will appear immediately.</p>
+              <div class="mb-3">
+                <label class="block text-sm font-semibold mb-1">Retailer Name <span class="text-red-500">*</span></label>
+                <input type="text" id="communityRetailerName" placeholder="e.g. CigarPage" class="w-full p-2.5 border border-gray-200 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+              </div>
+              <div class="mb-3">
+                <label class="block text-sm font-semibold mb-1">Product Page URL <span class="text-red-500">*</span></label>
+                <input type="url" id="communityUrl" placeholder="https://www.cigarpage.com/..." class="w-full p-2.5 border border-gray-200 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+              </div>
+              <div class="mb-4">
+                <label class="block text-sm font-semibold mb-1">Box Price ($) <span class="text-red-500">*</span></label>
+                <input type="number" id="communityPrice" step="0.01" min="1" placeholder="149.99" class="w-full p-2.5 border border-gray-200 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+              </div>
+              <div id="communityMsg" class="mb-3 text-center text-sm" style="display: none;"></div>
+              <div class="flex gap-3 justify-center">
+                <button onclick="submitCommunityPrice()" class="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-all text-sm">Submit</button>
+                <button onclick="toggleAddRetailer()" class="px-6 py-2.5 border border-gray-300 rounded-lg font-semibold text-gray-600 hover:bg-gray-50 transition-all text-sm">Cancel</button>
+              </div>
+            </div>
           </div>
           
           <!-- Mobile Cards -->
@@ -509,6 +538,7 @@
 
         document.getElementById('priceHistoryToggle').style.display = 'block';
         document.getElementById('buyingGuideToggle').style.display = 'block';
+        document.getElementById('addRetailerSection').style.display = 'block';
     }
       
       function populateFilters(results) {
@@ -618,9 +648,12 @@
             </td>
           <td class="p-4 border-b border-gray-200 text-center font-semibold text-xl">${result.base}</td>
           <td class="p-4 border-b border-gray-200 text-center">
-              ${result.oos 
-              ? '<span class="text-red-600 font-semibold text-sm uppercase">Out of Stock</span>' 
-              : '<span class="text-emerald-600 font-semibold">In Stock</span>'}
+              ${result.community
+                ? `<span class="inline-block px-2 py-1 rounded text-xs font-semibold uppercase bg-blue-50 text-blue-600 border border-blue-200">Community</span>
+                   <button onclick="reportRow(${result.community_id})" class="block mx-auto mt-1.5 text-xs text-gray-400 hover:text-red-500 transition-colors" title="Report this listing">&#9872; Report</button>`
+                : (result.oos 
+                  ? '<span class="text-red-600 font-semibold text-sm uppercase">Out of Stock</span>' 
+                  : '<span class="text-emerald-600 font-semibold">&#10003; In Stock</span>')}
             </td>
         </tr>
       `).join('');
@@ -635,20 +668,26 @@
         }
         
       mobileContainer.innerHTML = results.map(result => `
-        <div class="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+        <div class="bg-white border ${result.community ? 'border-blue-200' : 'border-gray-200'} rounded-xl p-5 shadow-sm">
           <div class="flex justify-between items-center pb-4 mb-4 border-b border-gray-200">
-            <span class="font-display font-semibold text-lg">${result.retailer}</span>
+            <div>
+              <span class="font-display font-semibold text-lg">${result.retailer}</span>
+              ${result.community ? '<div class="mt-1"><span class="inline-block px-2 py-0.5 rounded text-xs font-semibold uppercase bg-blue-50 text-blue-600 border border-blue-200">Community Submitted</span></div>' : ''}
+            </div>
             <span class="text-2xl font-bold text-brand-500">${result.base}</span>
             </div>
           <div class="space-y-2 mb-4">
             ${result.wrapper ? `<div class="flex justify-between"><span class="text-muted">Wrapper:</span><span class="font-semibold">${result.wrapper}</span></div>` : ''}
             ${result.vitola ? `<div class="flex justify-between"><span class="text-muted">Vitola:</span><span class="font-semibold">${result.vitola}</span></div>` : ''}
             <div class="flex justify-between"><span class="text-muted">Box Size:</span><span class="font-semibold">${result.box_qty}</span></div>
-            <div class="flex justify-between"><span class="text-muted">Stock:</span><span class="font-semibold">${result.oos ? '<span class="text-red-600">Out of Stock</span>' : '<span class="text-emerald-600">In Stock</span>'}</span></div>
+            ${result.community
+              ? ''
+              : `<div class="flex justify-between"><span class="text-muted">Stock:</span><span class="font-semibold">${result.oos ? '<span class="text-red-600">Out of Stock</span>' : '<span class="text-emerald-600">In Stock</span>'}</span></div>`}
               </div>
-          <a href="${result.url}" class="flex items-center justify-center py-4 bg-brand-500 hover:bg-brand-600 text-white rounded-xl font-semibold transition-all" target="_blank" rel="noopener" onclick="gtag('event','retailer_click',{retailer:'${result.retailer}',cigar:brand+' '+line,price:'${result.base}',source:'mobile_card'})">
+          <a href="${result.url}" class="flex items-center justify-center py-4 ${result.community ? 'bg-blue-600 hover:bg-blue-700' : 'bg-brand-500 hover:bg-brand-600'} text-white rounded-xl font-semibold transition-all" target="_blank" rel="noopener" onclick="gtag('event','retailer_click',{retailer:'${result.retailer}',cigar:brand+' '+line,price:'${result.base}',source:'mobile_card'})">
               View at ${result.retailer}
             </a>
+          ${result.community ? `<button onclick="reportRow(${result.community_id})" class="w-full mt-2 text-xs text-gray-400 hover:text-red-500 transition-colors text-center py-1">&#9872; Report this listing</button>` : ''}
         </div>
       `).join('');
       }
@@ -975,6 +1014,103 @@
           content.style.display = 'none';
           button.textContent = 'Learn More About This Cigar';
         }
+      }
+
+      // Community: Add a Retailer
+      let addRetailerOpen = false;
+      function toggleAddRetailer() {
+        const form = document.getElementById('addRetailerForm');
+        addRetailerOpen = !addRetailerOpen;
+        form.style.display = addRetailerOpen ? 'block' : 'none';
+      }
+
+      function submitCommunityPrice() {
+        const retailerName = document.getElementById('communityRetailerName').value.trim();
+        const url = document.getElementById('communityUrl').value.trim();
+        const price = parseFloat(document.getElementById('communityPrice').value);
+        const msgEl = document.getElementById('communityMsg');
+
+        if (!retailerName || !url || !price || price <= 0) {
+          msgEl.style.display = 'block';
+          msgEl.className = 'mb-3 text-center text-sm text-red-600';
+          msgEl.textContent = 'Please fill in all fields with valid values.';
+          return;
+        }
+
+        const wrapperVal = document.getElementById('wrapperFilter').value;
+        const vitolaVal = document.getElementById('vitolaFilter').value;
+
+        const matchingResult = allResults.find(r => {
+          if (wrapperVal && r.wrapper !== wrapperVal) return false;
+          if (vitolaVal && r.vitola !== vitolaVal) return false;
+          return true;
+        });
+
+        const payload = {
+          cid: '',
+          url: url,
+          price: price,
+          retailer_name: retailerName,
+          brand: brand,
+          line: line,
+          wrapper: wrapperVal || (matchingResult ? matchingResult.wrapper : ''),
+          vitola: vitolaVal || (matchingResult ? matchingResult.vitola : ''),
+          size: matchingResult ? matchingResult.size : '',
+          box_qty: matchingResult ? matchingResult.box_qty : 20,
+        };
+
+        msgEl.style.display = 'block';
+        msgEl.className = 'mb-3 text-center text-sm text-gray-500';
+        msgEl.textContent = 'Submitting...';
+
+        fetch('/api/community-price', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+          .then(r => r.json())
+          .then(data => {
+            if (data.status === 'success') {
+              msgEl.className = 'mb-3 text-center text-sm text-emerald-600 font-semibold';
+              msgEl.textContent = data.message;
+              document.getElementById('communityRetailerName').value = '';
+              document.getElementById('communityUrl').value = '';
+              document.getElementById('communityPrice').value = '';
+              gtag('event', 'community_price_submit', { cigar: brand + ' ' + line, retailer: retailerName });
+              setTimeout(() => { location.reload(); }, 1500);
+            } else {
+              msgEl.className = 'mb-3 text-center text-sm text-red-600';
+              msgEl.textContent = data.message;
+            }
+          })
+          .catch(() => {
+            msgEl.className = 'mb-3 text-center text-sm text-red-600';
+            msgEl.textContent = 'Network error. Please try again.';
+          });
+      }
+
+      // Community: Report / Downvote
+      function reportRow(communityId) {
+        const reason = prompt('Why are you reporting this listing?\n\n1 - Price has changed\n2 - Out of stock\n3 - Link is broken\n\nEnter 1, 2, or 3:');
+        if (!reason) return;
+
+        const reasonMap = { '1': 'price_changed', '2': 'out_of_stock', '3': 'link_broken' };
+        const mappedReason = reasonMap[reason.trim()];
+        if (!mappedReason) { alert('Invalid selection.'); return; }
+
+        fetch('/api/report-row', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ community_id: communityId, reason: mappedReason }),
+        })
+          .then(r => r.json())
+          .then(data => {
+            alert(data.message);
+            if (data.status === 'success') {
+              gtag('event', 'community_report', { community_id: communityId, reason: mappedReason });
+            }
+          })
+          .catch(() => alert('Network error. Please try again.'));
       }
     </script>
   </body>
