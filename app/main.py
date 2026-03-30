@@ -989,11 +989,15 @@ def build_options_tree():
                 'vitolas': set(),
                 'sizes': set(),
                 'box_qtys': set(),
+                'vitola_box_qtys': {},
                 'wrapper_alias': wrapper_alias
             }
         
         if product.vitola:
             tree[product.brand][product.line][wrapper_key]['vitolas'].add(product.vitola)
+            if product.vitola not in tree[product.brand][product.line][wrapper_key]['vitola_box_qtys']:
+                tree[product.brand][product.line][wrapper_key]['vitola_box_qtys'][product.vitola] = set()
+            tree[product.brand][product.line][wrapper_key]['vitola_box_qtys'][product.vitola].add(product.box_qty)
         tree[product.brand][product.line][wrapper_key]['sizes'].add(product.size)
         tree[product.brand][product.line][wrapper_key]['box_qtys'].add(product.box_qty)
     
@@ -1014,12 +1018,17 @@ def build_options_tree():
                 if wrapper_alias_value:
                     wrappers_with_aliases += 1
                 
+                vitola_box_qtys = {}
+                for v, qtys in wrapper_data.get('vitola_box_qtys', {}).items():
+                    vitola_box_qtys[v] = sorted(list(qtys))
+
                 wrappers.append({
                     "wrapper": wrapper_name if wrapper_name != "No Wrapper Specified" else "",
                     "wrapper_alias": wrapper_alias_value,
                     "vitolas": vitolas,
                     "sizes": sizes,
-                    "box_qtys": sorted(list(wrapper_data['box_qtys']))
+                    "box_qtys": sorted(list(wrapper_data['box_qtys'])),
+                    "vitola_box_qtys": vitola_box_qtys
                 })
             
             lines.append({

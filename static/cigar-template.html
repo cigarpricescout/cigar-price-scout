@@ -611,12 +611,29 @@
       function applyFilters() {
         const wrapperVal = document.getElementById('wrapperFilter').value;
         const vitolaVal = document.getElementById('vitolaFilter').value;
-        const boxQtyVal = document.getElementById('boxQtyFilter').value;
-        
+        const boxQtyFilter = document.getElementById('boxQtyFilter');
+        const boxQtyVal = boxQtyFilter.value;
+
+        // Rebuild box qty options based on current wrapper+vitola selection
+        const availableQtys = new Set();
+        allResults.forEach(r => {
+          if (wrapperVal && r.wrapper !== wrapperVal) return;
+          if (vitolaVal && r.vitola !== vitolaVal) return;
+          if (r.box_qty) availableQtys.add(Number(r.box_qty));
+        });
+        const sortedQtys = Array.from(availableQtys).sort((a, b) => a - b);
+        boxQtyFilter.innerHTML = '<option value="">All Box Qty</option>' + sortedQtys.map(q => `<option value="${q}">Box of ${q}</option>`).join('');
+        if (boxQtyVal && availableQtys.has(Number(boxQtyVal))) {
+          boxQtyFilter.value = boxQtyVal;
+        } else {
+          boxQtyFilter.value = '';
+        }
+
+        const finalBoxQty = boxQtyFilter.value;
         const filtered = allResults.filter(r => {
           if (wrapperVal && r.wrapper !== wrapperVal) return false;
           if (vitolaVal && r.vitola !== vitolaVal) return false;
-          if (boxQtyVal && String(r.box_qty) !== boxQtyVal) return false;
+          if (finalBoxQty && String(r.box_qty) !== finalBoxQty) return false;
           return true;
         });
         
