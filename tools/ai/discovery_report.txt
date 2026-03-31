@@ -1,31 +1,36 @@
-=== URL Discovery Report - March 06, 2026 11:36 AM ===
+=== URL Discovery Report - March 31, 2026 09:28 PM ===
 
 Retailers scanned: 26
-CIDs searched: 5
-Time elapsed: 213s
+CIDs searched: 35
+Time elapsed: 427s
 
-STAGED FOR BATCH APPROVAL (high confidence): 6 matches
-  ALECBRADLEY|ALECBRADLEY|PROJECT40MADURO|ROBUSTO|RO... -> https://www.cigarking.com/alec-bradley-project-40-maduro-robusto-5x50-box-24/
-  ALECBRADLEY|ALECBRADLEY|PRENSADO|ROBUSTO|ROBUSTO|5... -> https://www.cigarsdirect.com/products/alec-bradley-prensado-robusto
-  ALECBRADLEY|ALECBRADLEY|PRENSADO|ROBUSTO|ROBUSTO|5... -> https://www.hilandscigars.com/shop/cigars/alec-bradley/alec-bradley-prensado/alec-bradley-prensado-robusto/
-  ALECBRADLEY|ALECBRADLEY|PRENSADO|ROBUSTO|ROBUSTO|5... -> https://nickscigarworld.com/shop/premium-cigars/alec-bradley-prensado/alec-bradley-prensado-robusto/
-  ALECBRADLEY|ALECBRADLEY|PROJECT40MADURO|ROBUSTO|RO... -> https://nickscigarworld.com/shop/premium-cigars/alec-bradley-project-40-maduro/alec-bradley-project-40-maduro-robusto/
-  ... and 1 more
+STAGED FOR BATCH APPROVAL (high confidence): 28 matches
+  PADRON|PADRON|1964ANNIVERSARY|SUPERIOR|SUPERIOR|6.... -> https://www.cigarking.com/padron-1964-superior-maduro-6-5x42-box-25/
+  PADRON|PADRON|1964ANNIVERSARY|MONARCA|MONARCA|6.5x... -> https://www.cigarking.com/padron-1964-monarca-maduro-6-5x46-box-25/
+  PADRON|PADRON|1964ANNIVERSARY|HERMOSO|HERMOSO|4x56... -> https://www.cigarking.com/padron-1964-hermoso-maduro-4x56-box-26/
+  PADRON|PADRON|1964ANNIVERSARY|PIRAMIDE|PIRAMIDE|6.... -> https://www.cigarsdirect.com/products/padron-1964-anniversary-piramide-maduro
+  PADRON|PADRON|1964ANNIVERSARY|IMPERIAL|IMPERIAL|6x... -> https://www.cigarsdirect.com/products/padron-1964-anniversary-imperial-maduro
+  ... and 23 more
 
-NEEDS INDIVIDUAL REVIEW (medium confidence): 3 matches
-  -> Review file: C:\Users\briah\cigar-price-scout\tools\ai\pending_review.csv
-  ALECBRADLEY|ALECBRADLEY|PRENSADO|ROBUSTO|ROBUSTO|5...
-    Reason: Brand and line match, but need to verify vitola, size, wrapper and box quantity from product page
-  ALECBRADLEY|ALECBRADLEY|PRENSADO|ROBUSTO|ROBUSTO|5...
-    Reason: Brand, line, and vitola match perfectly. Wrapper code HON (Honduran) is not explicitly shown but Prensado typically uses Honduran wrapper. Box quantity unclear from URL.
-  ALECBRADLEY|ALECBRADLEY|PRENSADO|ROBUSTO|ROBUSTO|5...
-    Reason: Brand and line match (Alec Bradley Prensado), vitola matches (Robusto), box format, but 'Lost Art' variant may indicate different wrapper than HON
+NEEDS INDIVIDUAL REVIEW (medium confidence): 14 matches
+  -> Review file: /home/runner/work/cigar-price-scout/cigar-price-scout/tools/ai/pending_review.csv
+  PADRON|PADRON|1964ANNIVERSARY|IMPERIAL|IMPERIAL|6x...
+    Reason: Brand, line, vitola, size, wrapper match but box count is 25 vs 26
+  PADRON|PADRON|1964ANNIVERSARYTAA|BELICOSOTAA|BELIC...
+    Reason: Brand, line, and wrapper match, belicoso vitola matches, but TAA version not specifically indicated
+  ARTUROFUENTE|ARTUROFUENTE|OPUSX|PERFECXIONA|PERFEC...
+    Reason: Brand and line match, perfecxion vitola matches, but this appears to be a special vintage release rather than standard box
+  ARTUROFUENTE|ARTUROFUENTE|OPUSX|DOUBLEROBUSTO|DOUB...
+    Reason: Brand, line and double robusto vitola match, but this appears to be a vintage release rather than standard box
+  ARTUROFUENTE|ARTUROFUENTE|OPUSXANGEL'SSHARE|ROBUST...
+    Reason: Angel's Share match but unclear if Robusto vitola or box format
+  ... and 9 more
 
-NO MATCH FOUND: 121 CIDs had no matches
-LOW CONFIDENCE (skipped): 0 matches discarded
+NO MATCH FOUND: 857 CIDs had no matches
+LOW CONFIDENCE (skipped): 11 matches discarded
 
 Next steps:
-  1. Spot-check ~5% of high-confidence matches in C:\Users\briah\cigar-price-scout\tools\ai\staged_matches.csv
+  1. Spot-check ~5% of high-confidence matches in /home/runner/work/cigar-price-scout/cigar-price-scout/tools/ai/staged_matches.csv
   2. If spot-checks pass: python tools/ai/url_discoverer.py --approve-batch
-  3. Review medium matches in C:\Users\briah\cigar-price-scout\tools\ai\pending_review.csv
+  3. Review medium matches in /home/runner/work/cigar-price-scout/cigar-price-scout/tools/ai/pending_review.csv
   4. Publish approved: python tools/ai/url_discoverer.py --publish-approved
