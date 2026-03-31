@@ -168,6 +168,8 @@ def fetch_all_pending_from_api() -> list:
         return []
 
 
+MIN_MATCH_PRICE = 50.0
+
 def _render_match_card(i: int, m: dict) -> str:
     """Render a single match card for the email."""
     conf = (m.get("confidence") or "MEDIUM").upper()
@@ -184,9 +186,8 @@ def _render_match_card(i: int, m: dict) -> str:
     reject_url = f"{APP_BASE_URL}/admin/match/{m['token']}/reject"
     product_url = m.get("url", "")
 
-    reason = m.get("reason", "") or ""
-    if len(reason) > 120:
-        reason = reason[:117] + "..."
+    cid = m.get("cid", "N/A")
+    retailer = m.get("retailer_key", "")
 
     return f"""
     <tr><td style="padding:8px 0">
@@ -194,25 +195,20 @@ def _render_match_card(i: int, m: dict) -> str:
         <tr><td style="padding:16px 20px">
           <table width="100%" cellpadding="0" cellspacing="0">
             <tr>
-              <td style="font-size:16px;font-weight:bold;color:#333">
-                #{i}. {m.get('brand','')} {m.get('line','')} {m.get('vitola','')}
-              </td>
+              <td style="font-size:15px;font-weight:bold;color:#333">#{i}. {retailer}</td>
               <td align="right">
                 <span style="background:{conf_bg};color:{conf_color};padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700">{conf}</span>
               </td>
             </tr>
           </table>
-          <p style="margin:8px 0 4px;color:#666;font-size:13px">
-            {m.get('retailer_key','')} &middot; {m.get('size','')} &middot; Box of {m.get('box_qty','?')} &middot; {m.get('wrapper','')}
-          </p>
+          <div style="background:#f5f5f5;padding:8px 12px;border-radius:6px;margin:10px 0;font-family:monospace;font-size:12px;word-break:break-all;color:#333">{cid}</div>
           <table width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0">
             <tr>
-              <td style="font-size:18px;font-weight:bold;color:#333">{price_str}</td>
-              <td style="font-size:13px;font-weight:600;color:{stock_color}">{stock_str}</td>
+              <td style="font-size:20px;font-weight:bold;color:#333">{price_str}</td>
+              <td align="right" style="font-size:14px;font-weight:600;color:{stock_color}">{stock_str}</td>
             </tr>
           </table>
-          <p style="margin:4px 0 12px;color:#888;font-size:12px;font-style:italic">{reason}</p>
-          <table cellpadding="0" cellspacing="0"><tr>
+          <table cellpadding="0" cellspacing="0" style="margin-top:12px"><tr>
             <td style="padding-right:8px">
               <a href="{approve_url}" style="display:inline-block;background:#4CAF50;color:#fff;padding:8px 24px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:14px">Approve</a>
             </td>
@@ -230,11 +226,19 @@ def _render_match_card(i: int, m: dict) -> str:
 
 def build_match_email_html(all_pending: list, new_count: int = 0) -> str:
     """Build an HTML email body with approve/reject links for all pending matches."""
-    total = len(all_pending)
+    viable = [
+        m for m in all_pending
+        if not m.get("price") or float(m["price"]) >= MIN_MATCH_PRICE
+    ]
+    skipped = len(all_pending) - len(viable)
+    if skipped:
+        logger.info(f"Filtered {skipped} matches with price below ${MIN_MATCH_PRICE:.0f}")
+
+    total = len(viable)
     date_str = datetime.now().strftime("%B %d, %Y")
 
     cards_html = ""
-    for i, m in enumerate(all_pending, 1):
+    for i, m in enumerate(viable, 1):
         cards_html += _render_match_card(i, m)
 
     new_label = f"<span style='color:#4CAF50;font-weight:600'>{new_count}</span> new today &middot; " if new_count > 0 else ""
