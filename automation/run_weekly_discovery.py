@@ -402,16 +402,19 @@ def main():
 
     config = load_config()
 
-    import subprocess
-    logger.info("Pulling latest from git...")
-    pull_result = subprocess.run(
-        ["git", "pull", "--rebase"],
-        capture_output=True, text=True, cwd=str(PROJECT_ROOT),
-    )
-    if pull_result.returncode == 0:
-        logger.info("Git pull successful")
+    if os.getenv("GITHUB_ACTIONS"):
+        logger.info("Running in GitHub Actions -- skipping git pull (checkout is fresh)")
     else:
-        logger.warning(f"Git pull issue (continuing): {pull_result.stderr}")
+        import subprocess
+        logger.info("Pulling latest from git...")
+        pull_result = subprocess.run(
+            ["git", "pull", "--rebase"],
+            capture_output=True, text=True, cwd=str(PROJECT_ROOT),
+        )
+        if pull_result.returncode == 0:
+            logger.info("Git pull successful")
+        else:
+            logger.warning(f"Git pull issue (continuing): {pull_result.stderr}")
 
     new_count = 0
 

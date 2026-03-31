@@ -1,0 +1,87 @@
+name: Daily Discovery Digest
+
+on:
+  schedule:
+    # Runs at 9:00 AM EST (14:00 UTC) every day, after the 6 AM pricing update
+    - cron: '0 14 * * *'
+
+  # Allow manual trigger with configurable CID count
+  workflow_dispatch:
+    inputs:
+      top_cids:
+        description: 'Number of top CIDs to research'
+        required: false
+        default: '50'
+
+permissions:
+  contents: write
+
+jobs:
+  run-discovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas beautifulsoup4 requests lxml anthropic
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Configure git
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+
+      - name: Run discovery and send digest
+        run: |
+          cd automation
+          python run_weekly_discovery.py --top-cids ${{ github.event.inputs.top_cids || '50' }}
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ADMIN_SECRET_KEY: ${{ secrets.ADMIN_SECRET_KEY }}
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+          PYTHONUNBUFFERED: 1
+
+      - name: Commit and push changes (if needed)
+        run: |
+          if ! git diff --quiet || ! git diff --cached --quiet; then
+            echo "Found changes from discovery, committing..."
+            git add -A
+            git commit -m "Discovery update - $(date +'%Y-%m-%d %H:%M')" || echo "Nothing to commit"
+          fi
+
+          if [ $(git rev-list HEAD...origin/main --count 2>/dev/null || echo 0) -gt 0 ]; then
+            echo "Pushing commits..."
+            git push
+          else
+            echo "No new commits to push"
+          fi
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Discovery Digest Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Date:** $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "**CIDs searched:** ${{ github.event.inputs.top_cids || '50' }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ -f "tools/ai/discovery_report.txt" ]; then
+            echo "### Discovery Report:" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            tail -n 30 "tools/ai/discovery_report.txt" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
