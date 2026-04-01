@@ -168,6 +168,102 @@ def fetch_all_pending_from_api() -> list:
         return []
 
 
+def fetch_approved_from_api() -> list:
+    """Fetch approved matches ready to be published into retailer CSVs."""
+    if not ADMIN_SECRET_KEY:
+        logger.warning("ADMIN_SECRET_KEY not set, cannot fetch approved matches")
+        return []
+
+    try:
+        resp = http_requests.get(
+            f"{APP_BASE_URL}/api/admin/approved-matches",
+            headers={"X-Admin-Key": ADMIN_SECRET_KEY},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        matches = resp.json().get("matches", [])
+        logger.info(f"Fetched {len(matches)} approved matches from API")
+        return matches
+    except Exception as e:
+        logger.error(f"Failed to fetch approved matches: {e}")
+        return []
+
+
+def publish_approved_to_csvs(approved: list) -> int:
+    """Write approved matches into retailer CSVs and mark them as published."""
+    import pandas as pd
+
+    if not approved:
+        return 0
+
+    static_data = PROJECT_ROOT / "static" / "data"
+    published_ids = []
+    published_count = 0
+
+    by_retailer = {}
+    for m in approved:
+        key = m["retailer_key"]
+        by_retailer.setdefault(key, []).append(m)
+
+    for retailer_key, matches in by_retailer.items():
+        csv_path = static_data / f"{retailer_key}.csv"
+        if not csv_path.exists():
+            logger.warning(f"CSV not found for retailer: {retailer_key}, skipping {len(matches)} matches")
+            continue
+
+        retailer_df = pd.read_csv(csv_path)
+        existing_cids = set(retailer_df["cigar_id"].dropna().unique())
+
+        new_rows = []
+        for m in matches:
+            if m["cid"] in existing_cids:
+                logger.info(f"  Skipping {m['cid']} — already in {retailer_key}.csv")
+                published_ids.append(m["id"])
+                continue
+
+            new_row = {
+                "cigar_id": m["cid"],
+                "title": "",
+                "url": m["url"],
+                "brand": m.get("brand", ""),
+                "line": m.get("line", ""),
+                "wrapper": m.get("wrapper", ""),
+                "vitola": m.get("vitola", ""),
+                "size": m.get("size", ""),
+                "box_qty": m.get("box_qty", ""),
+                "price": "",
+                "in_stock": "",
+            }
+            for col in retailer_df.columns:
+                if col not in new_row:
+                    new_row[col] = ""
+
+            new_rows.append(new_row)
+            published_ids.append(m["id"])
+
+        if new_rows:
+            new_df = pd.DataFrame(new_rows)
+            retailer_df = pd.concat([retailer_df, new_df], ignore_index=True)
+            retailer_df.to_csv(csv_path, index=False)
+            published_count += len(new_rows)
+            logger.info(f"  Added {len(new_rows)} CIDs to {retailer_key}.csv")
+
+    if published_ids:
+        try:
+            resp = http_requests.post(
+                f"{APP_BASE_URL}/api/admin/mark-published",
+                json={"ids": published_ids},
+                headers={"X-Admin-Key": ADMIN_SECRET_KEY},
+                timeout=15,
+            )
+            resp.raise_for_status()
+            logger.info(f"Marked {len(published_ids)} matches as published in API")
+        except Exception as e:
+            logger.error(f"Failed to mark matches as published: {e}")
+
+    return published_count
+
+
 MIN_MATCH_PRICE = 50.0
 
 def _render_match_card(i: int, m: dict) -> str:
@@ -419,6 +515,15 @@ def main():
             logger.info("Git pull successful")
         else:
             logger.warning(f"Git pull issue (continuing): {pull_result.stderr}")
+
+    # 0. Publish any previously approved matches into retailer CSVs
+    logger.info("Checking for approved matches to publish...")
+    approved = fetch_approved_from_api()
+    if approved:
+        pub_count = publish_approved_to_csvs(approved)
+        logger.info(f"Published {pub_count} approved matches to retailer CSVs")
+    else:
+        logger.info("No approved matches to publish")
 
     new_count = 0
 
