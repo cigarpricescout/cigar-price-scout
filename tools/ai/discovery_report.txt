@@ -1,33 +1,32 @@
-=== URL Discovery Report - April 01, 2026 03:20 PM ===
+=== URL Discovery Report - April 02, 2026 03:10 PM ===
 
 Retailers scanned: 26
-CIDs searched: 34
-Time elapsed: 365s
+CIDs searched: 31
+Time elapsed: 342s
 
-STAGED FOR BATCH APPROVAL (high confidence): 22 matches
-  PADRON|PADRON|1964ANNIVERSARY|SUPERIOR|SUPERIOR|6.... -> https://www.cigarking.com/padron-1964-superior-maduro-6-5x42-box-25/
-  PADRON|PADRON|1964ANNIVERSARY|HERMOSO|HERMOSO|4x56... -> https://www.cigarking.com/padron-1964-hermoso-maduro-4x56-box-26/
-  PADRON|PADRON|1964ANNIVERSARY|A|A|8.25x50|MAD|BOX1... -> https://www.cigarking.com/padron-1964-a-maduro-8-2x50-box-10/
-  PADRON|PADRON|1964ANNIVERSARY|PIRAMIDE|PIRAMIDE|6.... -> https://www.cigarsdirect.com/products/padron-1964-anniversary-piramide-maduro
-  PADRON|PADRON|1964ANNIVERSARY|SUPERIOR|SUPERIOR|6.... -> https://www.cigarsdirect.com/products/padron-1964-anniversary-superior-maduro
-  ... and 17 more
+STAGED FOR BATCH APPROVAL (high confidence): 6 matches
+  PADRON|PADRON|FAMILYRESERVE|NO.46|NO.46|5.625x56|M... -> https://www.cigarking.com/padron-family-reserve-46-years-maduro-5-5x56-box-10/
+  PADRON|PADRON|FAMILYRESERVE|NO.50|NO.50|6.5x50|MAD... -> https://pyramidcigars.com/products/padron-family-reserve-no-50-maduro
+  PADRON|PADRON|1964ANNIVERSARYTAA|TOROTAA|TOROTAA|6... -> https://www.smallbatchcigar.com/padron-1964-toro-taa-maduro
+  PADRON|PADRON|FAMILYRESERVE|NO.46|NO.46|5.625x56|M... -> https://tobaccolocker.com/products/padron-family-reserve-46-maduro-cigars-box-of-10
+  PADRON|PADRON|FAMILYRESERVE|NO.50|NO.50|6.5x50|MAD... -> https://tobaccolocker.com/products/padron-family-reserve-50-maduro-cigars-box-of-10
+  ... and 1 more
 
-NEEDS INDIVIDUAL REVIEW (medium confidence): 10 matches
+NEEDS INDIVIDUAL REVIEW (medium confidence): 5 matches
   -> Review file: /home/runner/work/cigar-price-scout/cigar-price-scout/tools/ai/pending_review.csv
-  PADRON|PADRON|1964ANNIVERSARYTAA|BELICOSOTAA|BELIC...
-    Reason: Likely match: Padron 1964 Anniversary Belicoso Maduro, though TAA designation not specified
+  PADRON|PADRON|FAMILYRESERVE|NO.45|NO.45|5.125x52|M...
+    Reason: Brand, line, wrapper and box quantity match, but size differs slightly (6x52 vs 5.125x52)
+  PADRON|PADRON|FAMILYRESERVE|NO.50|NO.50|6.5x50|MAD...
+    Reason: Brand, line (Family Reserve), vitola (No.50), wrapper (Maduro), and box quantity match, but size differs significantly (5x54 vs 6.5x50)
   ARTUROFUENTE|ARTUROFUENTE|OPUSX|DOUBLEROBUSTO|DOUB...
-    Reason: Double Robusto vitola matches but this is a special vintage release, not standard OpusX line
-  ARTUROFUENTE|ARTUROFUENTE|OPUSXANGEL'SSHARE|ROBUST...
-    Reason: Brand and line match (OpusX Angel Share), but URL doesn't specify robusto vitola or box quantity clearly
-  PADRON|PADRON|1964ANNIVERSARY|A|A|8.25x50|MAD|BOX1...
-    Reason: Matches brand, line, vitola A, and Maduro wrapper, but is 10-pack instead of 15-pack box
-  ARTUROFUENTE|ARTUROFUENTE|OPUSXLOSTCITY|TORO|TORO|...
-    Reason: OpusX Lost City Toro matches, but size differs (6.75x48 vs 6x54) and no box quantity specified
-  ... and 5 more
+    Reason: Brand, line, and vitola match (Double Robusto), but this appears to be a limited vintage release rather than standard production box
+  ARTUROFUENTE|ARTUROFUENTE|OPUSX|PERFECXIONA|PERFEC...
+    Reason: Brand, line, and vitola match (PerfecXion), but this appears to be a limited vintage release rather than standard production box
+  ARTUROFUENTE|ARTUROFUENTE|OPUSXLOSTCITY|ROBUSTO|RO...
+    Reason: Brand, line and vitola match (OpusX Lost City Robusto), size close (5x50 vs 50x5.25), but no clear box quantity
 
-NO MATCH FOUND: 847 CIDs had no matches
-LOW CONFIDENCE (skipped): 5 matches discarded
+NO MATCH FOUND: 789 CIDs had no matches
+LOW CONFIDENCE (skipped): 6 matches discarded
 
 Next steps:
   1. Spot-check ~5% of high-confidence matches in /home/runner/work/cigar-price-scout/cigar-price-scout/tools/ai/staged_matches.csv
