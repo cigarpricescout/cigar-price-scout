@@ -1,31 +1,29 @@
-=== URL Discovery Report - April 02, 2026 03:10 PM ===
+=== URL Discovery Report - April 03, 2026 02:57 PM ===
 
 Retailers scanned: 26
-CIDs searched: 31
-Time elapsed: 342s
+CIDs searched: 29
+Time elapsed: 303s
 
-STAGED FOR BATCH APPROVAL (high confidence): 6 matches
-  PADRON|PADRON|FAMILYRESERVE|NO.46|NO.46|5.625x56|M... -> https://www.cigarking.com/padron-family-reserve-46-years-maduro-5-5x56-box-10/
-  PADRON|PADRON|FAMILYRESERVE|NO.50|NO.50|6.5x50|MAD... -> https://pyramidcigars.com/products/padron-family-reserve-no-50-maduro
+STAGED FOR BATCH APPROVAL (high confidence): 4 matches
+  PADRON|PADRON|FAMILYRESERVE|NO.95|NO.95|8x52|MAD|B... -> https://www.cigarboxpa.com/copy-of-padron-family-reserve-maduro-no-95-box.html
   PADRON|PADRON|1964ANNIVERSARYTAA|TOROTAA|TOROTAA|6... -> https://www.smallbatchcigar.com/padron-1964-toro-taa-maduro
-  PADRON|PADRON|FAMILYRESERVE|NO.46|NO.46|5.625x56|M... -> https://tobaccolocker.com/products/padron-family-reserve-46-maduro-cigars-box-of-10
-  PADRON|PADRON|FAMILYRESERVE|NO.50|NO.50|6.5x50|MAD... -> https://tobaccolocker.com/products/padron-family-reserve-50-maduro-cigars-box-of-10
-  ... and 1 more
+  PADRON|PADRON|FAMILYRESERVE|NO.95|NO.95|8x52|MAD|B... -> https://www.smallbatchcigar.com/padron-family-reserve-no-95-maduro
+  ARTUROFUENTE|ARTUROFUENTE|OPUSXLOSTCITY|ROBUSTO|RO... -> https://www.thecigarshop.com/fuente-fuente-opusx-the-lost-city-robusto-50x525.html
 
 NEEDS INDIVIDUAL REVIEW (medium confidence): 5 matches
   -> Review file: /home/runner/work/cigar-price-scout/cigar-price-scout/tools/ai/pending_review.csv
-  PADRON|PADRON|FAMILYRESERVE|NO.45|NO.45|5.125x52|M...
-    Reason: Brand, line, wrapper and box quantity match, but size differs slightly (6x52 vs 5.125x52)
-  PADRON|PADRON|FAMILYRESERVE|NO.50|NO.50|6.5x50|MAD...
-    Reason: Brand, line (Family Reserve), vitola (No.50), wrapper (Maduro), and box quantity match, but size differs significantly (5x54 vs 6.5x50)
-  ARTUROFUENTE|ARTUROFUENTE|OPUSX|DOUBLEROBUSTO|DOUB...
-    Reason: Brand, line, and vitola match (Double Robusto), but this appears to be a limited vintage release rather than standard production box
+  PADRON|PADRON|1964ANNIVERSARYTAA|BELICOSOTAA|BELIC...
+    Reason: Brand, line, and wrapper match, but this appears to be regular Belicoso not the TAA exclusive version
   ARTUROFUENTE|ARTUROFUENTE|OPUSX|PERFECXIONA|PERFEC...
-    Reason: Brand, line, and vitola match (PerfecXion), but this appears to be a limited vintage release rather than standard production box
-  ARTUROFUENTE|ARTUROFUENTE|OPUSXLOSTCITY|ROBUSTO|RO...
-    Reason: Brand, line and vitola match (OpusX Lost City Robusto), size close (5x50 vs 50x5.25), but no clear box quantity
+    Reason: Brand and line match (OpusX), Perfecxion vitola matches, but this is a limited vintage release rather than standard box
+  ARTUROFUENTE|ARTUROFUENTE|OPUSX|DOUBLEROBUSTO|DOUB...
+    Reason: Brand and line match (OpusX), Double Robusto vitola matches, but this is a limited vintage release rather than standard box
+  ARTUROFUENTE|ARTUROFUENTE|OPUSXLOSTCITY|TORO|TORO|...
+    Reason: Lost City Toro found but size is 6.75x48 vs expected 6x54
+  ARTUROFUENTE|ARTUROFUENTE|OPUSX|DOUBLEROBUSTO|DOUB...
+    Reason: Double Robusto found but it's Lost City line, not regular Opus X
 
-NO MATCH FOUND: 789 CIDs had no matches
+NO MATCH FOUND: 739 CIDs had no matches
 LOW CONFIDENCE (skipped): 6 matches discarded
 
 Next steps:
