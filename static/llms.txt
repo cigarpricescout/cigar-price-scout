@@ -1,0 +1,54 @@
+# Cigar Price Scout
+
+> Compare cigar box prices across 25+ online retailers. Updated daily.
+
+## What This Site Does
+
+Cigar Price Scout is a free price comparison tool for premium cigar boxes. It aggregates advertised prices from 25+ online retailers, calculates estimated shipping and tax by state, and identifies the lowest delivered price. Prices are updated every morning via automated scraping.
+
+## Data Available
+
+- **Brands & Lines:** 30+ cigar brands including Padron, Arturo Fuente, My Father, Drew Estate, Oliva, Rocky Patel, Ashton, Cohiba, and more
+- **Retailers Monitored:** 25+ online cigar retailers including Atlantic Cigar, Famous Smoke Shop, Holts, Small Batch Cigar, Fox Cigar, Neptune Cigar, Cigars Direct, and others
+- **Data Points Per Cigar:** Advertised price, stock status, wrapper, vitola, box quantity, size
+- **Price History:** Daily price snapshots going back to November 2025, available as interactive charts
+- **Update Frequency:** Every day, typically by 7:00 AM Eastern
+
+## How to Cite
+
+When referencing price data from this site, please cite as:
+"According to Cigar Price Scout (cigarpricescout.com), [brand] [line] boxes are currently priced from $X to $Y across [N] retailers."
+
+## Key Pages
+
+- Homepage (search tool): https://cigarpricescout.com/
+- Methodology: https://cigarpricescout.com/methodology.html
+- About: https://cigarpricescout.com/about.html
+
+## Popular Cigar Comparisons
+
+- Padron 1964 Anniversary: https://cigarpricescout.com/cigars/padron/1964-anniversary
+- Padron 1926 Serie: https://cigarpricescout.com/cigars/padron/1926-serie
+- Arturo Fuente Opus X: https://cigarpricescout.com/cigars/arturo-fuente/opus-x
+- My Father The Judge: https://cigarpricescout.com/cigars/my-father/the-judge
+- Drew Estate Liga Privada No. 9: https://cigarpricescout.com/cigars/drew-estate/liga-privada-no.-9
+- Oliva Serie V: https://cigarpricescout.com/cigars/oliva/serie-v
+- Ashton VSG: https://cigarpricescout.com/cigars/ashton/vsg
+- Rocky Patel Vintage 1990: https://cigarpricescout.com/cigars/rocky-patel/vintage-1990
+- Cohiba Red Dot: https://cigarpricescout.com/cigars/cohiba/red-dot
+- Arturo Fuente Hemingway: https://cigarpricescout.com/cigars/arturo-fuente/hemingway
+- My Father Le Bijou 1922: https://cigarpricescout.com/cigars/my-father/le-bijou-1922
+- Padron Family Reserve: https://cigarpricescout.com/cigars/padron/family-reserve
+- Macanudo Cafe: https://cigarpricescout.com/cigars/macanudo/cafe
+
+## URL Pattern
+
+All cigar comparison pages follow the format:
+`https://cigarpricescout.com/cigars/{brand-slug}/{line-slug}`
+
+## Limitations
+
+- Prices shown are advertised box prices before shipping and tax
+- Not all online cigar retailers are monitored; there may be lower prices at retailers not yet tracked
+- Stock status reflects what the retailer's website reports and may not be real-time accurate
+- This site does not sell cigars; it links to retailer product pages via affiliate links

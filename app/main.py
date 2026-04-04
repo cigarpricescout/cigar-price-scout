@@ -1684,6 +1684,10 @@ async def sitemap():
 async def robots():
     return FileResponse(f"{STATIC_PATH}/robots.txt")
 
+@app.get("/llms.txt", response_class=PlainTextResponse)
+async def llms_txt():
+    return FileResponse(f"{STATIC_PATH}/llms.txt", media_type="text/plain")
+
 @app.post("/api/box-pricing-request")
 async def submit_box_pricing_request(request: BoxPricingRequest):
     try:
