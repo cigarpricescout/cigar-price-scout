@@ -1,30 +1,33 @@
-=== URL Discovery Report - April 03, 2026 02:57 PM ===
+=== URL Discovery Report - April 04, 2026 02:45 PM ===
 
 Retailers scanned: 26
 CIDs searched: 29
-Time elapsed: 303s
+Time elapsed: 306s
 
-STAGED FOR BATCH APPROVAL (high confidence): 4 matches
-  PADRON|PADRON|FAMILYRESERVE|NO.95|NO.95|8x52|MAD|B... -> https://www.cigarboxpa.com/copy-of-padron-family-reserve-maduro-no-95-box.html
-  PADRON|PADRON|1964ANNIVERSARYTAA|TOROTAA|TOROTAA|6... -> https://www.smallbatchcigar.com/padron-1964-toro-taa-maduro
-  PADRON|PADRON|FAMILYRESERVE|NO.95|NO.95|8x52|MAD|B... -> https://www.smallbatchcigar.com/padron-family-reserve-no-95-maduro
-  ARTUROFUENTE|ARTUROFUENTE|OPUSXLOSTCITY|ROBUSTO|RO... -> https://www.thecigarshop.com/fuente-fuente-opusx-the-lost-city-robusto-50x525.html
+STAGED FOR BATCH APPROVAL (high confidence): 10 matches
+  PERDOMO|PERDOMO|RESERVE10THANNIVERSARYCHAMPAGNE|CH... -> https://www.bnbtobacco.com/products/perdomo-reserve-10th-anniversary-champagne
+  PERDOMO|PERDOMO|RESERVE10THANNIVERSARYCHAMPAGNE|CH... -> https://www.cigarking.com/copy-of-perdomo-reserve-10th-anniversary-champagne-churchill-7x54-box-25/
+  PERDOMO|PERDOMO|RESERVE10THANNIVERSARYCHAMPAGNE|CH... -> https://www.cigarsdirect.com/products/perdomo-reserve-10th-anniversary-champagne-churchill
+  PERDOMO|PERDOMO|RESERVE10THANNIVERSARYCHAMPAGNE|CH... -> https://foxcigar.com/shop/cigars/perdomo/perdomo-10th-champagne-churchill/
+  PERDOMO|PERDOMO|RESERVE10THANNIVERSARYCHAMPAGNE|CH... -> https://www.hilandscigars.com/shop/cigars/perdomo/perdomo-champagne-churchill-7x54-box-of-25-free-shipping/
+  ... and 5 more
 
-NEEDS INDIVIDUAL REVIEW (medium confidence): 5 matches
+NEEDS INDIVIDUAL REVIEW (medium confidence): 7 matches
   -> Review file: /home/runner/work/cigar-price-scout/cigar-price-scout/tools/ai/pending_review.csv
+  PADRON|PADRON|1964ANNIVERSARY|SI-15(SQUARETUBE)|SI...
+    Reason: Padron 1964 Anniversary Maduro Imperial 6x54 matches size and wrapper, but SI-15 square tube format not clearly specified and box quantity unclear
+  PERDOMO|PERDOMO|RESERVE10THANNIVERSARYCHAMPAGNE|CH...
+    Reason: Perdomo Reserve Champagne Churchill 7x54 matches brand, line, vitola and size, but '10th Anniversary' specification not confirmed and box quantity not specified
   PADRON|PADRON|1964ANNIVERSARYTAA|BELICOSOTAA|BELIC...
-    Reason: Brand, line, and wrapper match, but this appears to be regular Belicoso not the TAA exclusive version
+    Reason: Brand, line, vitola and wrapper match. TAA specification not clear from URL, but belicoso vitola matches
   ARTUROFUENTE|ARTUROFUENTE|OPUSX|PERFECXIONA|PERFEC...
-    Reason: Brand and line match (OpusX), Perfecxion vitola matches, but this is a limited vintage release rather than standard box
+    Reason: OpusX Perfecxion match found, but it's a vintage/limited edition which may not be the standard Perfecxion A
   ARTUROFUENTE|ARTUROFUENTE|OPUSX|DOUBLEROBUSTO|DOUB...
-    Reason: Brand and line match (OpusX), Double Robusto vitola matches, but this is a limited vintage release rather than standard box
-  ARTUROFUENTE|ARTUROFUENTE|OPUSXLOSTCITY|TORO|TORO|...
-    Reason: Lost City Toro found but size is 6.75x48 vs expected 6x54
-  ARTUROFUENTE|ARTUROFUENTE|OPUSX|DOUBLEROBUSTO|DOUB...
-    Reason: Double Robusto found but it's Lost City line, not regular Opus X
+    Reason: OpusX Double Robusto match found, but it's a vintage/limited edition which may not be the standard Double Robusto
+  ... and 2 more
 
-NO MATCH FOUND: 739 CIDs had no matches
-LOW CONFIDENCE (skipped): 6 matches discarded
+NO MATCH FOUND: 732 CIDs had no matches
+LOW CONFIDENCE (skipped): 5 matches discarded
 
 Next steps:
   1. Spot-check ~5% of high-confidence matches in /home/runner/work/cigar-price-scout/cigar-price-scout/tools/ai/staged_matches.csv
