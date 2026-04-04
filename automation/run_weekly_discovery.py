@@ -50,6 +50,104 @@ USER_AGENT = (
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
 
+RETAILERS_PKG = "tools.price_monitoring.retailers"
+
+RETAILER_EXTRACTOR_MAP = {
+    # Active retailers  (csv_key -> module_name, function_name)
+    "foxcigar":          ("fox_cigar",                       "extract_fox_cigar_data"),
+    "hilands":           ("hilands_cigars",                  "extract_hilands_cigars_data"),
+    "atlantic":          ("atlantic_cigar_extractor",        "extract_atlantic_cigar_data"),
+    "holts":             ("holts_cigars_extractor",          "extract_holts_cigar_data"),
+    "smallbatchcigar":   ("smallbatch_cigar_extractor",      "extract_smallbatch_cigar_data"),
+    "bighumidor":        ("big_humidor_extractor",           "extract_big_humidor_data"),
+    "cigarsdirect":      ("cigarsdirect_extractor",          "extract_cigarsdirect_data"),
+    "absolutecigars":    ("absolute_cigars_extractor",       "extract_absolute_cigars_data"),
+    "stogies":           ("stogies_extractor",               "extract_stogies_data"),
+    "tobaccostock":      ("tobaccostock_extractor",          "extract_tobaccostock_data"),
+    "thecigarshop":      ("thecigarshop_extractor",          "extract_thecigarshop_data"),
+    "nickscigarworld":   ("nicks_cigars",                    "extract_nicks_cigars_data"),
+    "twoguys":           ("two_guys_extractor",              "extract_two_guys_cigars_data"),
+    "watchcity":         ("watch_city_extractor",            "extract_watch_city_data"),
+    "tobaccolocker":     ("tobacco_locker_extractor",        "extract_tobacco_locker_data"),
+    "tampasweethearts":  ("tampa_sweethearts_extractor",     "extract_tampa_sweethearts_data"),
+    "smokeinn":          ("smokeinn_extractor",              "extract_smokeinn_cigar_data"),
+    "planetcigars":      ("planet_cigars_extractor",         "extract_planet_cigars_data"),
+    "bnbtobacco":        ("bnb_tobacco_extractor",           "extract_bnb_tobacco_data"),
+    "cigarboxpa":        ("cigarboxpa_extractor",            "extract_cigarboxpa_data"),
+    "pyramidcigars":     ("pyramid_cigars_extractor",        "extract_pyramid_cigars_data"),
+    "coronacigar":       ("coronacigar_extractor",           "extract_coronacigar_data"),
+    "cigarhustler":      ("cigarhustler_extractor",          "extract_cigarhustler_data"),
+    "cigardepot":        ("cigardepot_extractor",            "extract_cigardepot_data"),
+    "cigarking":         ("cigar_king_extractor",            "extract_cigar_king_data"),
+    "iheartcigars":      ("iheartcigars_production_final",   "extract_iheartcigars_data_production"),
+    # Dormant retailers
+    "gothamcigars":      ("gotham_cigars_extractor",         "extract_gotham_cigars_data"),
+    "neptune":           ("neptune_cigar_extractor",         "extract_neptune_cigar_data"),
+    "cigarprimestore":   ("cigarprimestore_extractor",       "extract_cigarprimestore_data"),
+    # Extra extractors (no active CSV yet, but discoverable)
+    "cigarpage":         ("cigar_page_extractor",            "extract_cigar_page_data"),
+    "abcfws":            ("abcfws_extractor",                "extract_abcfws_data"),
+    "baysidecigars":     ("baysidecigars_extractor",         "extract_bayside_cigars_data"),
+    "bestcigarprices":   ("best_cigar_prices_extractor",     "extract_best_cigar_prices_data"),
+    "boutiquecigar":     ("boutiquecigar_extractor",         "extract_boutiquecigar_data"),
+    "buitragocigars":    ("buitrago_cigars_extractor",       "extract_buitrago_cigars_data"),
+    "cigarboxinc":       ("cigarboxinc_extractor",           "extract_cigarboxinc_data"),
+    "cigarcellarofmiami":("cigarcellarofmiami_extractor",    "extract_cigarcellarofmiami_data"),
+    "cigarcountry":      ("cigar_country_extractor",         "extract_cigar_country_data"),
+    "famoussmoke":       ("famous_smoke_extractor",          "extract_famous_smoke_data"),
+    "mikescigars":       ("mikescigars_extractor",           "extract_mikescigars_data"),
+    "momscigars":        ("momscigars_extractor",            "extract_momscigars_data"),
+    "smokezone":         ("smokezone_extractor",             "extract_smokezone_data"),
+    "thompsoncigar":     ("thompson_cigars_extractor",       "extract_thompson_cigars_data"),
+}
+
+URL_DOMAIN_TO_KEY = {
+    "foxcigar.com":              "foxcigar",
+    "hilandscigars.com":         "hilands",
+    "atlanticcigar.com":         "atlantic",
+    "holts.com":                 "holts",
+    "smallbatchcigar.com":       "smallbatchcigar",
+    "bighumidor.com":            "bighumidor",
+    "cigarsdirect.com":          "cigarsdirect",
+    "absolutecigars.com":        "absolutecigars",
+    "stogiesworldclasscigars.com": "stogies",
+    "tobaccostock.com":          "tobaccostock",
+    "thecigarshop.com":          "thecigarshop",
+    "nickscigarworld.com":       "nickscigarworld",
+    "2guyscigars.com":           "twoguys",
+    "watchcitycigars.com":       "watchcity",
+    "tobaccolocker.com":         "tobaccolocker",
+    "tampasweethearts.com":      "tampasweethearts",
+    "smokeinn.com":              "smokeinn",
+    "planetcigars.com":          "planetcigars",
+    "bnbtobacco.com":            "bnbtobacco",
+    "cigarboxpa.com":            "cigarboxpa",
+    "pyramidcigars.com":         "pyramidcigars",
+    "coronacigar.com":           "coronacigar",
+    "cigarhustler.com":          "cigarhustler",
+    "cigardepot.com":            "cigardepot",
+    "cigarking.com":             "cigarking",
+    "iheartcigars.com":          "iheartcigars",
+    "gothamcigars.com":          "gothamcigars",
+    "neptunecigar.com":          "neptune",
+    "cigarprimestore.com":       "cigarprimestore",
+    "cigarpage.com":             "cigarpage",
+    "abcfws.com":                "abcfws",
+    "baysidecigars.com":         "baysidecigars",
+    "bestcigarprices.com":       "bestcigarprices",
+    "boutiquecigars.com":        "boutiquecigar",
+    "buitragocigars.com":        "buitragocigars",
+    "cigarboxinc.com":           "cigarboxinc",
+    "cigarcellarofmiami.com":    "cigarcellarofmiami",
+    "cigarcountry.com":          "cigarcountry",
+    "famous-smoke.com":          "famoussmoke",
+    "mikescigars.com":           "mikescigars",
+    "momscigars.com":            "momscigars",
+    "smokezonecigars.com":       "smokezone",
+    "thompsoncigar.com":         "thompsoncigar",
+    "cigarwarehouseusa.com":     "cigarwarehouse",
+}
+
 
 def load_config():
     """Load automation config for email settings."""
@@ -60,8 +158,69 @@ def load_config():
     return {}
 
 
-def fetch_price(url: str, timeout: int = 12) -> dict:
-    """Fetch price/stock from a product page for email display."""
+def _retailer_key_from_url(url: str) -> str | None:
+    """Derive retailer key from a URL's domain via URL_DOMAIN_TO_KEY."""
+    try:
+        from urllib.parse import urlparse
+        domain = urlparse(url).netloc.lower().replace("www.", "")
+        for suffix, key in URL_DOMAIN_TO_KEY.items():
+            if domain.endswith(suffix):
+                return key
+    except Exception:
+        pass
+    return None
+
+
+def _normalize_extractor_result(raw: dict | None) -> dict:
+    """Normalize varying extractor return formats into {price, in_stock, error}."""
+    if raw is None:
+        return {"price": None, "in_stock": None, "error": "extractor returned None"}
+
+    price = raw.get("price") or raw.get("box_price") or raw.get("sale_price")
+    if price is not None:
+        try:
+            price = float(price)
+        except (ValueError, TypeError):
+            price = None
+
+    in_stock = raw.get("in_stock")
+
+    error = raw.get("error")
+    if error is None and raw.get("success") is False:
+        error = "extraction unsuccessful"
+
+    return {"price": price, "in_stock": in_stock, "error": error}
+
+
+def extract_via_retailer(url: str, retailer_key: str | None = None) -> dict:
+    """
+    Extract price/stock using the retailer-specific extractor.
+    Falls back to generic scraper only if no extractor is found.
+    """
+    import importlib
+
+    key = retailer_key or _retailer_key_from_url(url)
+    if key:
+        key = key.replace("-DORMANT", "")
+
+    if key and key in RETAILER_EXTRACTOR_MAP:
+        module_name, func_name = RETAILER_EXTRACTOR_MAP[key]
+        fqn = f"{RETAILERS_PKG}.{module_name}"
+        try:
+            mod = importlib.import_module(fqn)
+            func = getattr(mod, func_name)
+            raw = func(url)
+            result = _normalize_extractor_result(raw)
+            logger.info(f"  Extractor [{key}] -> price={result['price']}, in_stock={result['in_stock']}")
+            return result
+        except Exception as e:
+            logger.warning(f"  Extractor [{key}] failed: {e}, falling back to generic")
+
+    return _fetch_price_generic(url)
+
+
+def _fetch_price_generic(url: str, timeout: int = 12) -> dict:
+    """Last-resort generic scraper when no retailer extractor matches."""
     try:
         from bs4 import BeautifulSoup
         resp = http_requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=timeout, allow_redirects=True)
@@ -474,11 +633,12 @@ def read_staged_matches() -> list:
 
 
 def enrich_with_prices(matches: list) -> list:
-    """Fetch live prices for each match URL."""
-    logger.info(f"Fetching prices for {len(matches)} URLs...")
+    """Fetch live prices using retailer-specific extractors."""
+    logger.info(f"Fetching prices for {len(matches)} URLs via retailer extractors...")
     for i, m in enumerate(matches):
-        logger.info(f"  [{i+1}/{len(matches)}] {m['url'][:70]}...")
-        data = fetch_price(m["url"])
+        retailer_key = m.get("retailer_key")
+        logger.info(f"  [{i+1}/{len(matches)}] {retailer_key or '?'}: {m['url'][:70]}...")
+        data = extract_via_retailer(m["url"], retailer_key)
         m["price"] = data.get("price")
         m["in_stock"] = data.get("in_stock")
         time.sleep(1.2)
