@@ -1777,10 +1777,10 @@ async def cigar_landing_page(brand: str, line: str):
             and normalize_line_slug(p.line) == line.lower()
         ]
         
-        # Require at least 3 unique retailers with prices for a meaningful comparison
+        # Require at least 2 unique retailers with prices for a meaningful comparison
         unique_retailers_with_prices = {p.retailer_key for p in matching_products if p.price_cents}
         
-        if not matching_products or len(unique_retailers_with_prices) < 3:
+        if not matching_products or len(unique_retailers_with_prices) < 2:
             return HTMLResponse(
                 content=f"""<!DOCTYPE html>
 <html lang="en">
@@ -1797,7 +1797,7 @@ async def cigar_landing_page(brand: str, line: str):
         <img src="/static/logo.png" alt="Cigar Price Scout" class="w-24 h-20 mx-auto mb-6">
         <h1 class="text-3xl font-bold text-gray-800 mb-4">Cigar Not Found</h1>
         <p class="text-gray-600 mb-6">We don't have enough pricing data for <strong>{brand_display} {line_display}</strong> yet.</p>
-        <p class="text-gray-500 mb-8">We need at least 3 retailers to show a meaningful comparison. Want us to add more? Let us know!</p>
+        <p class="text-gray-500 mb-8">We need at least 2 retailers to show a meaningful comparison. Want us to add more? Let us know!</p>
         <div class="space-x-4">
             <a href="/" class="inline-block bg-amber-700 hover:bg-amber-800 text-white font-semibold py-3 px-6 rounded-lg">Browse All Cigars</a>
             <a href="/request-box-pricing.html" class="inline-block border border-amber-700 text-amber-700 hover:bg-amber-50 font-semibold py-3 px-6 rounded-lg">Request This Cigar</a>
@@ -1849,10 +1849,12 @@ async def cigar_landing_page(brand: str, line: str):
         else:
             html = html.replace('{{SSR_PRODUCT_ROWS}}', '<tr><td colspan="4" class="p-4 text-center text-muted">Loading prices...</td></tr>')
         
-        # Fill in JSON-LD structured data for SEO
+        # Fill in JSON-LD structured data and meta tag values
+        retailer_count = len({p.retailer_key for p in matching_products if p.price_cents})
         html = html.replace('{{OFFER_COUNT}}', str(len(matching_products)))
         html = html.replace('{{LOW_PRICE}}', f"{min(prices):.2f}" if prices else "0")
         html = html.replace('{{HIGH_PRICE}}', f"{max(prices):.2f}" if prices else "0")
+        html = html.replace('{{RETAILER_COUNT}}', str(retailer_count))
         
         if has_seo:
             faq_1, faq_2, faq_3 = generate_faq_answers(brand_display, line_display, seo_data)
