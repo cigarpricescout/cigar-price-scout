@@ -1,33 +1,29 @@
-=== URL Discovery Report - April 04, 2026 02:45 PM ===
+=== URL Discovery Report - April 05, 2026 02:46 PM ===
 
 Retailers scanned: 26
 CIDs searched: 29
-Time elapsed: 306s
+Time elapsed: 293s
 
-STAGED FOR BATCH APPROVAL (high confidence): 10 matches
-  PERDOMO|PERDOMO|RESERVE10THANNIVERSARYCHAMPAGNE|CH... -> https://www.bnbtobacco.com/products/perdomo-reserve-10th-anniversary-champagne
-  PERDOMO|PERDOMO|RESERVE10THANNIVERSARYCHAMPAGNE|CH... -> https://www.cigarking.com/copy-of-perdomo-reserve-10th-anniversary-champagne-churchill-7x54-box-25/
-  PERDOMO|PERDOMO|RESERVE10THANNIVERSARYCHAMPAGNE|CH... -> https://www.cigarsdirect.com/products/perdomo-reserve-10th-anniversary-champagne-churchill
-  PERDOMO|PERDOMO|RESERVE10THANNIVERSARYCHAMPAGNE|CH... -> https://foxcigar.com/shop/cigars/perdomo/perdomo-10th-champagne-churchill/
-  PERDOMO|PERDOMO|RESERVE10THANNIVERSARYCHAMPAGNE|CH... -> https://www.hilandscigars.com/shop/cigars/perdomo/perdomo-champagne-churchill-7x54-box-of-25-free-shipping/
-  ... and 5 more
+STAGED FOR BATCH APPROVAL (high confidence): 2 matches
+  PADRON|PADRON|1964ANNIVERSARYTAA|TOROTAA|TOROTAA|6... -> https://www.smallbatchcigar.com/padron-1964-toro-taa-maduro
+  PADRON|PADRON|1964ANNIVERSARYTAA|BELICOSOTAA|BELIC... -> https://tobaccolocker.com/products/padron-1964-belicoso-maduro-box
 
-NEEDS INDIVIDUAL REVIEW (medium confidence): 7 matches
+NEEDS INDIVIDUAL REVIEW (medium confidence): 11 matches
   -> Review file: /home/runner/work/cigar-price-scout/cigar-price-scout/tools/ai/pending_review.csv
-  PADRON|PADRON|1964ANNIVERSARY|SI-15(SQUARETUBE)|SI...
-    Reason: Padron 1964 Anniversary Maduro Imperial 6x54 matches size and wrapper, but SI-15 square tube format not clearly specified and box quantity unclear
-  PERDOMO|PERDOMO|RESERVE10THANNIVERSARYCHAMPAGNE|CH...
-    Reason: Perdomo Reserve Champagne Churchill 7x54 matches brand, line, vitola and size, but '10th Anniversary' specification not confirmed and box quantity not specified
+  PERDOMO|PERDOMO|RESERVE10THANNIVERSARYCHAMPAGNE|CO...
+    Reason: Brand and line match perfectly (Perdomo Reserve 10th Anniversary Champagne with ECU wrapper), but cannot verify specific vitola size or box quantity from URL alone
+  PERDOMO|PERDOMO|RESERVE10THANNIVERSARYCHAMPAGNE|CO...
+    Reason: Matches Perdomo 10th Anniversary Champagne in box of 25, but vitola is Epicure rather than Corona - sizes may be similar
   PADRON|PADRON|1964ANNIVERSARYTAA|BELICOSOTAA|BELIC...
-    Reason: Brand, line, vitola and wrapper match. TAA specification not clear from URL, but belicoso vitola matches
+    Reason: Brand, line, wrapper match; standard Belicoso vs TAA Belicoso unclear from URL
+  PERDOMO|PERDOMO|RESERVE10THANNIVERSARYCHAMPAGNE|CO...
+    Reason: Brand and line match, Corona Extra vs Corona size difference, wrapper likely ECU
   ARTUROFUENTE|ARTUROFUENTE|OPUSX|PERFECXIONA|PERFEC...
-    Reason: OpusX Perfecxion match found, but it's a vintage/limited edition which may not be the standard Perfecxion A
-  ARTUROFUENTE|ARTUROFUENTE|OPUSX|DOUBLEROBUSTO|DOUB...
-    Reason: OpusX Double Robusto match found, but it's a vintage/limited edition which may not be the standard Double Robusto
-  ... and 2 more
+    Reason: Brand and line match (OpusX), vitola appears to match Perfecxion-A, but vintage series may differ from standard and uncertain if box format
+  ... and 6 more
 
-NO MATCH FOUND: 732 CIDs had no matches
-LOW CONFIDENCE (skipped): 5 matches discarded
+NO MATCH FOUND: 735 CIDs had no matches
+LOW CONFIDENCE (skipped): 6 matches discarded
 
 Next steps:
   1. Spot-check ~5% of high-confidence matches in /home/runner/work/cigar-price-scout/cigar-price-scout/tools/ai/staged_matches.csv
