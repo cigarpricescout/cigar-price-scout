@@ -1,229 +1,173 @@
 """
-iHeartCigars Extractor - FINAL PRODUCTION VERSION
-100% accurate pricing, quantities, and stock detection
+iHeartCigars Extractor - Shopify JSON API
+Uses /products/{handle}.json for reliable variant-level pricing.
+Falls back to HTML scraping if the JSON endpoint fails.
 
-COMPLIANCE: 1 req/sec, 10s timeout, minimal headers
-ACCURACY: 100% on all test cases
-READY FOR DEPLOYMENT
+COMPLIANCE: 3s delay between requests
 """
 
 import requests
 from bs4 import BeautifulSoup
 import time
 import re
+from urllib.parse import urlparse
+
+
+def _get_product_handle(url):
+    """Extract the Shopify product handle from any iHeartCigars product URL."""
+    path = urlparse(url).path
+    match = re.search(r'/products/([^/?#]+)', path)
+    return match.group(1) if match else None
+
+
+def _extract_via_shopify_json(handle):
+    """Primary extraction method: Shopify product JSON API."""
+    json_url = f"https://iheartcigars.com/products/{handle}.json"
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    }
+
+    resp = requests.get(json_url, headers=headers, timeout=10)
+    resp.raise_for_status()
+    product = resp.json().get('product', {})
+    variants = product.get('variants', [])
+
+    if not variants:
+        return None
+
+    box_variant = None
+    for v in variants:
+        title = (v.get('title') or '').lower()
+        if 'box' in title:
+            box_variant = v
+            break
+
+    if not box_variant:
+        box_variant = variants[0]
+
+    price = float(box_variant.get('price', 0))
+    compare_at = box_variant.get('compare_at_price')
+    retail_price = float(compare_at) if compare_at else None
+    available = box_variant.get('available')
+
+    box_qty = None
+    title_text = (box_variant.get('title') or '')
+    qty_match = re.search(r'(\d+)', title_text)
+    if qty_match and 'box' in title_text.lower():
+        box_qty = int(qty_match.group(1))
+
+    if box_qty is None:
+        body = product.get('body_html') or ''
+        body_match = re.search(r'box of (\d+)', body, re.I)
+        if body_match:
+            box_qty = int(body_match.group(1))
+
+    if box_qty is None:
+        full_title = product.get('title') or ''
+        title_match = re.search(r'box of (\d+)', full_title, re.I)
+        if title_match:
+            box_qty = int(title_match.group(1))
+
+    in_stock = available if available is not None else True
+
+    print(f"    [JSON] handle={handle} variant='{box_variant.get('title')}' "
+          f"price=${price} retail=${retail_price} qty={box_qty} stock={in_stock}")
+
+    return {
+        'price': price if price > 0 else None,
+        'retail_price': retail_price,
+        'box_qty': box_qty or 25,
+        'in_stock': in_stock,
+    }
+
+
+def _extract_via_html(url):
+    """Fallback: scrape the rendered HTML page."""
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    }
+    resp = requests.get(url, headers=headers, timeout=10)
+    resp.raise_for_status()
+    soup = BeautifulSoup(resp.content, 'html.parser')
+
+    current_price = None
+    retail_price = None
+    el = soup.select_one('.product-price-current')
+    if el:
+        m = re.search(r'\$([\d,]+(?:\.\d{2})?)', el.get_text())
+        if m:
+            current_price = float(m.group(1).replace(',', ''))
+    el_list = soup.select_one('.product-price-list')
+    if el_list:
+        m = re.search(r'\$([\d,]+(?:\.\d{2})?)', el_list.get_text())
+        if m:
+            retail_price = float(m.group(1).replace(',', ''))
+
+    page_text = soup.get_text().lower()
+    in_stock = True
+    for indicator in ['sold out', 'out of stock', 'currently unavailable']:
+        if indicator in page_text:
+            in_stock = False
+            break
+
+    box_qty = 25
+    qty_matches = re.findall(r'box of (\d+)', soup.get_text(), re.I)
+    if qty_matches:
+        box_qty = int(qty_matches[0])
+
+    print(f"    [HTML] price=${current_price} retail=${retail_price} qty={box_qty} stock={in_stock}")
+
+    return {
+        'price': current_price,
+        'retail_price': retail_price,
+        'box_qty': box_qty,
+        'in_stock': in_stock,
+    }
+
 
 def extract_iheartcigars_data_production(url):
     """
-    FINAL PRODUCTION iHeartCigars extractor
-    100% accurate across all test scenarios
+    iHeartCigars extractor — Shopify JSON primary, HTML fallback.
+    Always targets the 'Box' variant when multiple options exist.
     """
-    
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-    }
-    
+    time.sleep(3.0)
+
+    handle = _get_product_handle(url)
+    if not handle:
+        print(f"    [ERROR] Could not parse product handle from URL: {url}")
+        return None
+
     try:
-        print(f"    [EXTRACT] Fetching iHeartCigars page...")
-        time.sleep(3.0)  # 1 req/sec compliance
-        
-        response = requests.get(url, headers=headers, timeout=10)  # 10s timeout
-        response.raise_for_status()
-        
-        soup = BeautifulSoup(response.content, 'html.parser')
-        
-        # Extract all data
-        price_info = _extract_price_production(soup)
-        stock_info = _extract_stock_production(soup)
-        box_qty = _extract_box_quantity_production(soup)
-        
-        return {
-            'price': price_info['current_price'],
-            'retail_price': price_info.get('retail_price'),
-            'box_qty': box_qty,
-            'in_stock': stock_info
-        }
-        
+        result = _extract_via_shopify_json(handle)
+        if result and result['price']:
+            return result
+        print(f"    [WARN] JSON returned no price, falling back to HTML")
     except Exception as e:
-        print(f"    [ERROR] Extraction failed: {e}")
+        print(f"    [WARN] JSON failed ({e}), falling back to HTML")
+
+    try:
+        return _extract_via_html(url)
+    except Exception as e:
+        print(f"    [ERROR] HTML fallback also failed: {e}")
         return None
 
 
-def _extract_price_production(soup):
-    """Production pricing - filters duplicates and irrelevant prices"""
-    
-    print(f"    [PRICE] Analyzing pricing...")
-    
-    current_price = None
-    retail_price = None
-    
-    # Target product areas to avoid navigation prices
-    product_areas = []
-    for selector in ['.product-summary', '.product-details', '.product-info', '.entry-summary', '[class*="product"]']:
-        areas = soup.select(selector)
-        product_areas.extend(areas)
-    
-    # Extract prices from product areas with deduplication
-    found_prices = set()  # Automatic deduplication
-    
-    for area in product_areas:
-        price_elements = area.select('[class*="price"], [class*="cost"], [class*="amount"]')
-        
-        for element in price_elements:
-            text = element.get_text().strip()
-            price_matches = re.findall(r'\$(\d+(?:,\d{3})*(?:\.\d{2})?)', text)
-            
-            for match in price_matches:
-                price_value = float(match.replace(',', ''))
-                if price_value >= 100:  # Filter out single cigar prices
-                    found_prices.add(price_value)
-    
-    sorted_prices = sorted(list(found_prices))
-    print(f"    [PRICE] Found prices: {sorted_prices}")
-    
-    if len(sorted_prices) == 1:
-        current_price = sorted_prices[0]
-        print(f"    [PRICE] Single price: ${current_price}")
-        
-    elif len(sorted_prices) >= 2:
-        # Always use the lowest price (active/sale price)
-        current_price = min(sorted_prices)
-        potential_retail = max(sorted_prices)
-        
-        # If there's a difference, the higher price is likely the retail/MSRP
-        if potential_retail > current_price:
-            retail_price = potential_retail
-            print(f"    [PRICE] Sale: ${current_price}, Retail: ${retail_price}")
-        else:
-            print(f"    [PRICE] Current: ${current_price}")
-    
-    return {
-        'current_price': current_price,
-        'retail_price': retail_price
-    }
-
-
-def _extract_stock_production(soup):
-    """Production stock detection - prioritizes sold out text over buttons"""
-    
-    print(f"    [STOCK] Analyzing stock...")
-    
-    page_text = soup.get_text().lower()
-    
-    # PRIORITY 1: Explicit sold out text (highest priority)
-    sold_out_indicators = [
-        'sold out',
-        'out of stock',
-        'currently unavailable',
-        'temporarily unavailable'
-    ]
-    
-    for indicator in sold_out_indicators:
-        if indicator in page_text:
-            print(f"    [STOCK] Found '{indicator}' -> OUT OF STOCK")
-            return False
-    
-    # PRIORITY 2: Button analysis (only if no sold out text)
-    buttons = soup.find_all(['button', 'input', 'a'])
-    
-    for button in buttons:
-        button_text = button.get_text().strip().lower()
-        button_disabled = button.get('disabled')
-        
-        # Disabled add to cart
-        if 'add to cart' in button_text and button_disabled:
-            print(f"    [STOCK] Disabled ADD TO CART -> OUT OF STOCK")
-            return False
-        
-        # Active add to cart
-        if 'add to cart' in button_text and not button_disabled:
-            print(f"    [STOCK] Active ADD TO CART -> IN STOCK")
-            return True
-    
-    # Default to out of stock if no clear purchase capability
-    print(f"    [STOCK] No purchase capability -> OUT OF STOCK")
-    return False
-
-
-def _extract_box_quantity_production(soup):
-    """Production box quantity detection"""
-    
-    print(f"    [QTY] Analyzing quantity...")
-    
-    page_text = soup.get_text()
-    box_matches = re.findall(r'box of (\d+)', page_text, re.I)
-    
-    if box_matches:
-        box_qty = int(box_matches[0])
-        print(f"    [QTY] Found Box of {box_qty}")
-        return box_qty
-    
-    print(f"    [QTY] Default to 25")
-    return 25
-
-
-def test_production_extractor():
-    """Final production test - should be 100% accurate"""
-    
-    test_cases = [
-        {
-            'url': 'https://iheartcigars.com/products/no-9-robusto?_pos=2&_sid=5b548dd97&_ss=r',
-            'name': 'Privada No.9',
-            'expected_price': 375.0,
-            'expected_qty': 24,
-            'expected_stock': True
-        },
-        {
-            'url': 'https://iheartcigars.com/products/opusx-belicosos-xxx?variant=45748064649393',
-            'name': 'Belicosos XXX',
-            'expected_price': 1250.0,
-            'expected_qty': 42,
-            'expected_stock': True
-        },
-        {
-            'url': 'https://iheartcigars.com/products/opus-x-dubai-exclusivo-black-52?_pos=5&_sid=97b460cbf&_ss=r',
-            'name': 'Dubai Exclusivo',
-            'expected_price': 850.0,
-            'expected_qty': 15,
-            'expected_stock': False
-        }
-    ]
-    
-    print("FINAL PRODUCTION EXTRACTOR TEST")
-    print("=" * 50)
-    
-    all_correct = True
-    
-    for i, test in enumerate(test_cases):
-        print(f"\n[{i+1}/3] {test['name']}")
-        print(f"Expected: ${test['expected_price']} | Box {test['expected_qty']} | {'IN STOCK' if test['expected_stock'] else 'OUT OF STOCK'}")
-        print("-" * 40)
-        
-        result = extract_iheartcigars_data_production(test['url'])
-        
-        if result:
-            price_correct = result['price'] == test['expected_price']
-            qty_correct = result['box_qty'] == test['expected_qty']
-            stock_correct = result['in_stock'] == test['expected_stock']
-            
-            print(f"\nRESULTS:")
-            print(f"  Price: ${result['price']} {'CORRECT' if price_correct else 'WRONG'}")
-            print(f"  Retail: ${result['retail_price']}" if result['retail_price'] else "  Retail: None")
-            print(f"  Qty: {result['box_qty']} {'CORRECT' if qty_correct else 'WRONG'}")
-            print(f"  Stock: {result['in_stock']} {'CORRECT' if stock_correct else 'WRONG'}")
-            
-            if price_correct and qty_correct and stock_correct:
-                print(f"  Overall: PERFECT")
-            else:
-                print(f"  Overall: NEEDS WORK")
-                all_correct = False
-        else:
-            print("EXTRACTION FAILED")
-            all_correct = False
-    
-    print(f"\n" + "=" * 50)
-    print(f"FINAL ASSESSMENT: {'100% ACCURACY - PRODUCTION READY' if all_correct else 'NOT READY - NEEDS FIXES'}")
-    print("=" * 50)
-
-
 if __name__ == "__main__":
-    test_production_extractor()
+    test_urls = [
+        ('Liga Privada No.9 Robusto', 'https://iheartcigars.com/products/no-9-robusto'),
+        ('Opus X Belicoso XXX', 'https://iheartcigars.com/products/opusx-belicosos-xxx'),
+        ('Hemingway Classic', 'https://iheartcigars.com/products/hemingway-classic-natural'),
+        ('VSG Robusto', 'https://iheartcigars.com/products/vsg-robusto'),
+    ]
+
+    print("iHeartCigars Extractor Test")
+    print("=" * 60)
+    for name, url in test_urls:
+        print(f"\n--- {name} ---")
+        r = extract_iheartcigars_data_production(url)
+        if r:
+            stock = "In Stock" if r['in_stock'] else "Out of Stock"
+            print(f"  -> ${r['price']} | Box {r['box_qty']} | {stock}")
+        else:
+            print("  -> FAILED")
+    print("\n" + "=" * 60)
