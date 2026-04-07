@@ -1,32 +1,32 @@
-=== URL Discovery Report - April 06, 2026 03:01 PM ===
+=== URL Discovery Report - April 07, 2026 03:22 PM ===
 
 Retailers scanned: 26
 CIDs searched: 29
-Time elapsed: 303s
+Time elapsed: 278s
 
-STAGED FOR BATCH APPROVAL (high confidence): 10 matches
-  PERDOMO|PERDOMO|RESERVE10THANNIVERSARYCHAMPAGNE|RO... -> https://www.bnbtobacco.com/products/perdomo-reserve-10th-anniversary-champagne
+STAGED FOR BATCH APPROVAL (high confidence): 6 matches
   PERDOMO|PERDOMO|RESERVE10THANNIVERSARYCHAMPAGNE|RO... -> https://www.cigarking.com/copy-of-perdomo-reserve-10th-anniversary-champagne-robusto-5x54-box-25/
   PERDOMO|PERDOMO|RESERVE10THANNIVERSARYCHAMPAGNE|RO... -> https://www.cigarsdirect.com/products/perdomo-reserve-10th-anniversary-champagne-robusto
   PERDOMO|PERDOMO|RESERVE10THANNIVERSARYCHAMPAGNE|RO... -> https://foxcigar.com/shop/cigars/perdomo/perdomo-10th-champagne-robusto/
-  PERDOMO|PERDOMO|RESERVE10THANNIVERSARYCHAMPAGNE|RO... -> https://www.hilandscigars.com/shop/cigars/perdomo/perdomo-reserve-10th-anniversary-champange-sun-grown-robusto/
-  ... and 5 more
-
-NEEDS INDIVIDUAL REVIEW (medium confidence): 6 matches
-  -> Review file: /home/runner/work/cigar-price-scout/cigar-price-scout/tools/ai/pending_review.csv
-  ARTUROFUENTE|ARTUROFUENTE|OPUSX|PERFECXIONA|PERFEC...
-    Reason: Matches OpusX Perfecxion but appears to be a special vintage edition rather than standard box
-  ARTUROFUENTE|ARTUROFUENTE|OPUSX|DOUBLEROBUSTO|DOUB...
-    Reason: Matches OpusX Double Robusto but appears to be a special vintage edition rather than standard box
-  ARTUROFUENTE|ARTUROFUENTE|OPUSXANGEL'SSHARE|ROBUST...
-    Reason: Brand, line (OpusX Angel Share) match, but exact vitola specs and box quantity unclear from URL
-  ARTUROFUENTE|ARTUROFUENTE|OPUSXLOSTCITY|TORO|TORO|...
-    Reason: Brand and line match, vitola matches, but size differs (6.75x48 vs 6x54) and appears to be single not box
-  ARTUROFUENTE|ARTUROFUENTE|OPUSXLOSTCITY|ROBUSTO|RO...
-    Reason: Brand, line, and vitola match, size very close (5x50 vs 50x525), but appears to be single not box
+  PERDOMO|PERDOMO|RESERVE10THANNIVERSARYCHAMPAGNE|RO... -> https://nickscigarworld.com/shop/premium-cigars/perdomo-10th-anniversary-champagne/perdomo-10-anniversary-champagne-robusto/
+  PERDOMO|PERDOMO|RESERVE10THANNIVERSARYCHAMPAGNE|RO... -> https://pyramidcigars.com/products/perdomo-reserve-10th-anniversary-champagne-robusto-5-0-x-54
   ... and 1 more
 
-NO MATCH FOUND: 735 CIDs had no matches
+NEEDS INDIVIDUAL REVIEW (medium confidence): 8 matches
+  -> Review file: /home/runner/work/cigar-price-scout/cigar-price-scout/tools/ai/pending_review.csv
+  PERDOMO|PERDOMO|RESERVE10THANNIVERSARYCHAMPAGNE|RO...
+    Reason: Brand, line and vitola match, but Champagne wrapper vs Sun Grown is unclear - both could be Ecuadorian
+  PADRON|PADRON|1964ANNIVERSARYTAA|BELICOSOTAA|BELIC...
+    Reason: Brand, line, and wrapper match. Belicoso vitola matches but uncertain if this is the TAA version
+  ARTUROFUENTE|ARTUROFUENTE|OPUSX|DOUBLEROBUSTO|DOUB...
+    Reason: Matches brand, line, and vitola (Double Robusto), but this appears to be a limited vintage release rather than standard production
+  ARTUROFUENTE|ARTUROFUENTE|OPUSXANGEL'SSHARE|ROBUST...
+    Reason: OpusX Angel's Share found but unclear if box of 24 and exact vitola specifications
+  PERDOMO|PERDOMO|RESERVE10THANNIVERSARYCHAMPAGNE|RO...
+    Reason: Perdomo Reserve 10th Anniversary Champagne Robusto found but unclear if box of 25
+  ... and 3 more
+
+NO MATCH FOUND: 737 CIDs had no matches
 LOW CONFIDENCE (skipped): 3 matches discarded
 
 Next steps:
