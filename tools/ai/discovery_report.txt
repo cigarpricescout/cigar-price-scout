@@ -1,33 +1,32 @@
-=== URL Discovery Report - April 09, 2026 03:33 PM ===
+=== URL Discovery Report - April 10, 2026 03:01 PM ===
 
 Retailers scanned: 26
 CIDs searched: 29
-Time elapsed: 333s
+Time elapsed: 317s
 
 STAGED FOR BATCH APPROVAL (high confidence): 9 matches
   PERDOMO|PERDOMO|RESERVE10THANNIVERSARYCHAMPAGNE|RO... -> https://www.bnbtobacco.com/products/perdomo-reserve-10th-anniversary-champagne
+  PADRON|PADRON|1964ANNIVERSARYTAA|TOROTAA|TOROTAA|6... -> https://www.cigarboxpa.com/padron-serie-1964-maduro-taa-toro-box.html
   PERDOMO|PERDOMO|RESERVE10THANNIVERSARYCHAMPAGNE|RO... -> https://www.cigarking.com/copy-of-perdomo-reserve-10th-anniversary-champagne-robusto-5x54-box-25/
   PERDOMO|PERDOMO|RESERVE10THANNIVERSARYCHAMPAGNE|RO... -> https://www.cigarsdirect.com/products/perdomo-reserve-10th-anniversary-champagne-robusto
   PERDOMO|PERDOMO|RESERVE10THANNIVERSARYCHAMPAGNE|RO... -> https://foxcigar.com/shop/cigars/perdomo/perdomo-10th-champagne-robusto/
-  PERDOMO|PERDOMO|RESERVE10THANNIVERSARYCHAMPAGNE|RO... -> https://nickscigarworld.com/shop/premium-cigars/perdomo-10th-anniversary-champagne/perdomo-10-anniversary-champagne-robusto/
   ... and 4 more
 
-NEEDS INDIVIDUAL REVIEW (medium confidence): 9 matches
+NEEDS INDIVIDUAL REVIEW (medium confidence): 5 matches
   -> Review file: /home/runner/work/cigar-price-scout/cigar-price-scout/tools/ai/pending_review.csv
-  PERDOMO|PERDOMO|RESERVE10THANNIVERSARYCHAMPAGNE|RO...
-    Reason: Brand, line, vitola and size match, but wrapper differs (Sun Grown vs Champagne/ECU) and box quantity not specified
   PADRON|PADRON|1964ANNIVERSARYTAA|BELICOSOTAA|BELIC...
-    Reason: Brand, line, vitola, and wrapper match, but cannot confirm if this is specifically the TAA version or box quantity
+    Reason: Brand, line, vitola and wrapper match, but unsure if this is the TAA exclusive version
   ARTUROFUENTE|ARTUROFUENTE|OPUSX|PERFECXIONA|PERFEC...
-    Reason: OpusX Perfecxion match, but this is a vintage/limited edition version rather than standard box
+    Reason: OpusX Perfecxion match but this is a vintage/limited release version, not standard production
   ARTUROFUENTE|ARTUROFUENTE|OPUSX|DOUBLEROBUSTO|DOUB...
-    Reason: OpusX Double Robusto match, but this is a vintage/limited edition version rather than standard box
+    Reason: OpusX Double Robusto match but this is a vintage/limited release version, not standard production
   ARTUROFUENTE|ARTUROFUENTE|OPUSXANGEL'SSHARE|ROBUST...
-    Reason: Brand, line (OpusX Angel Share) match, but unclear if it's a box of 24 or the exact vitola specs
-  ... and 4 more
+    Reason: Brand, line, and vitola match but URL doesn't clearly specify box quantity or exact size
+  PERDOMO|PERDOMO|RESERVE10THANNIVERSARYCHAMPAGNE|RO...
+    Reason: Brand, line, and vitola match, but unable to confirm if this is a box of 25 or singles/smaller pack from URL alone
 
 NO MATCH FOUND: 723 CIDs had no matches
-LOW CONFIDENCE (skipped): 4 matches discarded
+LOW CONFIDENCE (skipped): 3 matches discarded
 
 Next steps:
   1. Spot-check ~5% of high-confidence matches in /home/runner/work/cigar-price-scout/cigar-price-scout/tools/ai/staged_matches.csv
