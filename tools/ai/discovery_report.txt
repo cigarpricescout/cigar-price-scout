@@ -1,8 +1,8 @@
-=== URL Discovery Report - April 11, 2026 02:47 PM ===
+=== URL Discovery Report - April 12, 2026 02:53 PM ===
 
 Retailers scanned: 26
 CIDs searched: 29
-Time elapsed: 294s
+Time elapsed: 295s
 
 STAGED FOR BATCH APPROVAL (high confidence): 9 matches
   PERDOMO|PERDOMO|RESERVE10THANNIVERSARYCHAMPAGNE|RO... -> https://www.bnbtobacco.com/products/perdomo-reserve-10th-anniversary-champagne
@@ -12,22 +12,22 @@ STAGED FOR BATCH APPROVAL (high confidence): 9 matches
   PERDOMO|PERDOMO|RESERVE10THANNIVERSARYCHAMPAGNE|RO... -> https://foxcigar.com/shop/cigars/perdomo/perdomo-10th-champagne-robusto/
   ... and 4 more
 
-NEEDS INDIVIDUAL REVIEW (medium confidence): 6 matches
+NEEDS INDIVIDUAL REVIEW (medium confidence): 8 matches
   -> Review file: /home/runner/work/cigar-price-scout/cigar-price-scout/tools/ai/pending_review.csv
-  PADRON|PADRON|1964ANNIVERSARYTAA|BELICOSOTAA|BELIC...
-    Reason: Brand, line, and wrapper match, vitola is Belicoso but TAA version may differ from regular
-  ARTUROFUENTE|ARTUROFUENTE|OPUSX|DOUBLEROBUSTO|DOUB...
-    Reason: OpusX Double Robusto matches brand, line and vitola, but this appears to be a limited vintage release rather than standard box
-  ARTUROFUENTE|ARTUROFUENTE|OPUSXANGEL'SSHARE|ROBUST...
-    Reason: Brand, line (OpusX Angel's Share), and vitola match, but URL shows 'deal' rather than specific box count
   PERDOMO|PERDOMO|RESERVE10THANNIVERSARYCHAMPAGNE|RO...
-    Reason: Brand, line, and vitola match but cannot confirm if this is a 25-count box or wrapper type from URL alone
-  ARTUROFUENTE|ARTUROFUENTE|OPUSXLOSTCITY|TORO|TORO|...
-    Reason: OpusX Lost City Toro matches brand and line, but size is 6.75x48 instead of 6x54
-  ... and 1 more
+    Reason: Brand, line (Reserve 10th Anniversary), vitola (Robusto), and size (5x54) match, but 'Champagne' wrapper may refer to Sun Grown, and box quantity not clearly specified
+  ARTUROFUENTE|ARTUROFUENTE|OPUSX|PERFECXIONA|PERFEC...
+    Reason: OpusX PerfecXion matches, but this is a vintage/limited release version which may have different packaging or specifications
+  ARTUROFUENTE|ARTUROFUENTE|OPUSX|DOUBLEROBUSTO|DOUB...
+    Reason: OpusX Double Robusto matches, but this is a vintage/limited release version which may have different packaging or specifications
+  ARTUROFUENTE|ARTUROFUENTE|OPUSXANGEL'SSHARE|ROBUST...
+    Reason: Matches Opus X Angel's Share but appears to be a deal/sampler rather than box of 24
+  PERDOMO|PERDOMO|RESERVE10THANNIVERSARYCHAMPAGNE|RO...
+    Reason: Brand, line, and vitola match, but URL doesn't clearly indicate box quantity or wrapper type
+  ... and 3 more
 
-NO MATCH FOUND: 736 CIDs had no matches
-LOW CONFIDENCE (skipped): 3 matches discarded
+NO MATCH FOUND: 733 CIDs had no matches
+LOW CONFIDENCE (skipped): 4 matches discarded
 
 Next steps:
   1. Spot-check ~5% of high-confidence matches in /home/runner/work/cigar-price-scout/cigar-price-scout/tools/ai/staged_matches.csv
