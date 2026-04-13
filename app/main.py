@@ -963,6 +963,8 @@ def build_options_tree():
     
     Only includes brand/line combinations carried by at least MIN_RETAILERS_FOR_COMPARISON
     distinct retailers so every dropdown selection leads to a meaningful comparison.
+    Variation-level filtering ensures individual wrapper/vitola/box_qty combos also
+    meet the retailer threshold before appearing in dropdowns.
     """
     products = load_all_products()
     wrapper_aliases = load_master_wrapper_aliases()
@@ -971,14 +973,19 @@ def build_options_tree():
     
     # Pre-compute retailer counts per brand/line
     line_retailers: dict[tuple, set] = {}
+    # Pre-compute retailer counts per specific variation
+    variation_retailers: dict[tuple, set] = {}
     for p in products:
         if p.brand:
             key = (p.brand, p.line)
             line_retailers.setdefault(key, set()).add(p.retailer_key)
+            vkey = (p.brand, p.line, p.wrapper or "", p.vitola or "", p.box_qty)
+            variation_retailers.setdefault(vkey, set()).add(p.retailer_key)
     
     tree = {}
     aliases_used = 0
     skipped_lines = 0
+    skipped_variations = 0
     
     for product in products:
         if not product.brand:
@@ -986,6 +993,11 @@ def build_options_tree():
         
         if len(line_retailers.get((product.brand, product.line), set())) < MIN_RETAILERS_FOR_COMPARISON:
             skipped_lines += 1
+            continue
+        
+        vkey = (product.brand, product.line, product.wrapper or "", product.vitola or "", product.box_qty)
+        if len(variation_retailers.get(vkey, set())) < MIN_RETAILERS_FOR_COMPARISON:
+            skipped_variations += 1
             continue
         
         if product.brand not in tree:
@@ -1016,7 +1028,18 @@ def build_options_tree():
         tree[product.brand][product.line][wrapper_key]['sizes'].add(product.size)
         tree[product.brand][product.line][wrapper_key]['box_qtys'].add(product.box_qty)
     
-    print(f"Aliases used during tree building: {aliases_used}, products skipped (< {MIN_RETAILERS_FOR_COMPARISON} retailers): {skipped_lines}")
+    # Prune empty branches: remove wrappers with no vitolas, lines with no wrappers
+    for brand_name in list(tree.keys()):
+        for line_name in list(tree[brand_name].keys()):
+            for wrapper_name in list(tree[brand_name][line_name].keys()):
+                if not tree[brand_name][line_name][wrapper_name]['vitolas']:
+                    del tree[brand_name][line_name][wrapper_name]
+            if not tree[brand_name][line_name]:
+                del tree[brand_name][line_name]
+        if not tree[brand_name]:
+            del tree[brand_name]
+    
+    print(f"Aliases used during tree building: {aliases_used}, products skipped (< {MIN_RETAILERS_FOR_COMPARISON} retailers): {skipped_lines}, variations skipped: {skipped_variations}")
     
     brands = []
     wrappers_with_aliases = 0
@@ -1781,10 +1804,16 @@ async def cigar_landing_page(brand: str, line: str):
             and normalize_line_slug(p.line) == line.lower()
         ]
         
-        # Require at least 2 unique retailers with prices for a meaningful comparison
-        unique_retailers_with_prices = {p.retailer_key for p in matching_products if p.price_cents}
+        # Check if ANY variation has enough retailers for a meaningful comparison
+        from collections import defaultdict as _defaultdict
+        _var_retailers = _defaultdict(set)
+        for p in matching_products:
+            _var_retailers[(p.wrapper, p.vitola, p.box_qty)].add(p.retailer_key)
+        has_valid_variation = any(
+            len(r) >= MIN_RETAILERS_FOR_COMPARISON for r in _var_retailers.values()
+        )
         
-        if not matching_products or len(unique_retailers_with_prices) < 2:
+        if not matching_products or not has_valid_variation:
             return HTMLResponse(
                 content=f"""<!DOCTYPE html>
 <html lang="en">
@@ -1801,7 +1830,7 @@ async def cigar_landing_page(brand: str, line: str):
         <img src="/static/logo.png" alt="Cigar Price Scout" class="w-24 h-20 mx-auto mb-6">
         <h1 class="text-3xl font-bold text-gray-800 mb-4">Cigar Not Found</h1>
         <p class="text-gray-600 mb-6">We don't have enough pricing data for <strong>{brand_display} {line_display}</strong> yet.</p>
-        <p class="text-gray-500 mb-8">We need at least 2 retailers to show a meaningful comparison. Want us to add more? Let us know!</p>
+        <p class="text-gray-500 mb-8">We need at least {MIN_RETAILERS_FOR_COMPARISON} retailers to show a meaningful comparison. Want us to add more? Let us know!</p>
         <div class="space-x-4">
             <a href="/" class="inline-block bg-amber-700 hover:bg-amber-800 text-white font-semibold py-3 px-6 rounded-lg">Browse All Cigars</a>
             <a href="/request-box-pricing.html" class="inline-block border border-amber-700 text-amber-700 hover:bg-amber-50 font-semibold py-3 px-6 rounded-lg">Request This Cigar</a>
@@ -2235,33 +2264,128 @@ h1 {{ color:{color}; margin:0 0 4px; font-size:24px; }}
 
 
 @app.get("/api/admin/pending-matches")
-async def get_pending_matches(request: Request):
-    """Fetch all staged (unreviewed) matches for the daily review email."""
-    admin_key = request.headers.get("X-Admin-Key", "")
+async def get_pending_matches(
+    request: Request,
+    confidence: Optional[str] = Query(None),
+    retailer: Optional[str] = Query(None),
+    brand: Optional[str] = Query(None),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+):
+    """Fetch staged (unreviewed) matches with optional filtering and pagination."""
+    admin_key = request.headers.get("X-Admin-Key", "") or request.query_params.get("key", "")
     expected = os.getenv("ADMIN_SECRET_KEY", "")
     if not expected or admin_key != expected:
         return JSONResponse({"error": "unauthorized"}, status_code=401)
 
     conn = get_analytics_conn()
     cur = conn.cursor()
-    cur.execute("""
+
+    where = ["status='staged'"]
+    params = []
+    if confidence:
+        where.append("confidence=%s")
+        params.append(confidence)
+    if retailer:
+        where.append("retailer_key=%s")
+        params.append(retailer)
+    if brand:
+        where.append("LOWER(brand)=LOWER(%s)")
+        params.append(brand)
+
+    where_sql = " AND ".join(where)
+
+    cur.execute(f"SELECT COUNT(1) FROM url_staged_matches WHERE {where_sql}", params)
+    total = cur.fetchone()[0]
+
+    cur.execute(
+        f"SELECT COUNT(1), confidence FROM url_staged_matches WHERE status='staged' GROUP BY confidence"
+    )
+    confidence_counts = {r[1]: r[0] for r in cur.fetchall()}
+
+    cur.execute(
+        f"SELECT DISTINCT retailer_key FROM url_staged_matches WHERE status='staged' ORDER BY retailer_key"
+    )
+    available_retailers = [r[0] for r in cur.fetchall()]
+
+    cur.execute(
+        f"SELECT DISTINCT brand FROM url_staged_matches WHERE status='staged' AND brand IS NOT NULL ORDER BY brand"
+    )
+    available_brands = [r[0] for r in cur.fetchall()]
+
+    cur.execute(f"""
         SELECT match_token, cid, retailer_key, url, confidence, reason,
                brand, line, vitola, wrapper, size, box_qty, price, in_stock,
                created_at
-        FROM url_staged_matches WHERE status='staged'
-        ORDER BY created_at DESC
-    """)
+        FROM url_staged_matches WHERE {where_sql}
+        ORDER BY
+            CASE confidence WHEN 'HIGH' THEN 0 WHEN 'MEDIUM' THEN 1 ELSE 2 END,
+            brand, line, vitola, retailer_key
+        LIMIT %s OFFSET %s
+    """, params + [limit, offset])
     rows = cur.fetchall()
     conn.close()
 
-    return {"matches": [
-        {"token": r[0], "cid": r[1], "retailer_key": r[2], "url": r[3],
-         "confidence": r[4], "reason": r[5], "brand": r[6], "line": r[7],
-         "vitola": r[8], "wrapper": r[9], "size": r[10], "box_qty": r[11],
-         "price": float(r[12]) if r[12] else None,
-         "in_stock": r[13], "created_at": str(r[14]) if r[14] else None}
-        for r in rows
-    ]}
+    return {
+        "total": total,
+        "offset": offset,
+        "limit": limit,
+        "confidence_counts": confidence_counts,
+        "available_retailers": available_retailers,
+        "available_brands": available_brands,
+        "matches": [
+            {"token": r[0], "cid": r[1], "retailer_key": r[2], "url": r[3],
+             "confidence": r[4], "reason": r[5], "brand": r[6], "line": r[7],
+             "vitola": r[8], "wrapper": r[9], "size": r[10], "box_qty": r[11],
+             "price": float(r[12]) if r[12] else None,
+             "in_stock": r[13], "created_at": str(r[14]) if r[14] else None}
+            for r in rows
+        ],
+    }
+
+
+@app.post("/api/admin/bulk-review")
+async def bulk_review_matches(request: Request):
+    """Bulk approve or reject matches by token list."""
+    admin_key = request.headers.get("X-Admin-Key", "")
+    expected = os.getenv("ADMIN_SECRET_KEY", "")
+    if not expected or admin_key != expected:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+
+    data = await request.json()
+    action = data.get("action")
+    tokens = data.get("tokens", [])
+
+    if action not in ("approve", "reject") or not tokens:
+        return JSONResponse({"error": "action must be approve/reject and tokens required"}, status_code=400)
+
+    new_status = "approved" if action == "approve" else "rejected"
+    conn = get_analytics_conn()
+    cur = conn.cursor()
+    updated = 0
+    for token in tokens:
+        cur.execute(
+            "UPDATE url_staged_matches SET status=%s, reviewed_at=NOW() WHERE match_token=%s AND status='staged'",
+            (new_status, token),
+        )
+        updated += cur.rowcount
+    conn.commit()
+    conn.close()
+
+    return {"action": new_status, "updated": updated}
+
+
+@app.get("/admin/review", response_class=HTMLResponse)
+async def admin_review_page(request: Request, key: str = Query("")):
+    """Mobile-friendly match review dashboard."""
+    expected = os.getenv("ADMIN_SECRET_KEY", "")
+    if not expected or key != expected:
+        return HTMLResponse(
+            '<div style="font-family:sans-serif;text-align:center;padding:60px">'
+            '<h2>Unauthorized</h2><p>Append ?key=YOUR_SECRET to the URL.</p></div>',
+            status_code=401,
+        )
+    return FileResponse(f"{STATIC_PATH}/admin-review.html", media_type="text/html")
 
 
 @app.get("/api/admin/approved-matches")
