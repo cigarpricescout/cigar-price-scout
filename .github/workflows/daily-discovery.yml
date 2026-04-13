@@ -1,11 +1,12 @@
 name: Daily Discovery Digest
 
 on:
-  schedule:
-    # Runs at 9:00 AM EST (14:00 UTC) every day, after the 6 AM pricing update
-    - cron: '0 14 * * *'
+  # Schedule disabled — discovery paused to save AI credits (re-discoveries exhausted CID pool)
+  # To re-enable, uncomment the schedule block below:
+  # schedule:
+  #   - cron: '0 14 * * *'
 
-  # Allow manual trigger with configurable CID count
+  # Manual trigger only while paused
   workflow_dispatch:
     inputs:
       top_cids:
