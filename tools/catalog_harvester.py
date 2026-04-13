@@ -101,8 +101,54 @@ def load_master_cids() -> list[dict]:
                 parsed["vitola_display"] = row.get("Vitola", "").strip()
                 parsed["wrapper_display"] = row.get("Wrapper", "").strip()
                 parsed["box_qty_master"] = row.get("Box Quantity", "").strip()
+                parsed["_raw_row"] = dict(row)
                 cids.append(parsed)
     return cids
+
+
+def build_cid_variant(source_cid: dict, new_box_qty: int) -> dict:
+    """Create a new CID dict with a different box quantity, cloned from an existing CID."""
+    old_cid_str = source_cid["cid"]
+    parts = old_cid_str.split("|")
+    parts[7] = f"BOX{new_box_qty}"
+    new_cid_str = "|".join(parts)
+
+    new_parsed = dict(source_cid)
+    new_parsed["cid"] = new_cid_str
+    new_parsed["box_qty"] = new_box_qty
+    new_parsed["box_qty_master"] = str(new_box_qty)
+
+    if "_raw_row" in source_cid:
+        new_row = dict(source_cid["_raw_row"])
+        new_row["cigar_id"] = new_cid_str
+        new_row["Box Quantity"] = str(new_box_qty)
+        new_parsed["_raw_row"] = new_row
+
+    return new_parsed
+
+
+def write_new_cids_to_master(new_cids: list[dict]):
+    """Append new CID rows to master_cigars.csv."""
+    if not new_cids:
+        return
+
+    existing = set()
+    with open(MASTER_CSV, "r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        fieldnames = reader.fieldnames
+        for row in reader:
+            existing.add(row.get("cigar_id", "").strip())
+
+    to_write = [c for c in new_cids if c["cid"] not in existing]
+    if not to_write:
+        return
+
+    with open(MASTER_CSV, "a", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        for c in to_write:
+            writer.writerow(c.get("_raw_row", {}))
+
+    print(f"  Added {len(to_write)} new CID variants to master_cigars.csv")
 
 
 def load_monitored_cids() -> dict[str, set]:
@@ -356,8 +402,15 @@ def match_catalog_to_cids(
     unmonitored_cids: list[dict],
     retailer_key: str,
     monitored_for_retailer: set,
+    all_cid_strings: set,
+    generated_cids: list[dict],
 ) -> list[dict]:
-    """Match harvested products against unmonitored CIDs for a retailer."""
+    """Match harvested products against unmonitored CIDs for a retailer.
+
+    When brand/line/vitola match strongly but box qty differs, generates a new
+    CID variant with the retailer's actual box quantity instead of forcing a
+    mismatch.
+    """
     matches = []
     already_matched_cids = set()
 
@@ -374,8 +427,10 @@ def match_catalog_to_cids(
         if price_float < 30:
             continue
 
+        variant_box_qty = box_variant.get("box_qty")
         best_match = None
         best_score = 0
+        best_cid_obj = None
 
         for cid in unmonitored_cids:
             if cid["cid"] in monitored_for_retailer:
@@ -386,6 +441,7 @@ def match_catalog_to_cids(
             result = score_match(product, box_variant, cid)
             if result["score"] > best_score and result["confidence"] != "NONE":
                 best_score = result["score"]
+                best_cid_obj = cid
                 best_match = {
                     "cid": cid["cid"],
                     "brand": cid["brand_display"],
@@ -399,16 +455,40 @@ def match_catalog_to_cids(
                     "product_vendor": product.get("vendor", ""),
                     "variant_title": box_variant.get("title", ""),
                     "variant_price": price,
-                    "variant_box_qty": box_variant.get("box_qty"),
+                    "variant_box_qty": variant_box_qty,
                     "available": box_variant.get("available"),
                     "score": result["score"],
                     "confidence": result["confidence"],
                     "reason": result["reason"],
                 }
 
-        if best_match and best_match["confidence"] in ("HIGH", "MEDIUM"):
-            matches.append(best_match)
-            already_matched_cids.add(best_match["cid"])
+        if not best_match or best_match["confidence"] not in ("HIGH", "MEDIUM"):
+            continue
+
+        cid_bq = best_cid_obj.get("box_qty")
+        if variant_box_qty and cid_bq and variant_box_qty != cid_bq:
+            # Strong match on everything except box qty — check/create a variant CID
+            new_cid_str = best_cid_obj["cid"].rsplit("|", 1)[0] + f"|BOX{variant_box_qty}"
+
+            if new_cid_str in all_cid_strings:
+                # CID with this box qty already exists, use it if not already matched
+                if new_cid_str not in already_matched_cids and new_cid_str not in monitored_for_retailer:
+                    best_match["cid"] = new_cid_str
+                    best_match["cid_box_qty"] = variant_box_qty
+                    best_match["reason"] += ", box_qty=existing_variant"
+                else:
+                    continue
+            else:
+                # Generate a brand-new CID variant
+                new_cid = build_cid_variant(best_cid_obj, variant_box_qty)
+                generated_cids.append(new_cid)
+                all_cid_strings.add(new_cid_str)
+                best_match["cid"] = new_cid_str
+                best_match["cid_box_qty"] = variant_box_qty
+                best_match["reason"] += ", box_qty=new_variant"
+
+        matches.append(best_match)
+        already_matched_cids.add(best_match["cid"])
 
     return matches
 
@@ -573,12 +653,14 @@ def main():
     for cid_set in monitored.values():
         all_monitored_union |= cid_set
     unmonitored = [c for c in all_cids if c["cid"] not in all_monitored_union]
+    all_cid_strings = {c["cid"] for c in all_cids}
     print(f"  Master CIDs: {len(all_cids)}")
     print(f"  Monitored (union): {len(all_monitored_union)}")
     print(f"  Unmonitored: {len(unmonitored)}")
 
     # Phase 2+3: Harvest and match per retailer
     all_matches = []
+    generated_cids = []
 
     for key, domain in sorted(shopify_retailers.items()):
         print(f"\n[Harvest] {key} ({domain})...")
@@ -596,11 +678,23 @@ def main():
         ]
 
         print(f"  Matching against {len(unmonitored)} unmonitored CIDs...")
-        matches = match_catalog_to_cids(cigar_products, unmonitored, key, retailer_monitored)
+        matches = match_catalog_to_cids(
+            cigar_products, unmonitored, key, retailer_monitored,
+            all_cid_strings, generated_cids,
+        )
         high = sum(1 for m in matches if m["confidence"] == "HIGH")
         med = sum(1 for m in matches if m["confidence"] == "MEDIUM")
+        new_variants = sum(1 for m in matches if "new_variant" in m.get("reason", ""))
+        existing_variants = sum(1 for m in matches if "existing_variant" in m.get("reason", ""))
         print(f"  Matches: {len(matches)} ({high} HIGH, {med} MEDIUM)")
+        if new_variants or existing_variants:
+            print(f"  Box qty variants: {new_variants} new CIDs created, {existing_variants} existing reused")
         all_matches.extend(matches)
+
+    # Write new CID variants to master_cigars.csv
+    if generated_cids:
+        print(f"\n[CID Expansion] {len(generated_cids)} new box-qty variants generated")
+        write_new_cids_to_master(generated_cids)
 
     # Output
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -614,6 +708,7 @@ def main():
     print("\n" + "=" * 70)
     print("RESULTS")
     print(f"  Total matches: {len(all_matches)} ({high_total} HIGH, {med_total} MEDIUM)")
+    print(f"  New CID variants added to master: {len(generated_cids)}")
     print(f"  Output: {output_path}")
     print("=" * 70)
 

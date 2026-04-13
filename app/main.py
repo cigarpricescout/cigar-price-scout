@@ -2413,6 +2413,23 @@ async def get_approved_matches(request: Request):
     ]}
 
 
+@app.post("/api/admin/purge-staged")
+async def purge_staged_matches(request: Request):
+    """Delete all staged (unreviewed) matches to allow a clean re-upload."""
+    admin_key = request.headers.get("X-Admin-Key", "")
+    expected = os.getenv("ADMIN_SECRET_KEY", "")
+    if not expected or admin_key != expected:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+
+    conn = get_analytics_conn()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM url_staged_matches WHERE status='staged'")
+    deleted = cur.rowcount
+    conn.commit()
+    conn.close()
+    return {"deleted": deleted}
+
+
 @app.post("/api/admin/mark-published")
 async def mark_matches_published(request: Request):
     """Mark matches as published after local automation processes them."""
