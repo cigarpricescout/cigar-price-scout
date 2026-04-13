@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Review Matches - Cigar Price Scout</title>
+<link rel="icon" type="image/png" href="/static/logo.png">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f0f0;color:#1a1a1a}
+  .header{background:#1a1a1a;color:#fff;padding:12px 16px;position:sticky;top:0;z-index:100}
+  .header h1{font-size:16px;font-weight:600}
+  .header .stats{font-size:12px;color:#aaa;margin-top:2px}
+  .filters{background:#fff;border-bottom:1px solid #ddd;padding:10px 16px;display:flex;gap:8px;flex-wrap:wrap;position:sticky;top:44px;z-index:99}
+  .filters select,.filters button{font-size:13px;padding:6px 10px;border:1px solid #ccc;border-radius:6px;background:#fff;color:#1a1a1a;cursor:pointer}
+  .filters button{font-weight:600}
+  .filters button.active{background:#1a1a1a;color:#fff;border-color:#1a1a1a}
+  .filters button.bulk-approve{background:#2e7d32;color:#fff;border-color:#2e7d32}
+  .filters button.bulk-reject{background:#c62828;color:#fff;border-color:#c62828;margin-left:auto}
+  .bulk-bar{background:#fffde7;border-bottom:1px solid #f9e04b;padding:8px 16px;display:flex;align-items:center;justify-content:space-between;font-size:13px;position:sticky;top:88px;z-index:98;display:none}
+  .bulk-bar.active{display:flex}
+  .bulk-bar .sel-count{font-weight:600}
+  .bulk-bar button{font-size:13px;padding:5px 12px;border:none;border-radius:6px;cursor:pointer;font-weight:600}
+  .bulk-bar .ba{background:#2e7d32;color:#fff;margin-right:6px}
+  .bulk-bar .br{background:#c62828;color:#fff;margin-right:6px}
+  .bulk-bar .bc{background:#eee;color:#333}
+  .cards{padding:8px}
+  .card{background:#fff;border-radius:10px;margin-bottom:8px;box-shadow:0 1px 3px rgba(0,0,0,.08);overflow:hidden;transition:opacity .3s,transform .3s}
+  .card.removing{opacity:0;transform:translateX(100px);height:0;margin:0;padding:0;overflow:hidden}
+  .card-body{padding:12px 14px}
+  .card .top-row{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+  .card .cigar-name{font-size:15px;font-weight:600;line-height:1.3}
+  .card .confidence{font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap;flex-shrink:0}
+  .card .confidence.HIGH{background:#e8f5e9;color:#2e7d32}
+  .card .confidence.MEDIUM{background:#fff3e0;color:#e65100}
+  .card .meta{font-size:13px;color:#666;margin-top:4px;line-height:1.5}
+  .card .meta span{display:inline-block;margin-right:10px}
+  .card .retailer-tag{display:inline-block;background:#e3f2fd;color:#1565c0;font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;margin-top:4px}
+  .card .url-row{font-size:11px;color:#999;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .card .url-row a{color:#999;text-decoration:none}
+  .card .reason-row{font-size:11px;color:#888;margin-top:4px;font-style:italic}
+  .card .actions{display:flex;gap:0;border-top:1px solid #eee;margin-top:10px}
+  .card .actions button{flex:1;padding:10px;border:none;font-size:14px;font-weight:600;cursor:pointer;transition:background .15s}
+  .card .actions .approve-btn{background:#f1f8f1;color:#2e7d32}
+  .card .actions .approve-btn:active{background:#c8e6c9}
+  .card .actions .reject-btn{background:#fef1f1;color:#c62828}
+  .card .actions .reject-btn:active{background:#ffcdd2}
+  .card .actions .select-btn{background:#f5f5f5;color:#666;flex:0 0 50px;border-left:1px solid #eee}
+  .card .actions .select-btn.selected{background:#fff9c4;color:#f57f17}
+  .paging{padding:12px 16px;display:flex;justify-content:center;gap:8px;align-items:center}
+  .paging button{padding:8px 16px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;font-size:13px}
+  .paging button:disabled{opacity:.4;cursor:default}
+  .paging .page-info{font-size:13px;color:#666}
+  .empty{text-align:center;padding:60px 20px;color:#888}
+  .empty h2{font-size:20px;margin-bottom:8px;color:#1a1a1a}
+  .loading{text-align:center;padding:60px 20px;color:#888}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1a1a1a;color:#fff;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:500;z-index:200;opacity:0;transition:opacity .3s}
+  .toast.show{opacity:1}
+  @media(min-width:640px){
+    .cards{max-width:600px;margin:0 auto}
+    .header,.filters,.bulk-bar{display:flex;justify-content:center}
+    .header{display:block;text-align:center}
+    .filters{justify-content:center}
+  }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Match Review</h1>
+  <div class="stats" id="stats">Loading...</div>
+</div>
+
+<div class="filters" id="filters">
+  <button id="btn-all" class="active" onclick="setConfidence('')">All</button>
+  <button id="btn-high" onclick="setConfidence('HIGH')">HIGH <span id="cnt-high"></span></button>
+  <button id="btn-medium" onclick="setConfidence('MEDIUM')">MED <span id="cnt-medium"></span></button>
+  <select id="sel-retailer" onchange="setRetailer(this.value)">
+    <option value="">All retailers</option>
+  </select>
+  <select id="sel-brand" onchange="setBrand(this.value)">
+    <option value="">All brands</option>
+  </select>
+</div>
+
+<div class="bulk-bar" id="bulk-bar">
+  <div><span class="sel-count" id="sel-count">0</span> selected</div>
+  <div>
+    <button class="ba" onclick="bulkAction('approve')">Approve</button>
+    <button class="br" onclick="bulkAction('reject')">Reject</button>
+    <button class="bc" onclick="clearSelection()">Clear</button>
+  </div>
+</div>
+
+<div class="cards" id="cards">
+  <div class="loading">Loading matches...</div>
+</div>
+
+<div class="paging" id="paging" style="display:none">
+  <button id="prev-btn" onclick="prevPage()">Prev</button>
+  <span class="page-info" id="page-info"></span>
+  <button id="next-btn" onclick="nextPage()">Next</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const KEY = new URLSearchParams(location.search).get('key') || '';
+const PAGE_SIZE = 50;
+let currentOffset = 0;
+let currentConfidence = '';
+let currentRetailer = '';
+let currentBrand = '';
+let totalMatches = 0;
+let selectedTokens = new Set();
+
+async function fetchMatches() {
+  const params = new URLSearchParams({key: KEY, offset: currentOffset, limit: PAGE_SIZE});
+  if (currentConfidence) params.set('confidence', currentConfidence);
+  if (currentRetailer) params.set('retailer', currentRetailer);
+  if (currentBrand) params.set('brand', currentBrand);
+
+  const resp = await fetch('/api/admin/pending-matches?' + params);
+  if (!resp.ok) { document.getElementById('cards').innerHTML = '<div class="empty"><h2>Error loading</h2></div>'; return null; }
+  return resp.json();
+}
+
+function renderCard(m) {
+  const price = m.price ? `$${m.price.toFixed(2)}` : '';
+  const stock = m.in_stock === true ? 'In Stock' : m.in_stock === false ? 'Out of Stock' : '';
+  const stockColor = m.in_stock === true ? '#2e7d32' : '#c62828';
+  const selected = selectedTokens.has(m.token) ? ' selected' : '';
+
+  return `<div class="card" id="card-${m.token}">
+    <div class="card-body">
+      <div class="top-row">
+        <div class="cigar-name">${m.brand || ''} ${m.line || ''}</div>
+        <span class="confidence ${m.confidence}">${m.confidence}</span>
+      </div>
+      <div class="meta">
+        <span>${m.vitola || ''}</span>
+        ${m.size ? `<span>${m.size}</span>` : ''}
+        ${m.box_qty ? `<span>Box of ${m.box_qty}</span>` : ''}
+      </div>
+      <div class="meta">
+        ${price ? `<span style="font-weight:600">${price}</span>` : ''}
+        ${stock ? `<span style="color:${stockColor}">${stock}</span>` : ''}
+      </div>
+      <span class="retailer-tag">${m.retailer_key}</span>
+      <div class="url-row"><a href="${m.url}" target="_blank">${m.url}</a></div>
+      ${m.reason ? `<div class="reason-row">${m.reason}</div>` : ''}
+    </div>
+    <div class="actions">
+      <button class="approve-btn" onclick="reviewOne('${m.token}','approve')">Approve</button>
+      <button class="reject-btn" onclick="reviewOne('${m.token}','reject')">Reject</button>
+      <button class="select-btn${selected}" onclick="toggleSelect('${m.token}')" title="Select for bulk action">&#9744;</button>
+    </div>
+  </div>`;
+}
+
+async function loadPage() {
+  selectedTokens.clear();
+  updateBulkBar();
+  const data = await fetchMatches();
+  if (!data) return;
+
+  totalMatches = data.total;
+  const cc = data.confidence_counts || {};
+
+  document.getElementById('stats').textContent =
+    `${totalMatches} pending | ${cc.HIGH || 0} HIGH | ${cc.MEDIUM || 0} MEDIUM`;
+  document.getElementById('cnt-high').textContent = cc.HIGH ? `(${cc.HIGH})` : '';
+  document.getElementById('cnt-medium').textContent = cc.MEDIUM ? `(${cc.MEDIUM})` : '';
+
+  const retSel = document.getElementById('sel-retailer');
+  const oldRet = retSel.value;
+  retSel.innerHTML = '<option value="">All retailers</option>';
+  (data.available_retailers || []).forEach(r => {
+    retSel.innerHTML += `<option value="${r}" ${r === oldRet ? 'selected' : ''}>${r}</option>`;
+  });
+
+  const brandSel = document.getElementById('sel-brand');
+  const oldBrand = brandSel.value;
+  brandSel.innerHTML = '<option value="">All brands</option>';
+  (data.available_brands || []).forEach(b => {
+    brandSel.innerHTML += `<option value="${b}" ${b === oldBrand ? 'selected' : ''}>${b}</option>`;
+  });
+
+  const container = document.getElementById('cards');
+  if (data.matches.length === 0) {
+    container.innerHTML = '<div class="empty"><h2>All clear!</h2><p>No matches to review.</p></div>';
+    document.getElementById('paging').style.display = 'none';
+    return;
+  }
+  container.innerHTML = data.matches.map(renderCard).join('');
+
+  const pg = document.getElementById('paging');
+  const page = Math.floor(currentOffset / PAGE_SIZE) + 1;
+  const totalPages = Math.ceil(totalMatches / PAGE_SIZE);
+  document.getElementById('page-info').textContent = `Page ${page} of ${totalPages}`;
+  document.getElementById('prev-btn').disabled = currentOffset === 0;
+  document.getElementById('next-btn').disabled = currentOffset + PAGE_SIZE >= totalMatches;
+  pg.style.display = totalPages > 1 ? 'flex' : 'none';
+}
+
+async function reviewOne(token, action) {
+  const card = document.getElementById('card-' + token);
+  if (!card) return;
+  card.classList.add('removing');
+
+  try {
+    await fetch(`/admin/match/${token}/${action}`, {method: 'GET'});
+    showToast(action === 'approve' ? 'Approved' : 'Rejected');
+  } catch(e) { showToast('Error', true); }
+
+  setTimeout(() => {
+    card.remove();
+    totalMatches--;
+    document.getElementById('stats').textContent = document.getElementById('stats').textContent
+      .replace(/^\d+/, totalMatches);
+    if (document.querySelectorAll('.card').length === 0) loadPage();
+  }, 350);
+}
+
+function toggleSelect(token) {
+  if (selectedTokens.has(token)) selectedTokens.delete(token);
+  else selectedTokens.add(token);
+  const btn = document.querySelector(`#card-${token} .select-btn`);
+  if (btn) btn.classList.toggle('selected', selectedTokens.has(token));
+  updateBulkBar();
+}
+
+function updateBulkBar() {
+  const bar = document.getElementById('bulk-bar');
+  document.getElementById('sel-count').textContent = selectedTokens.size;
+  bar.classList.toggle('active', selectedTokens.size > 0);
+}
+
+function clearSelection() {
+  selectedTokens.clear();
+  document.querySelectorAll('.select-btn.selected').forEach(b => b.classList.remove('selected'));
+  updateBulkBar();
+}
+
+async function bulkAction(action) {
+  if (selectedTokens.size === 0) return;
+  const tokens = [...selectedTokens];
+  const count = tokens.length;
+
+  try {
+    const resp = await fetch('/api/admin/bulk-review', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-Admin-Key': KEY},
+      body: JSON.stringify({action, tokens})
+    });
+    const data = await resp.json();
+    showToast(`${data.updated} ${action === 'approve' ? 'approved' : 'rejected'}`);
+  } catch(e) { showToast('Bulk action failed', true); }
+
+  tokens.forEach(t => {
+    const card = document.getElementById('card-' + t);
+    if (card) card.classList.add('removing');
+  });
+  selectedTokens.clear();
+  updateBulkBar();
+  setTimeout(() => loadPage(), 400);
+}
+
+function setConfidence(val) {
+  currentConfidence = val;
+  currentOffset = 0;
+  document.querySelectorAll('.filters button[id^="btn-"]').forEach(b => b.classList.remove('active'));
+  document.getElementById(val ? `btn-${val.toLowerCase()}` : 'btn-all').classList.add('active');
+  loadPage();
+}
+function setRetailer(val) { currentRetailer = val; currentOffset = 0; loadPage(); }
+function setBrand(val) { currentBrand = val; currentOffset = 0; loadPage(); }
+function nextPage() { currentOffset += PAGE_SIZE; loadPage(); window.scrollTo(0, 0); }
+function prevPage() { currentOffset = Math.max(0, currentOffset - PAGE_SIZE); loadPage(); window.scrollTo(0, 0); }
+
+function showToast(msg, err) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.background = err ? '#c62828' : '#1a1a1a';
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1500);
+}
+
+loadPage();
+</script>
+</body>
+</html>
