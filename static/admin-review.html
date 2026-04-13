@@ -29,16 +29,22 @@
   .card.removing{opacity:0;transform:translateX(100px);height:0;margin:0;padding:0;overflow:hidden}
   .card-body{padding:12px 14px}
   .card .top-row{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
-  .card .cigar-name{font-size:15px;font-weight:600;line-height:1.3}
   .card .confidence{font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap;flex-shrink:0}
   .card .confidence.HIGH{background:#e8f5e9;color:#2e7d32}
   .card .confidence.MEDIUM{background:#fff3e0;color:#e65100}
-  .card .meta{font-size:13px;color:#666;margin-top:4px;line-height:1.5}
-  .card .meta span{display:inline-block;margin-right:10px}
+  .card .section-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#999;margin-top:10px}
+  .card .section-label:first-of-type{margin-top:4px}
+  .card .cid-name{font-size:15px;font-weight:600;line-height:1.3}
+  .card .cid-details{font-size:13px;color:#444;margin-top:2px;line-height:1.5}
+  .card .cid-details span{display:inline-block;margin-right:8px}
+  .card .cid-details .label{color:#888;font-size:11px}
+  .card .divider{border:none;border-top:1px dashed #e0e0e0;margin:8px 0}
+  .card .product-title{font-size:13px;font-weight:500;color:#333;margin-top:2px}
+  .card .product-meta{font-size:13px;color:#666;margin-top:2px;line-height:1.5}
+  .card .product-meta span{display:inline-block;margin-right:10px}
   .card .retailer-tag{display:inline-block;background:#e3f2fd;color:#1565c0;font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;margin-top:4px}
-  .card .url-row{font-size:11px;color:#999;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .card .url-row a{color:#999;text-decoration:none}
-  .card .reason-row{font-size:11px;color:#888;margin-top:4px;font-style:italic}
+  .card .url-row{font-size:11px;color:#999;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .card .url-row a{color:#1565c0;text-decoration:none}
   .card .actions{display:flex;gap:0;border-top:1px solid #eee;margin-top:10px}
   .card .actions button{flex:1;padding:10px;border:none;font-size:14px;font-weight:600;cursor:pointer;transition:background .15s}
   .card .actions .approve-btn{background:#f1f8f1;color:#2e7d32}
@@ -124,30 +130,51 @@ async function fetchMatches() {
   return resp.json();
 }
 
+function parseReason(reason) {
+  if (!reason) return {};
+  const prodMatch = reason.match(/product='([^']+)'/);
+  const varMatch = reason.match(/variant='([^']+)'/);
+  return {
+    productTitle: prodMatch ? prodMatch[1] : '',
+    variantTitle: varMatch ? varMatch[1] : '',
+  };
+}
+
 function renderCard(m) {
   const price = m.price ? `$${m.price.toFixed(2)}` : '';
   const stock = m.in_stock === true ? 'In Stock' : m.in_stock === false ? 'Out of Stock' : '';
   const stockColor = m.in_stock === true ? '#2e7d32' : '#c62828';
   const selected = selectedTokens.has(m.token) ? ' selected' : '';
+  const parsed = parseReason(m.reason);
 
   return `<div class="card" id="card-${m.token}">
     <div class="card-body">
       <div class="top-row">
-        <div class="cigar-name">${m.brand || ''} ${m.line || ''}</div>
+        <div>
+          <div class="section-label">CID (What you're approving)</div>
+          <div class="cid-name">${m.brand || '?'} ${m.line || '?'}</div>
+        </div>
         <span class="confidence ${m.confidence}">${m.confidence}</span>
       </div>
-      <div class="meta">
-        <span>${m.vitola || ''}</span>
-        ${m.size ? `<span>${m.size}</span>` : ''}
-        ${m.box_qty ? `<span>Box of ${m.box_qty}</span>` : ''}
+      <div class="cid-details">
+        <span><span class="label">Vitola</span> ${m.vitola || '—'}</span>
+        <span><span class="label">Wrapper</span> ${m.wrapper || '—'}</span>
       </div>
-      <div class="meta">
+      <div class="cid-details">
+        ${m.box_qty ? `<span><span class="label">Box</span> ${m.box_qty}</span>` : ''}
+        ${m.size ? `<span><span class="label">Size</span> ${m.size}</span>` : ''}
+      </div>
+
+      <hr class="divider">
+
+      <div class="section-label">Retailer Product (Matched to)</div>
+      <div class="product-title">${parsed.productTitle || '—'}</div>
+      <div class="product-meta">
+        <span class="retailer-tag">${m.retailer_key}</span>
         ${price ? `<span style="font-weight:600">${price}</span>` : ''}
         ${stock ? `<span style="color:${stockColor}">${stock}</span>` : ''}
       </div>
-      <span class="retailer-tag">${m.retailer_key}</span>
       <div class="url-row"><a href="${m.url}" target="_blank">${m.url}</a></div>
-      ${m.reason ? `<div class="reason-row">${m.reason}</div>` : ''}
     </div>
     <div class="actions">
       <button class="approve-btn" onclick="reviewOne('${m.token}','approve')">Approve</button>
