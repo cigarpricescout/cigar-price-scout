@@ -2269,6 +2269,7 @@ async def get_pending_matches(
     confidence: Optional[str] = Query(None),
     retailer: Optional[str] = Query(None),
     brand: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
     offset: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
 ):
@@ -2292,6 +2293,9 @@ async def get_pending_matches(
     if brand:
         where.append("LOWER(brand)=LOWER(%s)")
         params.append(brand)
+    if search:
+        where.append("LOWER(cid) LIKE %s")
+        params.append(f"%{search.lower()}%")
 
     where_sql = " AND ".join(where)
 

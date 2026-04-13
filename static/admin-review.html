@@ -12,6 +12,7 @@
   .header h1{font-size:16px;font-weight:600}
   .header .stats{font-size:12px;color:#aaa;margin-top:2px}
   .filters{background:#fff;border-bottom:1px solid #ddd;padding:10px 16px;display:flex;gap:8px;flex-wrap:wrap;position:sticky;top:44px;z-index:99}
+  .filters input[type="search"]{font-size:13px;padding:6px 10px;border:1px solid #ccc;border-radius:6px;background:#fff;color:#1a1a1a;width:100%;max-width:220px}
   .filters select,.filters button{font-size:13px;padding:6px 10px;border:1px solid #ccc;border-radius:6px;background:#fff;color:#1a1a1a;cursor:pointer}
   .filters button{font-weight:600}
   .filters button.active{background:#1a1a1a;color:#fff;border-color:#1a1a1a}
@@ -78,6 +79,7 @@
 </div>
 
 <div class="filters" id="filters">
+  <input type="search" id="search-box" placeholder="Search CID (e.g. Opus X, Red Dot)" onkeydown="if(event.key==='Enter'){doSearch()}" />
   <button id="btn-all" class="active" onclick="setConfidence('')">All</button>
   <button id="btn-high" onclick="setConfidence('HIGH')">HIGH <span id="cnt-high"></span></button>
   <button id="btn-medium" onclick="setConfidence('MEDIUM')">MED <span id="cnt-medium"></span></button>
@@ -117,6 +119,7 @@ let currentOffset = 0;
 let currentConfidence = '';
 let currentRetailer = '';
 let currentBrand = '';
+let currentSearch = '';
 let totalMatches = 0;
 let selectedTokens = new Set();
 
@@ -125,6 +128,7 @@ async function fetchMatches() {
   if (currentConfidence) params.set('confidence', currentConfidence);
   if (currentRetailer) params.set('retailer', currentRetailer);
   if (currentBrand) params.set('brand', currentBrand);
+  if (currentSearch) params.set('search', currentSearch);
 
   const resp = await fetch('/api/admin/pending-matches?' + params);
   if (!resp.ok) { document.getElementById('cards').innerHTML = '<div class="empty"><h2>Error loading</h2></div>'; return null; }
@@ -294,6 +298,11 @@ function setConfidence(val) {
 }
 function setRetailer(val) { currentRetailer = val; currentOffset = 0; loadPage(); }
 function setBrand(val) { currentBrand = val; currentOffset = 0; loadPage(); }
+function doSearch() {
+  currentSearch = document.getElementById('search-box').value.trim();
+  currentOffset = 0;
+  loadPage();
+}
 function nextPage() { currentOffset += PAGE_SIZE; loadPage(); window.scrollTo(0, 0); }
 function prevPage() { currentOffset = Math.max(0, currentOffset - PAGE_SIZE); loadPage(); window.scrollTo(0, 0); }
 
