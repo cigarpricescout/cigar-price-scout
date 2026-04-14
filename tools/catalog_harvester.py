@@ -317,6 +317,126 @@ def _resolve_brand(vendor: str, title: str) -> str:
     return _normalize(vendor)
 
 
+_TITLE_STOP_WORDS = {
+    "cigar", "cigars", "box", "of", "the", "and", "by", "de", "los", "las",
+    "el", "la", "in", "with", "for", "new", "premium", "handmade", "hand",
+    "made", "pack", "ct", "count", "single", "sampler", "tins", "tin",
+}
+
+_WRAPPER_WORDS = {
+    "natural", "maduro", "claro", "oscuro", "sungrown", "sun", "grown",
+    "broadleaf", "habano", "connecticut", "corojo", "rosado", "shade",
+    "cameroon", "sumatra", "candela", "barber", "pole",
+}
+
+_VITOLA_WORDS = {
+    "robusto", "toro", "churchill", "gordo", "torpedo", "belicoso", "corona",
+    "lancero", "petit", "grande", "double", "magnum", "perfecto", "figurado",
+    "lonsdale", "panatela", "presidente", "short", "extra", "fino",
+    "rothschild", "doble", "gigante",
+}
+
+_SIZE_RE = re.compile(r"\d+\.?\d*\s*[x\"]\s*\d+")
+_BOX_RE = re.compile(r"box\s*of\s*\d+", re.I)
+_YEAR_RE = re.compile(r"^20\d{2}$")
+_NUM_RE = re.compile(r"^\d+$")
+
+# Product words that almost always mean a different sub-line than a generic parent CID.
+# If present in the title but absent from the CID string, we heavily penalize.
+_SUBLINE_MARKERS = frozenset({
+    "toymaker", "forbidden", "lost", "city", "lostcity", "destino", "siglo",
+    "h99", "unico", "unicos", "dirty", "rat", "feral", "flying", "pig",
+    "nicaragua", "profundo", "midnight", "twisted", "connecticut",
+    "esteli", "black", "market",
+    "oros", "oscuro", "rosado",  # often Oro Oscuro sub-line vs base Opus
+    "angels", "angel", "share", "20th", "anniversary", "power",
+    "champagne", "boxpressed", "box", "pressed",  # careful: "box" is stop - already removed
+})
+
+# Title tokens that are almost never the whole cigar identity alone — ignore for extra-word count.
+_SUBLINE_NOISE = frozenset({
+    "opusx", "opus", "fuente", "arturo", "drew", "estate", "liga", "privada",
+})
+
+
+def _cid_compact_blob(cid: dict) -> str:
+    """Lowercase alphanumeric only — for substring checks against CID identity."""
+    raw = (cid.get("cid") or "").replace("|", "").lower()
+    return re.sub(r"[^a-z0-9]", "", raw)
+
+
+def _token_explained_by_cid(token: str, cid: dict) -> bool:
+    """True if this product title token is accounted for by the CID identity."""
+    if len(token) < 3:
+        return True
+    if token in _SUBLINE_NOISE:
+        return True
+
+    blob = _cid_compact_blob(cid)
+    tc = re.sub(r"[^a-z0-9]", "", token)
+    if len(tc) >= 3 and tc in blob:
+        return True
+
+    cid_tokens = _tokenize_cid(cid)
+    for c in cid_tokens:
+        if len(c) < 2:
+            continue
+        if tc in re.sub(r"[^a-z0-9]", "", c) or re.sub(r"[^a-z0-9]", "", c) in tc:
+            return True
+        if fuzz.ratio(tc, re.sub(r"[^a-z0-9]", "", c)) >= 88:
+            return True
+
+    if tc == "opusx" and "opus" in cid_tokens:
+        return True
+
+    return False
+
+
+def _perfecxion_variant_mismatch(product_title: str, cid_vitola: str) -> bool:
+    """PerfecXion A vs X are different vitolas — reject conflation."""
+    t = product_title.lower()
+    cv = _normalize(cid_vitola)
+    if "perfecxion" not in cv and "perfec" not in cv:
+        return False
+    if "perfecxion" not in t and "perfec" not in t:
+        return False
+    # Map common spellings
+    has_a = bool(re.search(r"perfec\w*xion\s+a\b|perfec\w*xiona\b", t))
+    has_x = bool(re.search(r"perfec\w*xion\s+x\b|perfec\w*xionx\b", t))
+    cid_a = bool(re.search(r"perfec\w*xion\s+a\b|perfec\w*xiona\b", cv))
+    cid_x = bool(re.search(r"perfec\w*xion\s+x\b|perfec\w*xionx\b", cv))
+    if has_a and cid_x and not has_x:
+        return True
+    if has_x and cid_a and not has_a:
+        return True
+    return False
+
+
+def _tokenize_title(text: str) -> set[str]:
+    """Extract meaningful content words from a product title."""
+    text = _SIZE_RE.sub("", text)
+    text = _BOX_RE.sub("", text)
+    tokens = _normalize(text).split()
+    return {
+        t for t in tokens
+        if t not in _TITLE_STOP_WORDS
+        and t not in _WRAPPER_WORDS
+        and t not in _VITOLA_WORDS
+        and not _NUM_RE.match(t)
+        and len(t) > 1
+    }
+
+
+def _tokenize_cid(cid: dict) -> set[str]:
+    """Extract content words from a CID's brand, line, and vitola."""
+    parts = (
+        _normalize(cid.get("brand_display", ""))
+        + " " + _normalize(cid.get("line_display", ""))
+        + " " + _normalize(cid.get("vitola_display", ""))
+    )
+    return {t for t in parts.split() if len(t) > 1}
+
+
 def score_match(product: dict, box_variant: dict, cid: dict) -> dict:
     """Score how well a Shopify product matches a CID. Returns a dict with
     score (0-100), confidence level, and reason."""
@@ -335,6 +455,7 @@ def score_match(product: dict, box_variant: dict, cid: dict) -> dict:
     score = 0
     reasons = []
 
+    # --- Brand check: vendor must plausibly match CID brand ---
     brand_score = fuzz.token_set_ratio(cid_brand, product_brand)
     if brand_score < 60:
         brand_score = fuzz.partial_ratio(cid_brand, product_text)
@@ -347,9 +468,27 @@ def score_match(product: dict, box_variant: dict, cid: dict) -> dict:
     else:
         return {"score": 0, "confidence": "NONE", "reason": "brand mismatch"}
 
+    # --- Vendor cross-check: vendor must have SOME overlap with CID brand ---
+    if product_vendor and len(product_vendor) > 2:
+        vendor_vs_cid = fuzz.token_set_ratio(cid_brand, product_vendor)
+        vendor_vs_title = fuzz.partial_ratio(cid_brand, product_title)
+        if vendor_vs_cid < 50 and vendor_vs_title < 60:
+            return {"score": 0, "confidence": "NONE", "reason": f"vendor mismatch ({product_vendor})"}
+
+    # --- Line check ---
     line_score = fuzz.token_set_ratio(cid_line, product_title)
     if line_score < 60:
         line_score = max(line_score, fuzz.partial_ratio(cid_line, product_title))
+
+    # Verify the CID line slug appears in the product title (alphanumeric substring).
+    # Prevents "Serie G" matching "Serie V"; allows OPUSXTOYMAKERFORBIDDENX vs spaced titles.
+    slug_src = str(cid.get("line", "") or "")
+    slug_compact = re.sub(r"[^a-z0-9]", "", _normalize(slug_src))
+    product_compact = re.sub(r"[^a-z0-9]", "", product_title)
+    if len(slug_compact) >= 4:
+        if slug_compact not in product_compact and cid_line not in product_title:
+            line_score = min(line_score, 50)
+
     if line_score >= 80:
         score += 30
         reasons.append(f"line={line_score}")
@@ -359,6 +498,7 @@ def score_match(product: dict, box_variant: dict, cid: dict) -> dict:
     else:
         return {"score": 0, "confidence": "NONE", "reason": f"line mismatch ({line_score})"}
 
+    # --- Vitola check ---
     vitola_score = fuzz.token_set_ratio(cid_vitola, product_title)
     if vitola_score >= 80:
         score += 25
@@ -372,6 +512,10 @@ def score_match(product: dict, box_variant: dict, cid: dict) -> dict:
             score += 15
             reasons.append(f"vitola_tag={vitola_in_tags}")
 
+    if _perfecxion_variant_mismatch(product_title, cid["vitola_display"]):
+        return {"score": 0, "confidence": "NONE", "reason": "perfecxion A/X mismatch"}
+
+    # --- Box qty check ---
     variant_box_qty = box_variant.get("box_qty")
     if cid_box_qty and variant_box_qty:
         if cid_box_qty == variant_box_qty:
@@ -381,6 +525,42 @@ def score_match(product: dict, box_variant: dict, cid: dict) -> dict:
             score += 8
             reasons.append(f"box_qty~={variant_box_qty}")
 
+    # --- Sub-line / identity tokens not explained by the CID ---
+    product_tokens = _tokenize_title(product.get("title", ""))
+    extra_words = {
+        w for w in product_tokens
+        if not _YEAR_RE.match(w)
+        and not _token_explained_by_cid(w, cid)
+    }
+    marker_hits = sorted(extra_words & _SUBLINE_MARKERS)
+    strong_extras = {w for w in extra_words if len(w) >= 5}
+
+    # Title names a sub-line (ToyMaker, Forbidden, Lost City, etc.) but CID line slug does not.
+    if marker_hits and slug_compact and not any(m in slug_compact for m in marker_hits):
+        return {
+            "score": 0,
+            "confidence": "NONE",
+            "reason": f"subline in title not in CID ({', '.join(marker_hits)})",
+        }
+
+    if marker_hits:
+        score -= 45
+        reasons.append(f"subline_markers=-45 ({', '.join(marker_hits)})")
+    elif len(strong_extras) >= 2:
+        score -= 40
+        reasons.append(f"unexplained_words=-40 ({' '.join(sorted(strong_extras))})")
+    elif len(extra_words) >= 3:
+        score -= 35
+        reasons.append(f"unexplained_words=-35 ({' '.join(sorted(extra_words))})")
+    elif len(extra_words) >= 2:
+        score -= 22
+        reasons.append(f"unexplained_words=-22 ({' '.join(sorted(extra_words))})")
+    elif len(extra_words) == 1:
+        only = next(iter(extra_words))
+        if len(only) >= 7:
+            score -= 15
+            reasons.append(f"unexplained_word=-15 ({only})")
+
     if score >= 80:
         confidence = "HIGH"
     elif score >= 55:
@@ -389,6 +569,17 @@ def score_match(product: dict, box_variant: dict, cid: dict) -> dict:
         confidence = "LOW"
     else:
         confidence = "NONE"
+
+    # Never mark HIGH if sub-line markers contradict the CID identity.
+    if confidence == "HIGH" and marker_hits:
+        confidence = "MEDIUM"
+        reasons.append("capped=MEDIUM(subline)")
+    if confidence == "HIGH" and len(strong_extras) >= 2:
+        confidence = "MEDIUM"
+        reasons.append("capped=MEDIUM(extras)")
+    if confidence in ("HIGH", "MEDIUM") and len(extra_words) >= 4:
+        confidence = "LOW"
+        reasons.append("capped=LOW(too_many_extras)")
 
     return {
         "score": score,
