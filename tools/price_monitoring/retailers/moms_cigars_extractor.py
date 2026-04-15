@@ -1,12 +1,10 @@
 """
 Mom's Cigars Extractor
-Handles table-based multi-product pages where one URL contains multiple cigars
-Platform: Custom e-commerce with product tables
 
-Key Features:
-- Single URL contains multiple products in table format
-- Targets specific vitola + packaging combinations 
-- Extracts from table rows based on product matching
+Primary path: Shopify public JSON API (/products/{handle}.json) — matches variant rows
+(e.g. Classic / Box of 25) without HTML table scraping.
+
+Fallback: legacy HTML table parsing for non-standard URLs.
 """
 
 import requests
@@ -17,13 +15,50 @@ from typing import Dict, Optional
 
 def extract_moms_cigars_data(url: str, target_vitola: str = None, target_packaging: str = None) -> Dict:
     """
-    Extract data from Mom's Cigars table-based product pages
-    
+    Extract data from Mom's Cigars product pages.
+
     Args:
-        url: Product page URL (contains multiple products in table)
-        target_vitola: Specific vitola to target (e.g. "Classic", "Signature", "Short Story") 
-        target_packaging: Packaging type (e.g. "Box of 25", "5 Pack")
+        url: Product URL (Shopify ``/products/...`` recommended)
+        target_vitola: e.g. "Classic", "Signature", "Short Story"
+        target_packaging: e.g. "Box of 25", "5 Pack"
     """
+    if "momscigars.com" in url.lower() and "/products/" in url.lower():
+        try:
+            try:
+                from .shopify_json_extract import (
+                    fetch_shopify_product,
+                    pick_variant_for_moms,
+                    variant_to_price_result,
+                )
+            except ImportError:
+                from shopify_json_extract import (
+                    fetch_shopify_product,
+                    pick_variant_for_moms,
+                    variant_to_price_result,
+                )
+
+            product = fetch_shopify_product(url, delay_s=1.0)
+            if product:
+                variants = product.get("variants") or []
+                v = pick_variant_for_moms(variants, target_vitola, target_packaging)
+                if v:
+                    res = variant_to_price_result(product, v)
+                    if res.get("success"):
+                        return {
+                            "success": True,
+                            "product_title": res.get("product_title"),
+                            "price": res.get("price"),
+                            "original_price": res.get("original_price"),
+                            "discount_percent": res.get("discount_percent"),
+                            "in_stock": res.get("in_stock"),
+                            "box_quantity": res.get("box_quantity"),
+                            "target_found": True,
+                            "available_products": [],
+                            "error": None,
+                        }
+        except Exception:
+            pass
+
     try:
         # Conservative headers
         headers = {

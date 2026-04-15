@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
 Bayside Cigars Extractor
-Following the exact same pattern as the working Absolute Cigars extractor
-Rate: 1 request/second, Timeout: 10 seconds, Compliance: Tier 1
-Platform: WooCommerce, Headers: Minimal (just User-Agent)
+
+Primary path: Shopify JSON API (store is on Shopify; use ``/products/{handle}`` URLs).
+
+Fallback: legacy HTML scrape (often blocked or 404 on old ``/product/`` paths).
 """
 
 import requests
@@ -149,6 +150,26 @@ class BaysideCigarsExtractor:
 
 def extract_bayside_cigars_data(url: str) -> Dict:
     """Main extraction function for Bayside Cigars"""
+    if "baysidecigars.com" in url.lower() and "/products/" in url.lower():
+        try:
+            try:
+                from .shopify_json_extract import extract_shopify_product_url
+            except ImportError:
+                from shopify_json_extract import extract_shopify_product_url
+
+            shop = extract_shopify_product_url(url, moms_style_variants=False)
+            if shop and shop.get("price"):
+                return {
+                    "success": True,
+                    "price": shop["price"],
+                    "box_quantity": shop.get("box_quantity"),
+                    "in_stock": shop.get("in_stock"),
+                    "discount_percent": shop.get("discount_percent"),
+                    "error": None,
+                }
+        except Exception:
+            pass
+
     extractor = BaysideCigarsExtractor()
     result = extractor.extract_product_data(url)
     
@@ -165,9 +186,8 @@ def extract_bayside_cigars_data(url: str) -> Dict:
 def test_extractor():
     """Test the extractor with sample URLs"""
     test_urls = [
-        'https://baysidecigars.com/product/arturo-fuente-hemingway-best-seller-natural-box/',
-        'https://baysidecigars.com/product/arturo-fuente-opusx-robusto/',
-        'https://baysidecigars.com/product/cohiba-spectre-2021-1-cigar/'
+        "https://baysidecigars.com/products/arturo-fuente-hemingway-signature",
+        "https://baysidecigars.com/products/ashton-symmetry-belicoso",
     ]
     
     print("Testing Bayside Cigars extraction...")

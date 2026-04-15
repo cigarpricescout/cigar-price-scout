@@ -38,21 +38,26 @@ HEADERS = {
 RETAILER_DOMAINS = {
     "absolutecigars":   "absolutecigars.com",
     "atlantic":         "atlanticcigar.com",
+    "baysidecigars":    "baysidecigars.com",
     "bighumidor":       "www.bighumidor.com",
     "bnbtobacco":       "www.bnbtobacco.com",
     "cigarboxpa":       "www.cigarboxpa.com",
     "cigardepot":       "cigardepot.us",
     "cigarhustler":     "cigarhustler.com",
     "cigarking":        "www.cigarking.com",
+    "cigaroasis":       "cigaroasis.com",
     "cigarsdirect":     "www.cigarsdirect.com",
     "coronacigar":      "www.coronacigar.com",
     "foxcigar":         "foxcigar.com",
     "hilands":          "www.hilandscigars.com",
     "holts":            "www.holts.com",
+    "escobarcigars":    "escobarcigars.com",
     "iheartcigars":     "iheartcigars.com",
+    "momscigars":       "momscigars.com",
     "nickscigarworld":  "nickscigarworld.com",
     "planetcigars":     "www.planetcigars.com",
     "pyramidcigars":    "pyramidcigars.com",
+    "santamonicacigars": "santamonicacigars.com",
     "smallbatchcigar":  "www.smallbatchcigar.com",
     "smokeinn":         "www.smokeinn.com",
     "stogies":          "stogiesworldclasscigars.com",
@@ -412,6 +417,54 @@ def _perfecxion_variant_mismatch(product_title: str, cid_vitola: str) -> bool:
     return False
 
 
+def _opusx_vitola_shape_conflict(product_title: str, cid: dict) -> str | None:
+    """Reject OPUS X when the title names a different named vitola than the CID slug.
+
+    Fuzzy line+brand matching can score well on \"Opus X\" while the vitola in the
+    title is a figurado or another release (e.g. Shark, Super Belicoso, 25 Year Perfecto).
+    """
+    line = (cid.get("line") or "").upper()
+    if line != "OPUSX":
+        return None
+    vslug = (cid.get("vitola") or "").upper()
+    t = product_title
+
+    # PerfecXion A — long parejo; not Shark, Belicoso, Perfecto figurado, etc.
+    if vslug == "PERFECXIONA":
+        if re.search(r"\bshark\b", t) or re.search(r"77\s*shark", t):
+            return "opusx vitola: PERFECXIONA vs shark in title"
+        if re.search(r"super\s*belicoso", t) or re.search(r"\bbelicoso\b", t):
+            return "opusx vitola: PERFECXIONA vs belicoso in title"
+        if re.search(r"\bperfecto\b", t) or re.search(
+            r"25\s*year.*\bperfecto\b|\bperfecto\b.*25\s*year", t
+        ):
+            return "opusx vitola: PERFECXIONA vs perfecto in title"
+        if re.search(r"\btorpedo\b|\bpiramide\b|\bfigurado\b", t):
+            return "opusx vitola: PERFECXIONA vs figurado shape in title"
+        if re.search(r"taste\s+of\s+love", t):
+            return "opusx vitola: PERFECXIONA vs Taste of Love (Shark LE) in title"
+        return None
+
+    # PerfecXion 77 Shark — require shark / 77 signal if title reads as plain PerfecXion A/X.
+    if vslug == "PERFECXION77SHARK":
+        has_shark = bool(re.search(r"\bshark\b|77\s*shark", t))
+        looks_pfa = bool(re.search(r"perfec\w*xion\s+a\b|perfecxiona\b", t))
+        looks_pfx = bool(re.search(r"perfec\w*xion\s+x\b|perfecxionx\b", t))
+        if (looks_pfa or looks_pfx) and not has_shark:
+            return "opusx vitola: PERFECXION77SHARK vs non-shark PerfecXion title"
+        return None
+
+    # Super Belicoso — not a PerfecXion vitola listing.
+    if vslug == "SUPERBELICOSO":
+        if re.search(r"perfecxion|perfec\s*xion", t) and not re.search(
+            r"super\s*belicoso", t
+        ):
+            return "opusx vitola: SUPERBELICOSO vs perfecxion-only title"
+        return None
+
+    return None
+
+
 def _tokenize_title(text: str) -> set[str]:
     """Extract meaningful content words from a product title."""
     text = _SIZE_RE.sub("", text)
@@ -497,6 +550,10 @@ def score_match(product: dict, box_variant: dict, cid: dict) -> dict:
         reasons.append(f"line~={line_score}")
     else:
         return {"score": 0, "confidence": "NONE", "reason": f"line mismatch ({line_score})"}
+
+    opusx_shape = _opusx_vitola_shape_conflict(product_title, cid)
+    if opusx_shape:
+        return {"score": 0, "confidence": "NONE", "reason": opusx_shape}
 
     # --- Vitola check ---
     vitola_score = fuzz.token_set_ratio(cid_vitola, product_title)

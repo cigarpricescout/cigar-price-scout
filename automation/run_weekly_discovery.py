@@ -96,9 +96,12 @@ RETAILER_EXTRACTOR_MAP = {
     "cigarcountry":      ("cigar_country_extractor",         "extract_cigar_country_data"),
     "famoussmoke":       ("famous_smoke_extractor",          "extract_famous_smoke_data"),
     "mikescigars":       ("mikescigars_extractor",           "extract_mikescigars_data"),
-    "momscigars":        ("momscigars_extractor",            "extract_momscigars_data"),
+    "momscigars":        ("moms_cigars_extractor",           "extract_moms_cigars_data"),
     "smokezone":         ("smokezone_extractor",             "extract_smokezone_data"),
     "thompsoncigar":     ("thompson_cigars_extractor",       "extract_thompson_cigars_data"),
+    "cigaroasis":        ("shopify_generic_extractor",       "extract_shopify_store_data"),
+    "escobarcigars":     ("shopify_generic_extractor",       "extract_shopify_store_data"),
+    "santamonicacigars": ("shopify_generic_extractor",       "extract_shopify_store_data"),
 }
 
 URL_DOMAIN_TO_KEY = {
@@ -146,6 +149,9 @@ URL_DOMAIN_TO_KEY = {
     "smokezonecigars.com":       "smokezone",
     "thompsoncigar.com":         "thompsoncigar",
     "cigarwarehouseusa.com":     "cigarwarehouse",
+    "cigaroasis.com":            "cigaroasis",
+    "escobarcigars.com":         "escobarcigars",
+    "santamonicacigars.com":     "santamonicacigars",
 }
 
 
