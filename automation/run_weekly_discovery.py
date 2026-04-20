@@ -380,9 +380,17 @@ def publish_approved_to_csvs(approved: list) -> int:
         existing_cids = set(retailer_df["cigar_id"].dropna().unique())
 
         new_rows = []
+        updated_count = 0
         for m in matches:
             if m["cid"] in existing_cids:
-                logger.info(f"  Skipping {m['cid']} — already in {retailer_key}.csv")
+                mask = retailer_df["cigar_id"] == m["cid"]
+                existing_url = retailer_df.loc[mask, "url"].iloc[0] if mask.any() else ""
+                if pd.isna(existing_url) or str(existing_url).strip() == "":
+                    retailer_df.loc[mask, "url"] = m["url"]
+                    updated_count += 1
+                    logger.info(f"  Updated URL for {m['cid']} in {retailer_key}.csv")
+                else:
+                    logger.info(f"  Skipping {m['cid']} — already in {retailer_key}.csv with URL")
                 published_ids.append(m["id"])
                 continue
 
@@ -409,9 +417,11 @@ def publish_approved_to_csvs(approved: list) -> int:
         if new_rows:
             new_df = pd.DataFrame(new_rows)
             retailer_df = pd.concat([retailer_df, new_df], ignore_index=True)
+
+        if new_rows or updated_count:
             retailer_df.to_csv(csv_path, index=False)
-            published_count += len(new_rows)
-            logger.info(f"  Added {len(new_rows)} CIDs to {retailer_key}.csv")
+            published_count += len(new_rows) + updated_count
+            logger.info(f"  Added {len(new_rows)} new + updated {updated_count} existing CIDs in {retailer_key}.csv")
 
     if published_ids:
         try:
