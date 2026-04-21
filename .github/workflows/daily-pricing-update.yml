@@ -44,7 +44,8 @@ jobs:
           cd automation
           python automated_cigar_price_system.py
         env:
-          # Pass any needed environment variables
+          ADMIN_SECRET_KEY: ${{ secrets.ADMIN_SECRET_KEY }}
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
           PYTHONUNBUFFERED: 1
       
       - name: Commit and push changes (if needed)
