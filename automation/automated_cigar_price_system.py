@@ -513,7 +513,12 @@ class AutomatedCigarPriceSystem:
                 self.logger.warning(f"Failed to capture post-state for {retailer_name}: {e}")
 
     def process_approved_matches(self) -> int:
-        """Fetch approved matches from the live API and append to retailer CSVs."""
+        """Fetch approved matches from the live API and append to retailer CSVs.
+
+        Groups matches by retailer so each CSV is read and written exactly once,
+        and uses pandas to preserve retailer-specific columns and correctly
+        escape any commas/quotes in field values.
+        """
         import requests as http_req
 
         admin_key = os.getenv("ADMIN_SECRET_KEY", "")
@@ -540,39 +545,83 @@ class AutomatedCigarPriceSystem:
             return 0
 
         self.logger.info(f"Processing {len(matches)} approved matches")
-        published_ids = []
         csv_dir = self.project_root / "static" / "data"
 
+        by_retailer: Dict[str, List[dict]] = {}
         for m in matches:
-            retailer_key = m["retailer_key"]
+            by_retailer.setdefault(m["retailer_key"], []).append(m)
+
+        published_ids: List = []
+        total_added = 0
+        total_updated = 0
+
+        for retailer_key, rmatches in by_retailer.items():
             csv_path = csv_dir / f"{retailer_key}.csv"
-
             if not csv_path.exists():
-                self.logger.warning(f"CSV not found for {retailer_key}, skipping")
+                self.logger.warning(
+                    f"CSV not found for {retailer_key}, skipping {len(rmatches)} matches"
+                )
                 continue
 
-            existing_cids = set()
-            with open(csv_path, "r", encoding="utf-8") as f:
-                reader = pd.read_csv(f)
-                if "cigar_id" in reader.columns:
-                    existing_cids = set(reader["cigar_id"].dropna().values)
+            df = pd.read_csv(csv_path)
+            existing_cids = (
+                set(df["cigar_id"].dropna().unique()) if "cigar_id" in df.columns else set()
+            )
+            has_url_col = "url" in df.columns
 
-            cid = m["cid"]
-            if cid in existing_cids:
-                self.logger.info(f"CID {cid} already in {retailer_key}.csv, skipping")
+            new_rows = []
+            updated = 0
+
+            for m in rmatches:
+                cid = m["cid"]
+                url = m.get("url", "")
+
+                if cid in existing_cids:
+                    if has_url_col:
+                        mask = df["cigar_id"] == cid
+                        if mask.any():
+                            existing_url = df.loc[mask, "url"].iloc[0]
+                            if pd.isna(existing_url) or str(existing_url).strip() == "":
+                                df.loc[mask, "url"] = url
+                                updated += 1
+                                self.logger.info(
+                                    f"Updated URL for {cid} in {retailer_key}.csv"
+                                )
+                    published_ids.append(m["id"])
+                    continue
+
+                new_row = {
+                    "cigar_id": cid,
+                    "title": "",
+                    "url": url,
+                    "brand": m.get("brand", ""),
+                    "line": m.get("line", ""),
+                    "wrapper": m.get("wrapper", ""),
+                    "vitola": m.get("vitola", ""),
+                    "size": m.get("size", ""),
+                    "box_qty": m.get("box_qty", ""),
+                    "price": "",
+                    "in_stock": "",
+                }
+                for col in df.columns:
+                    if col not in new_row:
+                        new_row[col] = ""
+                new_rows.append(new_row)
                 published_ids.append(m["id"])
-                continue
+                self.logger.info(f"Added {cid} to {retailer_key}.csv")
 
-            with open(csv_path, "r", encoding="utf-8") as f:
-                header_line = f.readline().strip()
+            if new_rows:
+                df = pd.concat([df, pd.DataFrame(new_rows)], ignore_index=True)
 
-            new_row = f'{cid},,{m["url"]},{m.get("brand","")},{m.get("line","")},{m.get("wrapper","")},{m.get("vitola","")},{m.get("size","")},{m.get("box_qty","")},,,\n'
+            if new_rows or updated:
+                df.to_csv(csv_path, index=False)
+                total_added += len(new_rows)
+                total_updated += updated
 
-            with open(csv_path, "a", encoding="utf-8") as f:
-                f.write(new_row)
-
-            self.logger.info(f"Added {cid} to {retailer_key}.csv")
-            published_ids.append(m["id"])
+        if total_added or total_updated:
+            self.logger.info(
+                f"Published {total_added} new rows, updated {total_updated} URLs"
+            )
 
         if published_ids:
             try:
