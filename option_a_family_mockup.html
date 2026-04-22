@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Option A Preview — Related releases in this family</title>
+
+  <!-- Tailwind (same as cigar-template.html) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: { 50: '#faf7f2', 500: '#7c5c2e', 600: '#6b4f27' },
+            ink: '#111111',
+            muted: '#4b5563',
+          },
+          fontFamily: {
+            serif: ['Cormorant Garamond', 'Georgia', 'serif'],
+            display: ['Cinzel', 'Georgia', 'serif'],
+          },
+        },
+      },
+    }
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap" rel="stylesheet" />
+
+  <style>
+    /* Hide browser default scrollbar styling on horizontal rail */
+    .family-rail {
+      scrollbar-width: thin;
+      scrollbar-color: #d6cdb8 transparent;
+    }
+    .family-rail::-webkit-scrollbar { height: 8px; }
+    .family-rail::-webkit-scrollbar-track { background: transparent; }
+    .family-rail::-webkit-scrollbar-thumb { background: #d6cdb8; border-radius: 4px; }
+
+    /* Highlight callout for "this is the new piece" */
+    .new-callout {
+      position: relative;
+    }
+    .new-callout::before {
+      content: "NEW";
+      position: absolute;
+      top: -10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #7c5c2e;
+      color: white;
+      font-family: 'Cinzel', serif;
+      font-weight: 700;
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      padding: 3px 12px;
+      border-radius: 999px;
+      z-index: 10;
+    }
+  </style>
+</head>
+
+<body class="bg-brand-50 font-serif text-ink text-lg leading-relaxed">
+
+  <!-- Preview banner -->
+  <div class="bg-amber-100 border-b border-amber-300 text-center py-2 text-sm text-amber-900">
+    <strong>Option A preview</strong> — this is what the Opus X Oro Oscuro page would look like with the new "Related in this family" section. The NEW block is highlighted below.
+  </div>
+
+  <div class="max-w-5xl mx-auto px-5 py-6">
+
+    <!-- ============================================================== -->
+    <!-- CONTEXT: tail end of the existing pricing table (dimmed) -->
+    <!-- ============================================================== -->
+    <div class="opacity-60 pointer-events-none">
+      <h2 class="font-display font-bold text-2xl text-center tracking-wide my-4">
+        Arturo Fuente Opus X Oro Oscuro – Advertised Box Prices
+      </h2>
+
+      <div class="overflow-x-auto mb-4">
+        <table class="w-full border-collapse bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+          <thead>
+            <tr class="bg-gray-50">
+              <th class="p-4 border-b border-gray-200 text-center font-display font-semibold">Retailer</th>
+              <th class="p-4 border-b border-gray-200 text-left font-display font-semibold">Product Details</th>
+              <th class="p-4 border-b border-gray-200 text-center font-display font-semibold">Advertised Price</th>
+              <th class="p-4 border-b border-gray-200 text-center font-display font-semibold">Stock Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="p-4 border-b border-gray-200 text-center"><span class="text-brand-500 font-semibold text-lg">Atlantic Cigar</span></td>
+              <td class="p-4 border-b border-gray-200 text-left text-sm text-muted">
+                <div>Wrapper: Oro Oscuro</div>
+                <div>Vitola: Belicoso XXX</div>
+                <div>Box of 42</div>
+              </td>
+              <td class="p-4 border-b border-gray-200 text-center font-semibold text-xl">$1,329.27</td>
+              <td class="p-4 border-b border-gray-200 text-center"><span class="text-emerald-600 font-semibold">&#10003; In Stock</span></td>
+            </tr>
+            <tr>
+              <td class="p-4 border-b border-gray-200 text-center"><span class="text-brand-500 font-semibold text-lg">Holt's Cigar Co.</span></td>
+              <td class="p-4 border-b border-gray-200 text-left text-sm text-muted">
+                <div>Wrapper: Oro Oscuro</div>
+                <div>Vitola: Belicoso XXX</div>
+                <div>Box of 42</div>
+              </td>
+              <td class="p-4 border-b border-gray-200 text-center font-semibold text-xl">$1,399.00</td>
+              <td class="p-4 border-b border-gray-200 text-center"><span class="text-emerald-600 font-semibold">&#10003; In Stock</span></td>
+            </tr>
+            <tr>
+              <td class="p-4 text-center"><span class="text-brand-500 font-semibold text-lg">Corona Cigar Co.</span></td>
+              <td class="p-4 text-left text-sm text-muted">
+                <div>Wrapper: Oro Oscuro</div>
+                <div>Vitola: Belicoso XXX</div>
+                <div>Box of 42</div>
+              </td>
+              <td class="p-4 text-center font-semibold text-xl">$1,445.50</td>
+              <td class="p-4 text-center"><span class="text-red-600 font-semibold text-sm uppercase">Out of Stock</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="text-center text-sm text-muted italic">...rest of pricing table and filters sit above this block...</p>
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- NEW: Related releases in this family                              -->
+    <!-- ============================================================== -->
+    <section class="new-callout my-10 bg-white rounded-xl p-6 md:p-8 shadow-sm border-2 border-brand-500/30">
+      <div class="text-center mb-6">
+        <h2 class="font-display font-bold text-2xl text-brand-500 mb-2">
+          More from the Opus X family
+        </h2>
+        <p class="text-muted max-w-2xl mx-auto text-base">
+          If you're shopping Opus X Oro Oscuro, you might also want to compare prices on these related Arturo Fuente releases.
+        </p>
+      </div>
+
+      <!-- Horizontal scrollable rail on mobile, grid on desktop -->
+      <div class="family-rail overflow-x-auto md:overflow-visible pb-2">
+        <div class="flex md:grid md:grid-cols-3 gap-4 min-w-max md:min-w-0">
+
+          <!-- Sibling 1 -->
+          <a href="/cigars/arturo-fuente/opus-x"
+             class="block w-72 md:w-auto shrink-0 bg-brand-50 hover:bg-white border border-gray-200 hover:border-brand-500 rounded-xl p-5 transition-all hover:shadow-md group">
+            <div class="flex items-start justify-between mb-2">
+              <h3 class="font-display font-semibold text-lg text-ink group-hover:text-brand-500 transition-colors">
+                Opus X
+              </h3>
+              <span class="text-xs text-muted uppercase tracking-wider">Core</span>
+            </div>
+            <div class="flex flex-wrap gap-1.5 mb-3">
+              <span class="inline-block text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-semibold">Dominican Rosado</span>
+            </div>
+            <div class="text-sm text-muted mb-1">12 vitolas · 14 retailers</div>
+            <div class="flex items-end justify-between">
+              <div>
+                <div class="text-xs text-muted uppercase tracking-wider">From</div>
+                <div class="text-xl font-bold text-emerald-600">$385.50</div>
+              </div>
+              <span class="text-brand-500 font-semibold text-sm group-hover:translate-x-1 transition-transform">Compare &rarr;</span>
+            </div>
+          </a>
+
+          <!-- Sibling 2 -->
+          <a href="/cigars/arturo-fuente/opus-x-angels-share"
+             class="block w-72 md:w-auto shrink-0 bg-brand-50 hover:bg-white border border-gray-200 hover:border-brand-500 rounded-xl p-5 transition-all hover:shadow-md group">
+            <div class="flex items-start justify-between mb-2">
+              <h3 class="font-display font-semibold text-lg text-ink group-hover:text-brand-500 transition-colors">
+                Opus X Angel's Share
+              </h3>
+              <span class="text-xs text-muted uppercase tracking-wider">Aged</span>
+            </div>
+            <div class="flex flex-wrap gap-1.5 mb-3">
+              <span class="inline-block text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-semibold">Dominican Rosado</span>
+            </div>
+            <div class="text-sm text-muted mb-1">4 vitolas · 6 retailers</div>
+            <div class="flex items-end justify-between">
+              <div>
+                <div class="text-xs text-muted uppercase tracking-wider">From</div>
+                <div class="text-xl font-bold text-emerald-600">$620.00</div>
+              </div>
+              <span class="text-brand-500 font-semibold text-sm group-hover:translate-x-1 transition-transform">Compare &rarr;</span>
+            </div>
+          </a>
+
+          <!-- Sibling 3 -->
+          <a href="/cigars/arturo-fuente/opus-x-20th-anniversary"
+             class="block w-72 md:w-auto shrink-0 bg-brand-50 hover:bg-white border border-gray-200 hover:border-brand-500 rounded-xl p-5 transition-all hover:shadow-md group">
+            <div class="flex items-start justify-between mb-2">
+              <h3 class="font-display font-semibold text-lg text-ink group-hover:text-brand-500 transition-colors">
+                Opus X 20th Anniversary
+              </h3>
+              <span class="text-xs text-muted uppercase tracking-wider">Limited</span>
+            </div>
+            <div class="flex flex-wrap gap-1.5 mb-3">
+              <span class="inline-block text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-semibold">Dominican Rosado</span>
+            </div>
+            <div class="text-sm text-muted mb-1">7 vitolas · 5 retailers</div>
+            <div class="flex items-end justify-between">
+              <div>
+                <div class="text-xs text-muted uppercase tracking-wider">From</div>
+                <div class="text-xl font-bold text-emerald-600">$890.00</div>
+              </div>
+              <span class="text-brand-500 font-semibold text-sm group-hover:translate-x-1 transition-transform">Compare &rarr;</span>
+            </div>
+          </a>
+
+          <!-- Sibling 4 -->
+          <a href="/cigars/arturo-fuente/opus-x-forbidden-x"
+             class="block w-72 md:w-auto shrink-0 bg-brand-50 hover:bg-white border border-gray-200 hover:border-brand-500 rounded-xl p-5 transition-all hover:shadow-md group">
+            <div class="flex items-start justify-between mb-2">
+              <h3 class="font-display font-semibold text-lg text-ink group-hover:text-brand-500 transition-colors">
+                Opus X Forbidden X
+              </h3>
+              <span class="text-xs text-muted uppercase tracking-wider">Limited</span>
+            </div>
+            <div class="flex flex-wrap gap-1.5 mb-3">
+              <span class="inline-block text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-semibold">Dominican Rosado</span>
+            </div>
+            <div class="text-sm text-muted mb-1">4 vitolas · 4 retailers</div>
+            <div class="flex items-end justify-between">
+              <div>
+                <div class="text-xs text-muted uppercase tracking-wider">From</div>
+                <div class="text-xl font-bold text-emerald-600">$740.00</div>
+              </div>
+              <span class="text-brand-500 font-semibold text-sm group-hover:translate-x-1 transition-transform">Compare &rarr;</span>
+            </div>
+          </a>
+
+          <!-- Sibling 5 -->
+          <a href="/cigars/arturo-fuente/opus-x-lost-city"
+             class="block w-72 md:w-auto shrink-0 bg-brand-50 hover:bg-white border border-gray-200 hover:border-brand-500 rounded-xl p-5 transition-all hover:shadow-md group">
+            <div class="flex items-start justify-between mb-2">
+              <h3 class="font-display font-semibold text-lg text-ink group-hover:text-brand-500 transition-colors">
+                Opus X Lost City
+              </h3>
+              <span class="text-xs text-muted uppercase tracking-wider">Limited</span>
+            </div>
+            <div class="flex flex-wrap gap-1.5 mb-3">
+              <span class="inline-block text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-semibold">Dominican Rosado</span>
+            </div>
+            <div class="text-sm text-muted mb-1">3 vitolas · 4 retailers</div>
+            <div class="flex items-end justify-between">
+              <div>
+                <div class="text-xs text-muted uppercase tracking-wider">From</div>
+                <div class="text-xl font-bold text-emerald-600">$550.00</div>
+              </div>
+              <span class="text-brand-500 font-semibold text-sm group-hover:translate-x-1 transition-transform">Compare &rarr;</span>
+            </div>
+          </a>
+
+          <!-- Sibling 6 -->
+          <a href="/cigars/arturo-fuente/opus-x-toymaker-forbidden-x"
+             class="block w-72 md:w-auto shrink-0 bg-brand-50 hover:bg-white border border-gray-200 hover:border-brand-500 rounded-xl p-5 transition-all hover:shadow-md group">
+            <div class="flex items-start justify-between mb-2">
+              <h3 class="font-display font-semibold text-lg text-ink group-hover:text-brand-500 transition-colors">
+                Opus X ToyMaker Forbidden X
+              </h3>
+              <span class="text-xs text-muted uppercase tracking-wider">Collab</span>
+            </div>
+            <div class="flex flex-wrap gap-1.5 mb-3">
+              <span class="inline-block text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-semibold">Dominican Rosado</span>
+            </div>
+            <div class="text-sm text-muted mb-1">2 vitolas · 3 retailers</div>
+            <div class="flex items-end justify-between">
+              <div>
+                <div class="text-xs text-muted uppercase tracking-wider">From</div>
+                <div class="text-xl font-bold text-emerald-600">$980.00</div>
+              </div>
+              <span class="text-brand-500 font-semibold text-sm group-hover:translate-x-1 transition-transform">Compare &rarr;</span>
+            </div>
+          </a>
+
+        </div>
+      </div>
+
+      <p class="text-xs text-muted italic text-center mt-4 md:hidden">
+        &larr; Scroll to see more releases &rarr;
+      </p>
+    </section>
+
+    <!-- ============================================================== -->
+    <!-- CONTEXT: start of the existing SEO / FAQ section (dimmed)         -->
+    <!-- ============================================================== -->
+    <div class="opacity-60 pointer-events-none">
+      <div class="text-center my-8">
+        <button class="bg-brand-500 text-white font-semibold py-3 px-8 rounded-xl shadow-md">
+          Learn More About This Cigar
+        </button>
+      </div>
+      <section class="bg-white rounded-xl p-8 shadow-sm border border-gray-100">
+        <h2 class="font-display text-2xl font-semibold text-brand-500 mb-3">About Arturo Fuente Opus X Oro Oscuro</h2>
+        <p class="text-muted">The Opus X Oro Oscuro is a limited-edition variation of the iconic Fuente Opus X...</p>
+      </section>
+    </div>
+  </div>
+
+  <!-- Variant toggle: compact vs. full -->
+  <div class="fixed bottom-4 right-4 bg-white shadow-lg rounded-xl p-3 border border-gray-200 text-sm">
+    <div class="font-semibold text-ink mb-1">Card variants to consider:</div>
+    <div class="text-muted text-xs leading-snug">Current layout is the "full card" (wrapper chip + vitola/retailer count + price).<br />A "compact" variant would drop the chip and count, showing just name + price + arrow.</div>
+  </div>
+
+</body>
+</html>
