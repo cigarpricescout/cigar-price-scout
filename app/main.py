@@ -18,7 +18,7 @@ import os
 import sqlite3
 import hashlib
 import psycopg2
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urlparse, urlunparse, parse_qsl, urlencode
 
 try:
     from apscheduler.schedulers.background import BackgroundScheduler
@@ -1307,7 +1307,7 @@ def compare(
             "promo": f"{promo_discount:.0f}% off" if promo_discount else None,
             "promo_code": promo_code,
             "delivered_after_promo": f"${final_delivered_cents/100:.2f}",
-            "url": product.url,
+            "url": add_tracking_params(product.url, brand=brand, line=line, retailer_key=product.retailer_key),
             "oos": not product.in_stock,
             "cheapest": False,
             "authorized": is_authorized,
@@ -1477,7 +1477,7 @@ def compare_all(
             "promo": f"{promo_discount}% off" if promo_discount else None,
             "promo_code": promo_code,
             "delivered_after_promo": f"${final_delivered_cents/100:.2f}",
-            "url": product.url,
+            "url": add_tracking_params(product.url, brand=brand, line=line, retailer_key=product.retailer_key),
             "oos": not product.in_stock,
             "cheapest": False,
             "authorized": is_authorized,
@@ -1942,6 +1942,72 @@ def _escape_html(s: str) -> str:
     )
 
 
+# --- Outbound-link attribution (UTM + per-retailer affiliate) ----------------
+# UTM tags prove to retailers that we sent them traffic. When we get approved
+# for an affiliate program, add an entry to AFFILIATE_PARAMS below and the same
+# wrapper will inject the affiliate tracking params in addition to UTM. Until
+# then, UTM alone is enough evidence to negotiate direct CPA deals — retailers
+# can see the inbound traffic in their own GA/Shopify analytics.
+AFFILIATE_PARAMS: dict[str, dict[str, str]] = {
+    # Populate as retailer programs get approved. Example shape:
+    # "famous": {"refid": "cigarpricescout"},
+    # "jrcigar": {"AID": "1234567", "PID": "8765432"},
+}
+
+
+def add_tracking_params(
+    url: str,
+    brand: str = "",
+    line: str = "",
+    retailer_key: str = "",
+) -> str:
+    """Wrap an outbound retailer URL with UTM + (if available) affiliate params.
+
+    - Preserves any existing query string and fragment on the original URL.
+    - Never overwrites a param the retailer URL already carries (defensive).
+    - Falls back to the original URL on any parse error so broken wrapping
+      never blocks a user from reaching a retailer.
+
+    UTM schema:
+      utm_source   = cigarpricescout.com          (who sent them)
+      utm_medium   = price_comparison             (channel type)
+      utm_campaign = <brand-slug>                 (aggregate by brand)
+      utm_content  = <line-slug>                  (granular per cigar line)
+    """
+    if not url or not isinstance(url, str):
+        return url
+    if not url.startswith(("http://", "https://")):
+        return url
+    try:
+        parsed = urlparse(url)
+        existing = parse_qsl(parsed.query, keep_blank_values=True)
+        existing_keys = {k.lower() for k, _ in existing}
+
+        to_add: list[tuple[str, str]] = [
+            ("utm_source", "cigarpricescout.com"),
+            ("utm_medium", "price_comparison"),
+        ]
+        if brand:
+            to_add.append(("utm_campaign", create_slug(brand)))
+        if line:
+            to_add.append(("utm_content", create_slug(line)))
+
+        # Per-retailer affiliate params (future). Added BEFORE UTM so the
+        # retailer's own cookie/attribution logic sees them first.
+        aff = AFFILIATE_PARAMS.get(retailer_key or "", {})
+        prefix: list[tuple[str, str]] = [(k, v) for k, v in aff.items()]
+
+        for k, v in prefix + to_add:
+            if k.lower() not in existing_keys:
+                existing.append((k, v))
+                existing_keys.add(k.lower())
+
+        new_query = urlencode(existing, doseq=True)
+        return urlunparse(parsed._replace(query=new_query))
+    except Exception:
+        return url
+
+
 @app.get("/cigars/{brand}/{line}", response_class=HTMLResponse)
 async def cigar_landing_page(brand: str, line: str):
     """
@@ -2093,7 +2159,9 @@ async def cigar_landing_page(brand: str, line: str):
                     f'<span class="font-semibold">{_escape_html(p.vitola)}</span></div>'
                     if p.vitola else ""
                 )
-                product_url = _escape_html(p.url) if p.url else "/"
+                product_url = _escape_html(
+                    add_tracking_params(p.url, brand=brand, line=line, retailer_key=p.retailer_key)
+                ) if p.url else "/"
                 ssr_mobile_cards.append(f'''<div class="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
           <div class="flex justify-between items-center pb-4 mb-4 border-b border-gray-200">
             <span class="font-display font-semibold text-lg">{_escape_html(p.retailer_name)}</span>
