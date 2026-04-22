@@ -2443,6 +2443,109 @@ async def trigger_feed_update():
     run_feed_processor()
     return {"status": "Feed processor triggered"}
 
+
+@app.get("/api/admin/analytics-health")
+async def analytics_health(request: Request):
+    """Snapshot of every analytics capture surface so we can verify data is
+    flowing without opening Railway/GSC/GA4 separately. Returns row counts and
+    first/last timestamps per table over the last 24h, 7d, and 30d. Also lists
+    the top 5 brands/lines by recent search volume so we can eyeball
+    realistic-looking data vs bot noise."""
+    admin_key = request.headers.get("X-Admin-Key", "")
+    expected = os.getenv("ADMIN_SECRET_KEY", "")
+    if not expected or admin_key != expected:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+
+    try:
+        conn = get_analytics_conn()
+        cur = conn.cursor()
+
+        def _table_stats(table: str) -> dict:
+            cur.execute(f"SELECT COUNT(*) FROM {table}")
+            total = cur.fetchone()[0] or 0
+            cur.execute(
+                f"SELECT COUNT(*) FROM {table} WHERE ts > NOW() - INTERVAL '24 hours'"
+            )
+            d1 = cur.fetchone()[0] or 0
+            cur.execute(
+                f"SELECT COUNT(*) FROM {table} WHERE ts > NOW() - INTERVAL '7 days'"
+            )
+            d7 = cur.fetchone()[0] or 0
+            cur.execute(
+                f"SELECT COUNT(*) FROM {table} WHERE ts > NOW() - INTERVAL '30 days'"
+            )
+            d30 = cur.fetchone()[0] or 0
+            cur.execute(f"SELECT MIN(ts), MAX(ts) FROM {table}")
+            mn, mx = cur.fetchone()
+            return {
+                "total_rows": total,
+                "rows_last_24h": d1,
+                "rows_last_7d": d7,
+                "rows_last_30d": d30,
+                "first_event_at": mn.isoformat() if mn else None,
+                "last_event_at": mx.isoformat() if mx else None,
+            }
+
+        report: dict = {}
+        for tbl in ("search_events", "click_events"):
+            try:
+                report[tbl] = _table_stats(tbl)
+            except Exception as e:
+                report[tbl] = {"error": str(e)}
+
+        # Top 5 brand+line searches in the last 7 days — sanity check that rows
+        # look like real users, not a flat stream of bots hitting one URL.
+        try:
+            cur.execute("""
+                SELECT brand, line, COUNT(*) AS n
+                FROM search_events
+                WHERE ts > NOW() - INTERVAL '7 days'
+                  AND brand IS NOT NULL AND line IS NOT NULL
+                GROUP BY brand, line
+                ORDER BY n DESC
+                LIMIT 5
+            """)
+            report["top_brand_line_last_7d"] = [
+                {"brand": r[0], "line": r[1], "searches": r[2]}
+                for r in cur.fetchall()
+            ]
+        except Exception as e:
+            report["top_brand_line_last_7d"] = {"error": str(e)}
+
+        # Top 5 retailers clicked in the last 7 days — verifies click_events
+        # is catching real traffic on the /go redirect (cheapest-retailer link).
+        try:
+            cur.execute("""
+                SELECT retailer, COUNT(*) AS n
+                FROM click_events
+                WHERE ts > NOW() - INTERVAL '7 days'
+                  AND retailer IS NOT NULL
+                GROUP BY retailer
+                ORDER BY n DESC
+                LIMIT 5
+            """)
+            report["top_retailers_last_7d"] = [
+                {"retailer": r[0], "clicks": r[1]} for r in cur.fetchall()
+            ]
+        except Exception as e:
+            report["top_retailers_last_7d"] = {"error": str(e)}
+
+        conn.close()
+
+        report["generated_at"] = datetime.utcnow().isoformat() + "Z"
+        report["ga4_measurement_id"] = "G-QV9XYRECFK"
+        report["notes"] = [
+            "search_events is populated by every /compare API call (one per page load).",
+            "click_events is only populated by the /go redirect on the 'cheapest retailer' button at the top of each cigar page; main table + mobile card clicks go direct and are tracked in GA4 only.",
+            "GA4 and Google Search Console data must be viewed in their respective UIs.",
+        ]
+        return report
+    except Exception as e:
+        return JSONResponse(
+            {"error": f"analytics DB unreachable: {e}"},
+            status_code=500,
+        )
+
 # ============== URL MATCH REVIEW API ==============
 
 @app.post("/api/admin/upload-matches")
