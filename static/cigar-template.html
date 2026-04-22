@@ -239,17 +239,6 @@
       <h1 class="font-display font-bold text-3xl tracking-wide">Cigar Price Scout</h1>
       </header>
       
-    <!-- CTA Button -->
-    <div class="text-center mb-4">
-      <a href="/" class="inline-block bg-brand-500 hover:bg-brand-600 text-white font-bold py-3 px-6 rounded-xl transition-all shadow-md hover:shadow-lg">
-        Scout Other Cigar Boxes
-      </a>
-      </div>
-
-    <p class="text-center text-muted font-semibold mt-6 mb-4">
-        Want shipping, tax, and promo calculations? Run a full comparison on our homepage.
-      </p>
-
       <main>
         <section id="results">
         <h2 id="resultsTitle" class="font-display font-bold text-2xl text-center tracking-wide my-4">
@@ -306,12 +295,14 @@
           </div>
         </a>
 
-        <!-- Action Buttons Row -->
-        <div id="actionButtonsRow" class="flex justify-center gap-3 my-5 flex-wrap" style="display: none;">
+        <!-- Action Buttons Row
+             Mobile: vertical stack, each button full width.
+             Desktop (md+): horizontal row, center-justified, wraps if needed. -->
+        <div id="actionButtonsRow" class="flex flex-col md:flex-row md:justify-center md:flex-wrap gap-3 my-5 max-w-md md:max-w-none mx-auto" style="display: none;">
           <button 
             id="price-history-btn"
             onclick="togglePriceHistory()"
-            class="inline-flex items-center gap-2 px-5 py-2.5 border border-brand-500 rounded-xl bg-white text-brand-500 font-semibold hover:bg-brand-50 transition-all text-sm"
+            class="w-full md:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 border border-brand-500 rounded-xl bg-white text-brand-500 font-semibold hover:bg-brand-50 transition-all text-sm"
           >
             <svg id="chart-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
             <span id="price-history-btn-text">Price History</span>
@@ -320,22 +311,30 @@
           <button 
             id="buying-guide-btn"
             onclick="toggleBuyingGuide()"
-            class="inline-flex items-center gap-2 px-5 py-2.5 border border-brand-500 rounded-xl bg-white text-brand-500 font-semibold hover:bg-brand-50 transition-all text-sm"
+            class="w-full md:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 border border-brand-500 rounded-xl bg-white text-brand-500 font-semibold hover:bg-brand-50 transition-all text-sm"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
             <span id="buying-guide-btn-text">Buying Guide</span>
             <span id="buying-guide-arrow" class="text-xs">&#9660;</span>
           </button>
+          {{RELATED_RELEASES_BUTTON}}
           <button 
             id="missingPriceBtn"
             onclick="openMissingPriceModal()"
-            class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gray-300 text-white font-semibold cursor-not-allowed transition-all text-sm"
+            class="w-full md:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gray-300 text-white font-semibold cursor-not-allowed transition-all text-sm"
             disabled
             title="Select a wrapper, vitola, and box quantity first"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Missing Price
           </button>
+          <a 
+            href="/"
+            class="w-full md:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-semibold transition-all text-sm shadow-sm hover:shadow"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            Scout Other Cigars
+          </a>
         </div>
 
         <!-- Price History Chart (collapsed by default) -->
@@ -415,6 +414,8 @@
             </div>
           </div>
         </div>
+
+        {{RELATED_RELEASES_SECTION}}
 
           <!-- Desktop Table -->
         <div class="desktop-table overflow-x-auto">
@@ -866,6 +867,29 @@
           guideExpanded = true;
           gtag('event', 'buying_guide_expand', { cigar: brand + ' ' + line });
           loadBuyingGuide();
+        }
+      }
+
+      // Related Releases (sibling cigar lines in the same brand)
+      let familyExpanded = false;
+      function toggleFamily() {
+        const section = document.getElementById('familySection');
+        const btnText = document.getElementById('family-btn-text');
+        const arrow = document.getElementById('family-arrow');
+        if (!section || !btnText || !arrow) return;
+
+        if (familyExpanded) {
+          section.style.display = 'none';
+          btnText.textContent = 'View Related Releases';
+          arrow.innerHTML = '&#9660;';
+          familyExpanded = false;
+        } else {
+          section.style.display = 'block';
+          btnText.textContent = 'Hide Related Releases';
+          arrow.innerHTML = '&#9650;';
+          familyExpanded = true;
+          try { gtag('event', 'related_releases_expand', { cigar: brand + ' ' + line }); } catch (e) {}
+          setTimeout(() => section.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
         }
       }
 

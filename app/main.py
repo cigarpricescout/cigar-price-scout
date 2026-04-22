@@ -1777,6 +1777,171 @@ Submitted: {datetime.now().strftime('%Y-%m-%d at %H:%M:%S')}
         logger.error(f"Error processing contact form: {e}")
         return {"status": "error", "message": "There was an error sending your message. Please try again."}
 
+def _build_related_releases_html(
+    all_products,
+    canonical_brand: str,
+    current_line_slug: str,
+    brand_slug: str,
+) -> tuple[str, str]:
+    """Build the Related Releases button + collapsible panel HTML for a cigar page.
+
+    Returns ("", "") when there aren't at least 2 qualifying sibling lines, so both
+    template placeholders collapse to nothing and the page looks identical to before.
+
+    A sibling line qualifies when:
+      - same brand (case-insensitive match against the canonical brand)
+      - different line slug from the current page
+      - has at least one (wrapper, vitola, box_qty) variation with
+        >= MIN_RETAILERS_FOR_COMPARISON distinct retailers (mirrors the 404 check in
+        the route, guaranteeing every sibling link lands on a valid comparison page)
+    """
+    from collections import defaultdict
+
+    canonical_brand_lower = canonical_brand.lower()
+    variation_retailers: dict[tuple, set] = defaultdict(set)
+    line_info: dict[str, dict] = defaultdict(
+        lambda: {
+            "line_display": None,
+            "retailers": set(),
+            "vitolas": set(),
+            "prices": [],
+            "wrapper_counts": defaultdict(int),
+        }
+    )
+
+    for p in all_products:
+        if p.brand.lower() != canonical_brand_lower:
+            continue
+        p_line_slug = normalize_line_slug(p.line)
+        if p_line_slug == current_line_slug:
+            continue
+
+        variation_retailers[(p.line, p.wrapper, p.vitola, p.box_qty)].add(p.retailer_key)
+
+        info = line_info[p.line]
+        if info["line_display"] is None:
+            info["line_display"] = p.line
+        info["retailers"].add(p.retailer_key)
+        info["vitolas"].add((p.wrapper, p.vitola, p.box_qty))
+        if p.price_cents:
+            info["prices"].append(p.price_cents / 100)
+        if p.wrapper:
+            info["wrapper_counts"][p.wrapper] += 1
+
+    valid_lines = {
+        line_key
+        for (line_key, _w, _v, _b), retailers in variation_retailers.items()
+        if len(retailers) >= MIN_RETAILERS_FOR_COMPARISON
+    }
+
+    siblings = []
+    for line_key in valid_lines:
+        info = line_info[line_key]
+        if not info["prices"]:
+            continue
+        most_common_wrapper = (
+            max(info["wrapper_counts"].items(), key=lambda kv: kv[1])[0]
+            if info["wrapper_counts"]
+            else ""
+        )
+        siblings.append(
+            {
+                "line_display": info["line_display"],
+                "line_slug": normalize_line_slug(info["line_display"]),
+                "retailer_count": len(info["retailers"]),
+                "vitola_count": len(info["vitolas"]),
+                "min_price": min(info["prices"]),
+                "wrapper": most_common_wrapper,
+            }
+        )
+
+    siblings.sort(key=lambda s: (-s["retailer_count"], -s["vitola_count"], s["line_display"]))
+    top_siblings = siblings[:3]
+
+    if len(top_siblings) < 2:
+        return "", ""
+
+    button_html = (
+        '<button\n'
+        '            id="family-btn"\n'
+        '            onclick="toggleFamily()"\n'
+        '            class="w-full md:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 border border-brand-500 rounded-xl bg-white text-brand-500 font-semibold hover:bg-brand-50 transition-all text-sm"\n'
+        '          >\n'
+        '            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+        '<polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>'
+        '<polyline points="2 17 12 22 22 17"></polyline>'
+        '<polyline points="2 12 12 17 22 12"></polyline></svg>\n'
+        '            <span id="family-btn-text">Related Releases</span>\n'
+        '            <span id="family-arrow" class="text-xs">&#9660;</span>\n'
+        '          </button>'
+    )
+
+    brand_display_for_heading = canonical_brand.strip()
+
+    cards_html_parts = []
+    for s in top_siblings:
+        price_str = f"${s['min_price']:,.2f}"
+        vitola_word = "vitola" if s["vitola_count"] == 1 else "vitolas"
+        retailer_word = "retailer" if s["retailer_count"] == 1 else "retailers"
+        wrapper_badge = (
+            f'<span class="inline-block text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-semibold">{_escape_html(s["wrapper"])}</span>'
+            if s["wrapper"]
+            else ""
+        )
+        cards_html_parts.append(
+            f'''<a href="/cigars/{brand_slug}/{s["line_slug"]}"
+             class="block bg-brand-50 hover:bg-white border border-gray-200 hover:border-brand-500 rounded-xl p-5 transition-all hover:shadow-md group">
+            <div class="flex items-start justify-between mb-2">
+              <h4 class="font-display font-semibold text-lg text-ink group-hover:text-brand-500 transition-colors">{_escape_html(s["line_display"])}</h4>
+            </div>
+            <div class="flex flex-wrap gap-1.5 mb-3">
+              {wrapper_badge}
+            </div>
+            <div class="text-sm text-muted mb-1">{s["vitola_count"]} {vitola_word} &middot; {s["retailer_count"]} {retailer_word}</div>
+            <div class="flex items-end justify-between">
+              <div>
+                <div class="text-xs text-muted uppercase tracking-wider">From</div>
+                <div class="text-xl font-bold text-emerald-600">{price_str}</div>
+              </div>
+              <span class="text-brand-500 font-semibold text-sm group-hover:translate-x-1 transition-transform">Compare &rarr;</span>
+            </div>
+          </a>'''
+        )
+
+    cards_html = "\n\n          ".join(cards_html_parts)
+
+    section_html = f'''<!-- Related Releases Section (collapsed by default) -->
+        <div id="familySection" style="display: none;" class="my-5">
+          <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+            <h3 class="font-display font-semibold text-xl text-brand-500 text-center mb-1">Other {_escape_html(brand_display_for_heading)} Releases</h3>
+            <p class="text-center text-sm text-muted italic mb-5">Prices are the current lowest advertised box price across tracked retailers.</p>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {cards_html}
+            </div>
+
+            <div class="text-center mt-6">
+              <a href="/" class="inline-flex items-center gap-1 text-brand-500 hover:text-brand-600 font-semibold text-sm underline-offset-4 hover:underline">
+                View all cigars on cigarpricescout.com &rarr;
+              </a>
+            </div>
+          </div>
+        </div>'''
+
+    return button_html, section_html
+
+
+def _escape_html(s: str) -> str:
+    if not s:
+        return ""
+    return (
+        s.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+
+
 @app.get("/cigars/{brand}/{line}", response_class=HTMLResponse)
 async def cigar_landing_page(brand: str, line: str):
     """
@@ -1861,6 +2026,19 @@ async def cigar_landing_page(brand: str, line: str):
         html = html.replace('{{LINE}}', line_display)
         html = html.replace('{{BRAND_SLUG}}', brand)
         html = html.replace('{{LINE_SLUG}}', line)
+
+        # Related Releases: other lines from the same brand with >= MIN_RETAILERS_FOR_COMPARISON
+        # on at least one variation. Sorted by total distinct retailer count desc, capped at 3.
+        # The toggle button is only rendered when there are >= 2 qualifying siblings.
+        canonical_brand = matching_products[0].brand
+        sibling_html_button, sibling_html_section = _build_related_releases_html(
+            all_products=all_products,
+            canonical_brand=canonical_brand,
+            current_line_slug=line.lower(),
+            brand_slug=brand,
+        )
+        html = html.replace('{{RELATED_RELEASES_BUTTON}}', sibling_html_button)
+        html = html.replace('{{RELATED_RELEASES_SECTION}}', sibling_html_section)
         
         # Generate server-side rendered product rows for SEO (Google sees real content, not "Loading...")
         ssr_rows = []
