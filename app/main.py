@@ -2005,7 +2005,14 @@ async def cigar_landing_page(brand: str, line: str):
 </html>""",
                 status_code=404
             )
-        
+
+        # Use the master-CSV canonical brand/line casing for everything the user and
+        # Google see going forward. URL-slug-derived `.title()` mangles numeric
+        # suffixes (e.g., "10th" -> "10Th", "xxx" -> "Xxx"), which makes SERP snippets
+        # look unprofessional and hurts CTR.
+        brand_display = matching_products[0].brand
+        line_display = matching_products[0].line
+
         # Read the template
         template_path = Path(f"{STATIC_PATH}/cigar-template.html")
         

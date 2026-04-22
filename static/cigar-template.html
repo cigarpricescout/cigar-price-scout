@@ -236,14 +236,17 @@
     <!-- Header -->
     <header class="flex flex-col items-center justify-center gap-2 py-7 text-center">
       <img src="/static/logo.png" alt="Cigar Price Scout Logo" class="w-24 h-20 object-contain" />
-      <h1 class="font-display font-bold text-3xl tracking-wide">Cigar Price Scout</h1>
+      <!-- Site-name banner (visually unchanged). Demoted from <h1> to <p> so the
+           cigar-specific heading below can claim the page's only <h1>, which is
+           Google's strongest on-page topic signal. -->
+      <p class="font-display font-bold text-3xl tracking-wide">Cigar Price Scout</p>
       </header>
       
       <main>
         <section id="results">
-        <h2 id="resultsTitle" class="font-display font-bold text-2xl text-center tracking-wide my-4">
-            {{BRAND}} {{LINE}} – Advertised Box Prices
-          </h2>
+        <h1 id="resultsTitle" class="font-display font-bold text-2xl text-center tracking-wide my-4">
+            {{BRAND}} {{LINE}} Prices – Compare {{RETAILER_COUNT}} Retailers
+          </h1>
 
         <!-- Filters
              Mobile: single column, each control full-width (uniform look).
@@ -598,7 +601,10 @@
             summaryEl.textContent = summary;
         }
 
-      if (titleEl) titleEl.textContent = `${data.brand} ${data.line} – Advertised Box Prices`;
+      // Intentionally NOT updating titleEl here — the server renders the canonical
+      // H1 (cigar name + "Prices – Compare N Retailers") and we want that to remain
+      // stable regardless of client-side filter state so Googlebot's JS render pass
+      // sees the same H1 as the initial SSR pass.
 
         populateFilters(data.results);
         renderTable(data.results);
