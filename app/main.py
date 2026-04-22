@@ -2048,24 +2048,77 @@ async def cigar_landing_page(brand: str, line: str):
         html = html.replace('{{RELATED_RELEASES_SECTION}}', sibling_html_section)
         
         # Generate server-side rendered product rows for SEO (Google sees real content, not "Loading...")
+        # Both desktop table rows AND mobile cards are SSR'd — critical for Googlebot
+        # Smartphone / mobile-first indexing, where the desktop table is hidden by CSS
+        # media queries. Without SSR mobile cards, mobile-first crawl sees an empty
+        # content area and flags the page as Soft 404.
         ssr_rows = []
+        ssr_mobile_cards = []
         prices = []
-        for p in matching_products[:10]:
+        # Deduplicate by (retailer, wrapper, vitola, box_qty) so the cards list doesn't
+        # show near-duplicate cards for the same variation across data reloads.
+        _seen_card_keys = set()
+        for p in matching_products[:25]:
             price_dollars = p.price_cents / 100 if p.price_cents else 0
             price_str = f"${price_dollars:.2f}" if p.price_cents else "N/A"
             if p.price_cents:
                 prices.append(price_dollars)
-            ssr_rows.append(f'''<tr class="border-b border-gray-100 hover:bg-gray-50">
-          <td class="p-3 text-sm">{p.retailer_name}</td>
-          <td class="p-3 text-sm">{p.wrapper or 'N/A'}</td>
-          <td class="p-3 text-sm">{p.vitola or 'N/A'}</td>
+
+            # Desktop table row (cap at 10)
+            if len(ssr_rows) < 10:
+                ssr_rows.append(f'''<tr class="border-b border-gray-100 hover:bg-gray-50">
+          <td class="p-3 text-sm">{_escape_html(p.retailer_name)}</td>
+          <td class="p-3 text-sm">{_escape_html(p.wrapper or "N/A")}</td>
+          <td class="p-3 text-sm">{_escape_html(p.vitola or "N/A")}</td>
           <td class="p-3 text-sm font-semibold">{price_str}</td>
         </tr>''')
-        
+
+            # Mobile card (cap at 10, dedupe on same-variation rows so Google
+            # doesn't see 10 identical cards for the same box).
+            card_key = (p.retailer_key, p.wrapper, p.vitola, p.box_qty)
+            if len(ssr_mobile_cards) < 10 and card_key not in _seen_card_keys and p.price_cents:
+                _seen_card_keys.add(card_key)
+                stock_html = (
+                    '<span class="text-emerald-600">In Stock</span>'
+                    if p.in_stock else
+                    '<span class="text-red-600">Out of Stock</span>'
+                )
+                wrapper_row = (
+                    f'<div class="flex justify-between"><span class="text-muted">Wrapper:</span>'
+                    f'<span class="font-semibold">{_escape_html(p.wrapper)}</span></div>'
+                    if p.wrapper else ""
+                )
+                vitola_row = (
+                    f'<div class="flex justify-between"><span class="text-muted">Vitola:</span>'
+                    f'<span class="font-semibold">{_escape_html(p.vitola)}</span></div>'
+                    if p.vitola else ""
+                )
+                product_url = _escape_html(p.url) if p.url else "/"
+                ssr_mobile_cards.append(f'''<div class="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+          <div class="flex justify-between items-center pb-4 mb-4 border-b border-gray-200">
+            <span class="font-display font-semibold text-lg">{_escape_html(p.retailer_name)}</span>
+            <span class="text-2xl font-bold text-brand-500">{price_str}</span>
+          </div>
+          <div class="space-y-2 mb-4">
+            {wrapper_row}
+            {vitola_row}
+            <div class="flex justify-between"><span class="text-muted">Box Size:</span><span class="font-semibold">{int(p.box_qty)}</span></div>
+            <div class="flex justify-between"><span class="text-muted">Stock:</span><span class="font-semibold">{stock_html}</span></div>
+          </div>
+          <a href="{product_url}" class="flex items-center justify-center py-4 bg-brand-500 hover:bg-brand-600 text-white rounded-xl font-semibold transition-all" target="_blank" rel="noopener">
+            View at {_escape_html(p.retailer_name)}
+          </a>
+        </div>''')
+
         if ssr_rows:
             html = html.replace('{{SSR_PRODUCT_ROWS}}', '\n'.join(ssr_rows))
         else:
             html = html.replace('{{SSR_PRODUCT_ROWS}}', '<tr><td colspan="4" class="p-4 text-center text-muted">Loading prices...</td></tr>')
+
+        if ssr_mobile_cards:
+            html = html.replace('{{SSR_MOBILE_CARDS}}', '\n'.join(ssr_mobile_cards))
+        else:
+            html = html.replace('{{SSR_MOBILE_CARDS}}', '')
         
         # Fill in JSON-LD structured data and meta tag values
         retailer_count = len({p.retailer_key for p in matching_products if p.price_cents})

@@ -444,9 +444,13 @@
           </div>
 
           
-          <!-- Mobile Cards -->
+          <!-- Mobile Cards
+               SSR-populated with real product data so Googlebot Smartphone
+               (mobile-first indexing) sees content on initial HTML parse even
+               if JS rendering times out. Replaced in-browser by
+               renderMobileCards() once /api/prices returns. -->
         <div id="mobileCards" class="mobile-cards space-y-4">
-            <!-- Mobile cards populated by JavaScript -->
+            {{SSR_MOBILE_CARDS}}
           </div>
           
           <!-- Fallback content for search engines and JavaScript-disabled browsers -->
@@ -466,18 +470,22 @@
           </noscript>
         </section>
 
-        <!-- SEO Content Section -->
+        <!-- SEO Content Section
+             Visible by default so mobile-first Googlebot counts it as primary
+             content (display:none content is crawled but weighted less, which
+             contributed to Soft 404 flags on thin-looking cigar pages). The
+             toggle button lets users collapse it if they want a cleaner view. -->
         <div class="text-center my-8">
-          <button 
-            id="seo-toggle-btn" 
+          <button
+            id="seo-toggle-btn"
             onclick="toggleSEO()"
             class="bg-brand-500 hover:bg-brand-600 text-white font-semibold py-3 px-8 rounded-xl transition-all shadow-md hover:shadow-lg"
           >
-            Learn More About This Cigar
+            Hide Details
           </button>
         </div>
 
-        <section id="seo-content" style="display: none;" class="seo-content my-8 bg-white rounded-xl p-8 shadow-sm border border-gray-100">
+        <section id="seo-content" class="seo-content my-8 bg-white rounded-xl p-8 shadow-sm border border-gray-100">
           
           <!-- About Section -->
           <h2 class="font-display">About {{BRAND}} {{LINE}}</h2>
@@ -1149,18 +1157,24 @@
         }
       }
 
-      // SEO Content Toggle
+      // SEO Content Toggle.
+      // Panel is VISIBLE by default (see template comment) so Googlebot counts
+      // it as primary content. Users can collapse for a cleaner view.
       function toggleSEO() {
         gtag('event', 'seo_expand', { cigar: brand + ' ' + line });
         const content = document.getElementById('seo-content');
         const button = document.getElementById('seo-toggle-btn');
-        
-        if (content.style.display === 'none') {
-          content.style.display = 'block';
-          button.textContent = 'Show Less';
-        } else {
+
+        // Compute current visibility from computed style, not inline style,
+        // so the initial 'no inline style' (visible by default) branch works.
+        const isVisible = window.getComputedStyle(content).display !== 'none';
+
+        if (isVisible) {
           content.style.display = 'none';
-          button.textContent = 'Learn More About This Cigar';
+          button.textContent = 'Show Details';
+        } else {
+          content.style.display = 'block';
+          button.textContent = 'Hide Details';
         }
       }
 
