@@ -1911,22 +1911,22 @@ def _build_related_releases_html(
     cards_html = "\n\n          ".join(cards_html_parts)
 
     section_html = f'''<!-- Related Releases Section (collapsed by default) -->
-        <div id="familySection" style="display: none;" class="my-5">
-          <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-            <h3 class="font-display font-semibold text-xl text-brand-500 text-center mb-1">Other {_escape_html(brand_display_for_heading)} Releases</h3>
-            <p class="text-center text-sm text-muted italic mb-5">Prices are the current lowest advertised box price across tracked retailers.</p>
+          <div id="familySection" style="display: none;" class="w-full md:basis-full md:order-last">
+            <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+              <h3 class="font-display font-semibold text-xl text-brand-500 text-center mb-1">Other {_escape_html(brand_display_for_heading)} Releases</h3>
+              <p class="text-center text-sm text-muted italic mb-5">Prices are the current lowest advertised box price across tracked retailers.</p>
 
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {cards_html}
-            </div>
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {cards_html}
+              </div>
 
-            <div class="text-center mt-6">
-              <a href="/" class="inline-flex items-center gap-1 text-brand-500 hover:text-brand-600 font-semibold text-sm underline-offset-4 hover:underline">
-                View all cigars on cigarpricescout.com &rarr;
-              </a>
+              <div class="text-center mt-6">
+                <a href="/" class="inline-flex items-center gap-1 text-brand-500 hover:text-brand-600 font-semibold text-sm underline-offset-4 hover:underline">
+                  View all cigars on cigarpricescout.com &rarr;
+                </a>
+              </div>
             </div>
-          </div>
-        </div>'''
+          </div>'''
 
     return button_html, section_html
 

@@ -245,18 +245,20 @@
             {{BRAND}} {{LINE}} – Advertised Box Prices
           </h2>
 
-        <!-- Filters -->
-        <div class="flex gap-3 justify-center my-5 flex-wrap">
-          <select id="wrapperFilter" class="p-3 border border-gray-200 rounded-xl bg-white font-serif text-base focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500">
+        <!-- Filters
+             Mobile: single column, each control full-width (uniform look).
+             Desktop (md+): horizontal row, center-justified. -->
+        <div class="flex flex-col md:flex-row gap-3 md:justify-center md:flex-wrap my-5 max-w-md md:max-w-none mx-auto">
+          <select id="wrapperFilter" class="w-full md:w-auto p-3 border border-gray-200 rounded-xl bg-white font-serif text-base focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500">
               <option value="">All Wrappers</option>
             </select>
-          <select id="vitolaFilter" class="p-3 border border-gray-200 rounded-xl bg-white font-serif text-base focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500">
+          <select id="vitolaFilter" class="w-full md:w-auto p-3 border border-gray-200 rounded-xl bg-white font-serif text-base focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500">
               <option value="">All Vitolas</option>
             </select>
-          <select id="boxQtyFilter" class="p-3 border border-gray-200 rounded-xl bg-white font-serif text-base focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500">
+          <select id="boxQtyFilter" class="w-full md:w-auto p-3 border border-gray-200 rounded-xl bg-white font-serif text-base focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500">
               <option value="">All Box Qty</option>
             </select>
-          <button onclick="clearFilters()" class="px-5 py-3 border border-brand-500 rounded-xl bg-white text-brand-500 font-semibold hover:bg-brand-50 transition-all">
+          <button onclick="clearFilters()" class="w-full md:w-auto px-5 py-3 border border-brand-500 rounded-xl bg-white text-brand-500 font-semibold hover:bg-brand-50 transition-all">
             Clear Filters
           </button>
           </div>
@@ -296,8 +298,10 @@
         </a>
 
         <!-- Action Buttons Row
-             Mobile: vertical stack, each button full width.
-             Desktop (md+): horizontal row, center-justified, wraps if needed. -->
+             Mobile (flex-col): each panel renders directly below its trigger button.
+             Desktop (md+): buttons in a single row; panels use `md:order-last md:basis-full`
+             so they break to their own full-width line below the row while still being
+             reachable in the DOM right after the button that triggered them. -->
         <div id="actionButtonsRow" class="flex flex-col md:flex-row md:justify-center md:flex-wrap gap-3 my-5 max-w-md md:max-w-none mx-auto" style="display: none;">
           <button 
             id="price-history-btn"
@@ -308,6 +312,57 @@
             <span id="price-history-btn-text">Price History</span>
             <span id="price-history-arrow" class="text-xs">&#9660;</span>
           </button>
+
+          <!-- Price History Chart (collapsed by default) -->
+          <div id="priceHistorySection" style="display: none;" class="w-full md:basis-full md:order-last">
+            <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+              <h3 id="priceHistoryTitle" class="font-display font-semibold text-xl text-brand-500 text-center mb-1"></h3>
+              <p class="text-center text-sm text-muted italic mb-3">Based on retailers currently monitored by Cigar Price Scout. Prices at other retailers may vary.</p>
+              
+              <!-- Summary badges above chart -->
+              <div id="priceHistoryBadges" style="display: none;" class="flex justify-center gap-4 mb-4">
+                <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gray-100 text-sm font-semibold text-gray-600">
+                  <span class="w-3 h-0.5 bg-gray-400 inline-block" style="border-top: 2px dashed #9CA3AF;"></span>
+                  Avg: <span id="badge-avg-price" class="text-gray-800">--</span>
+                </span>
+                <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-50 text-sm font-semibold text-red-600">
+                  <span class="w-2 h-2 bg-red-500 rounded-full inline-block"></span>
+                  Low: <span id="badge-low-price">--</span>
+                  <span id="badge-low-retailer" class="text-red-400 font-normal text-xs"></span>
+                </span>
+              </div>
+
+              <p id="priceHistoryPrompt" class="text-center text-muted py-8" style="display: none;">Select a wrapper and vitola above to view price history.</p>
+
+              <!-- Desktop: interactive chart -->
+              <div id="priceHistoryChart" class="history-desktop" style="display: none; position: relative; max-height: 320px;">
+                <canvas id="historyCanvas"></canvas>
+              </div>
+
+              <!-- Mobile: metrics summary card -->
+              <div id="priceHistoryMobile" class="history-mobile" style="display: none;">
+                <div class="grid grid-cols-3 gap-3 text-center">
+                  <div class="bg-emerald-50 rounded-lg p-4">
+                    <div class="text-xs text-muted uppercase tracking-wide mb-1">Lowest</div>
+                    <div id="mobile-low-price" class="text-xl font-bold text-emerald-600">--</div>
+                    <div id="mobile-low-retailer" class="text-xs text-muted mt-1"></div>
+                  </div>
+                  <div class="bg-gray-50 rounded-lg p-4">
+                    <div class="text-xs text-muted uppercase tracking-wide mb-1">Average</div>
+                    <div id="mobile-avg-price" class="text-xl font-bold text-gray-700">--</div>
+                    <div class="text-xs text-muted mt-1">across retailers</div>
+                  </div>
+                  <div class="bg-red-50 rounded-lg p-4">
+                    <div class="text-xs text-muted uppercase tracking-wide mb-1">Highest</div>
+                    <div id="mobile-high-price" class="text-xl font-bold text-red-500">--</div>
+                    <div id="mobile-high-retailer" class="text-xs text-muted mt-1"></div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
           <button 
             id="buying-guide-btn"
             onclick="toggleBuyingGuide()"
@@ -317,7 +372,38 @@
             <span id="buying-guide-btn-text">Buying Guide</span>
             <span id="buying-guide-arrow" class="text-xs">&#9660;</span>
           </button>
+
+          <!-- Buying Guide Section (collapsed by default) -->
+          <div id="buyingGuideSection" style="display: none;" class="w-full md:basis-full md:order-last">
+            <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+              <h3 class="font-display font-semibold text-xl text-brand-500 text-center mb-1">Buying Guide</h3>
+              <p id="buyingGuidePrompt" class="text-center text-muted py-8" style="display: none;">Select a wrapper and vitola above to view buying recommendations.</p>
+              <div id="buyingGuideCards" style="display: none;">
+                <p class="text-center text-sm text-muted italic mb-4">Based on <span id="rec-data-points"></span> historical price observations across all monitored retailers</p>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div class="rounded-xl border-2 border-emerald-200 bg-emerald-50 p-4 text-center">
+                    <div class="text-sm uppercase tracking-wider text-emerald-600 font-bold mb-1">Great Deal</div>
+                    <div class="text-xl font-bold text-emerald-700">Below $<span id="rec-buy-below"></span></div>
+                    <p class="text-sm text-emerald-600 mt-2">This price is in the bottom 25% historically. Buy now before it goes back up.</p>
+                  </div>
+                  <div class="rounded-xl border-2 border-amber-200 bg-amber-50 p-4 text-center">
+                    <div class="text-sm uppercase tracking-wider text-amber-600 font-bold mb-1">Fair Price</div>
+                    <div class="text-lg font-bold text-amber-700" style="white-space: nowrap;">$<span id="rec-fair-low"></span> – $<span id="rec-fair-high"></span></div>
+                    <p class="text-sm text-amber-600 mt-2">Typical market range. A decent price, but discounts come around if you can wait.</p>
+                  </div>
+                  <div class="rounded-xl border-2 border-rose-200 bg-rose-50 p-4 text-center">
+                    <div class="text-sm uppercase tracking-wider text-rose-600 font-bold mb-1">Premium Pricing</div>
+                    <div class="text-xl font-bold text-rose-700">Above $<span id="rec-premium-above"></span></div>
+                    <p class="text-sm text-rose-600 mt-2">Higher than most retailers. Better deals are available — check the comparison below.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {{RELATED_RELEASES_BUTTON}}
+          {{RELATED_RELEASES_SECTION}}
+
           <button 
             id="missingPriceBtn"
             onclick="openMissingPriceModal()"
@@ -326,96 +412,16 @@
             title="Select a wrapper, vitola, and box quantity first"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            Missing Price
+            <span>Missing Price</span>
           </button>
           <a 
             href="/"
             class="w-full md:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-semibold transition-all text-sm shadow-sm hover:shadow"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            Scout Other Cigars
+            <span>Scout Other Cigars</span>
           </a>
         </div>
-
-        <!-- Price History Chart (collapsed by default) -->
-        <div id="priceHistorySection" style="display: none;" class="my-5">
-          <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-            <h3 id="priceHistoryTitle" class="font-display font-semibold text-xl text-brand-500 text-center mb-1"></h3>
-            <p class="text-center text-sm text-muted italic mb-3">Based on retailers currently monitored by Cigar Price Scout. Prices at other retailers may vary.</p>
-            
-            <!-- Summary badges above chart -->
-            <div id="priceHistoryBadges" style="display: none;" class="flex justify-center gap-4 mb-4">
-              <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gray-100 text-sm font-semibold text-gray-600">
-                <span class="w-3 h-0.5 bg-gray-400 inline-block" style="border-top: 2px dashed #9CA3AF;"></span>
-                Avg: <span id="badge-avg-price" class="text-gray-800">--</span>
-              </span>
-              <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-50 text-sm font-semibold text-red-600">
-                <span class="w-2 h-2 bg-red-500 rounded-full inline-block"></span>
-                Low: <span id="badge-low-price">--</span>
-                <span id="badge-low-retailer" class="text-red-400 font-normal text-xs"></span>
-              </span>
-            </div>
-
-            <p id="priceHistoryPrompt" class="text-center text-muted py-8" style="display: none;">Select a wrapper and vitola above to view price history.</p>
-
-            <!-- Desktop: interactive chart -->
-            <div id="priceHistoryChart" class="history-desktop" style="display: none; position: relative; max-height: 320px;">
-              <canvas id="historyCanvas"></canvas>
-            </div>
-
-            <!-- Mobile: metrics summary card -->
-            <div id="priceHistoryMobile" class="history-mobile" style="display: none;">
-              <div class="grid grid-cols-3 gap-3 text-center">
-                <div class="bg-emerald-50 rounded-lg p-4">
-                  <div class="text-xs text-muted uppercase tracking-wide mb-1">Lowest</div>
-                  <div id="mobile-low-price" class="text-xl font-bold text-emerald-600">--</div>
-                  <div id="mobile-low-retailer" class="text-xs text-muted mt-1"></div>
-                </div>
-                <div class="bg-gray-50 rounded-lg p-4">
-                  <div class="text-xs text-muted uppercase tracking-wide mb-1">Average</div>
-                  <div id="mobile-avg-price" class="text-xl font-bold text-gray-700">--</div>
-                  <div class="text-xs text-muted mt-1">across retailers</div>
-                </div>
-                <div class="bg-red-50 rounded-lg p-4">
-                  <div class="text-xs text-muted uppercase tracking-wide mb-1">Highest</div>
-                  <div id="mobile-high-price" class="text-xl font-bold text-red-500">--</div>
-                  <div id="mobile-high-retailer" class="text-xs text-muted mt-1"></div>
-                </div>
-              </div>
-            </div>
-
-          </div>
-        </div>
-
-        <!-- Buying Guide Section (collapsed by default) -->
-        <div id="buyingGuideSection" style="display: none;" class="my-5">
-          <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-            <h3 class="font-display font-semibold text-xl text-brand-500 text-center mb-1">Buying Guide</h3>
-            <p id="buyingGuidePrompt" class="text-center text-muted py-8" style="display: none;">Select a wrapper and vitola above to view buying recommendations.</p>
-            <div id="buyingGuideCards" style="display: none;">
-              <p class="text-center text-sm text-muted italic mb-4">Based on <span id="rec-data-points"></span> historical price observations across all monitored retailers</p>
-              <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div class="rounded-xl border-2 border-emerald-200 bg-emerald-50 p-4 text-center">
-                  <div class="text-sm uppercase tracking-wider text-emerald-600 font-bold mb-1">Great Deal</div>
-                  <div class="text-xl font-bold text-emerald-700">Below $<span id="rec-buy-below"></span></div>
-                  <p class="text-sm text-emerald-600 mt-2">This price is in the bottom 25% historically. Buy now before it goes back up.</p>
-                </div>
-                <div class="rounded-xl border-2 border-amber-200 bg-amber-50 p-4 text-center">
-                  <div class="text-sm uppercase tracking-wider text-amber-600 font-bold mb-1">Fair Price</div>
-                  <div class="text-lg font-bold text-amber-700" style="white-space: nowrap;">$<span id="rec-fair-low"></span> – $<span id="rec-fair-high"></span></div>
-                  <p class="text-sm text-amber-600 mt-2">Typical market range. A decent price, but discounts come around if you can wait.</p>
-                </div>
-                <div class="rounded-xl border-2 border-rose-200 bg-rose-50 p-4 text-center">
-                  <div class="text-sm uppercase tracking-wider text-rose-600 font-bold mb-1">Premium Pricing</div>
-                  <div class="text-xl font-bold text-rose-700">Above $<span id="rec-premium-above"></span></div>
-                  <p class="text-sm text-rose-600 mt-2">Higher than most retailers. Better deals are available — check the comparison below.</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {{RELATED_RELEASES_SECTION}}
 
           <!-- Desktop Table -->
         <div class="desktop-table overflow-x-auto">
@@ -680,14 +686,17 @@
         const w = document.getElementById('wrapperFilter').value;
         const v = document.getElementById('vitolaFilter').value;
         const q = document.getElementById('boxQtyFilter').value;
+        // NOTE: these strings must keep `w-full md:w-auto` and `justify-center` in sync
+        // with the static class list on the button so mobile alignment (full-width,
+        // centered text) is preserved after the JS override runs.
         if (w && v && q) {
           btn.disabled = false;
-          btn.className = 'inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand-500 text-white font-semibold hover:bg-brand-600 transition-all text-sm';
+          btn.className = 'w-full md:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-brand-500 text-white font-semibold hover:bg-brand-600 transition-all text-sm';
           btn.style.cursor = 'pointer';
           btn.title = '';
         } else {
           btn.disabled = true;
-          btn.className = 'inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gray-300 text-white font-semibold cursor-not-allowed transition-all text-sm';
+          btn.className = 'w-full md:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gray-300 text-white font-semibold cursor-not-allowed transition-all text-sm';
           btn.title = 'Select a wrapper, vitola, and box quantity first';
         }
       }
