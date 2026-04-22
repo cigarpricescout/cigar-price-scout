@@ -1,4 +1,4 @@
 cigar_id,title,url,brand,line,wrapper,vitola,size,box_qty,price,in_stock,current_promotions_applied
-ARTUROFUENTE|ARTUROFUENTE|HEMINGWAY|MASTERPIECE|MASTERPIECE|9x52|CAM|BOX10,,https://santamonicacigars.com/products/arturo-fuente-hemingway-masterpiece,Arturo Fuente,Hemingway,Cameroon,Masterpiece,,10,,,
-ASHTON|ASHTON|CLASSIC|CHURCHILL|CHURCHILL|7.5x52|CT|BOX25,,https://santamonicacigars.com/products/ashton-classic-churchill,Ashton,Classic,Connecticut Shade,Churchill,,25,,,
-ASHTON|ASHTON|CLASSIC|CORONA|CORONA|5.5x44|CT|BOX25,,https://santamonicacigars.com/products/ashton-classic-corona,Ashton,Classic,Connecticut Shade,Corona,,25,,,
+ARTUROFUENTE|ARTUROFUENTE|HEMINGWAY|MASTERPIECE|MASTERPIECE|9x52|CAM|BOX10,Masterpiece,https://santamonicacigars.com/products/arturo-fuente-hemingway-masterpiece,Arturo Fuente,Hemingway,Cameroon,Masterpiece,9x52,10,240.0,True,
+ASHTON|ASHTON|CLASSIC|CHURCHILL|CHURCHILL|7.5x52|CT|BOX25,Churchill,https://santamonicacigars.com/products/ashton-classic-churchill,Ashton,Classic,Connecticut Shade,Churchill,7.5x52,25,500.0,True,
+ASHTON|ASHTON|CLASSIC|CORONA|CORONA|5.5x44|CT|BOX25,Corona,https://santamonicacigars.com/products/ashton-classic-corona,Ashton,Classic,Connecticut Shade,Corona,5.5x44,25,400.0,True,
