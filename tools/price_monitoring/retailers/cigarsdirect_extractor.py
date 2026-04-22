@@ -113,7 +113,7 @@ def _extract_pricing_minimal_fix(soup: BeautifulSoup) -> tuple:
             if 'grid-product__price' in elem_class:
                 continue  # Skip navigation grid prices
             
-            price_text = elem.get_text()
+            price_text = elem.get_text().replace(',', '')
             price_match = re.search(r'\$(\d+\.?\d*)', price_text)
             if price_match:
                 try:

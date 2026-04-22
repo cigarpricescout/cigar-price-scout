@@ -63,7 +63,8 @@ def _extract_watch_city_pricing_fixed(soup: BeautifulSoup) -> tuple:
     msrp_price = None
     discount_percent = None
     
-    page_text = soup.get_text()
+    # Strip thousands separators so prices >= $1,000 parse correctly.
+    page_text = soup.get_text().replace(',', '')
     print(f"    [PRICE] Analyzing pricing...")
     
     # Strategy 1: Price ranges like "$10.60 - $409.50"

@@ -98,8 +98,8 @@ class MomsCigarsExtractor:
                             qty = int(qty_match.group(1))
                             print(f"    Quantity: {qty}")
                             
-                            # Extract price from option text
-                            price_match = re.search(r'\$(\d+\.?\d*)', option_text)
+                            # Extract price from option text (strip thousands separators)
+                            price_match = re.search(r'\$(\d+\.?\d*)', option_text.replace(',', ''))
                             if price_match:
                                 price = float(price_match.group(1))
                                 print(f"    Price: ${price}")

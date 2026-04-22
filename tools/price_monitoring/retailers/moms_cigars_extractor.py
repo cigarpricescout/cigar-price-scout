@@ -233,13 +233,13 @@ def _parse_html_table(table, target_vitola: str = None, target_packaging: str = 
                 original_price = None
                 
                 if price_col is not None and price_col < len(cells):
-                    price_text = cells[price_col].get_text().strip()
+                    price_text = cells[price_col].get_text().strip().replace(',', '')
                     price_match = re.search(r'\$(\d+\.?\d*)', price_text)
                     if price_match:
                         price = float(price_match.group(1))
                 
                 if msrp_col is not None and msrp_col < len(cells):
-                    msrp_text = cells[msrp_col].get_text().strip()
+                    msrp_text = cells[msrp_col].get_text().strip().replace(',', '')
                     msrp_match = re.search(r'\$(\d+\.?\d*)', msrp_text)
                     if msrp_match:
                         original_price = float(msrp_match.group(1))

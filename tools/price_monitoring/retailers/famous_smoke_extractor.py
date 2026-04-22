@@ -66,7 +66,8 @@ def _extract_famous_pricing_fixed(soup: BeautifulSoup) -> tuple:
     msrp_price = None
     discount_percent = None
     
-    page_text = soup.get_text()
+    # Strip thousands separators so prices >= $1,000 parse correctly.
+    page_text = soup.get_text().replace(',', '')
     
     # Debug: Show what prices are actually in the page
     all_dollar_amounts = re.findall(r'\$(\d+\.?\d*)', page_text)
@@ -93,7 +94,7 @@ def _extract_famous_pricing_fixed(soup: BeautifulSoup) -> tuple:
         for element in msrp_elements:
             parent = element.parent if element.parent else None
             if parent:
-                search_text = parent.get_text()
+                search_text = parent.get_text().replace(',', '')
                 print(f"DEBUG: MSRP parent text: {search_text[:100]}")
                 price_match = re.search(r'\$(\d+\.?\d*)', search_text)
                 if price_match:

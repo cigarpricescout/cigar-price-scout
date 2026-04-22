@@ -78,7 +78,8 @@ class BigHumidorExtractor:
 
     def _extract_price(self, soup: BeautifulSoup) -> Optional[float]:
         """Extract price using Big Humidor's actual format - two prices separated by spaces"""
-        page_text = soup.get_text()
+        # Strip thousands separators so prices >= $1,000 parse correctly.
+        page_text = soup.get_text().replace(',', '')
         
         # Strategy 1: Look for Big Humidor's actual format: "Price: $X.XX  $Y.YY"
         dual_price_pattern = r'price:\s*\$(\d+(?:\.\d{2})?)\s+\$(\d+(?:\.\d{2})?)'

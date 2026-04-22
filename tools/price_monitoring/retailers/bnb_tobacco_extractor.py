@@ -195,7 +195,7 @@ def _extract_from_price_elements(soup: BeautifulSoup) -> Optional[float]:
                         pass
                 
                 # Check text content
-                text = elem.get_text().strip()
+                text = elem.get_text().strip().replace(',', '')
                 price_match = re.search(r'\$(\d+\.?\d*)', text)
                 if price_match:
                     try:
@@ -301,7 +301,7 @@ def _extract_original_price(soup: BeautifulSoup) -> Optional[float]:
         compare_elements = soup.find_all(['del', 's']) + soup.find_all(attrs={'class': re.compile(r'compare|original|was', re.I)})
         
         for elem in compare_elements:
-            text = elem.get_text().strip()
+            text = elem.get_text().strip().replace(',', '')
             price_match = re.search(r'\$(\d+\.?\d*)', text)
             if price_match:
                 try:

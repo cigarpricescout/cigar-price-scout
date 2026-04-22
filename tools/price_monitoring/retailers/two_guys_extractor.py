@@ -103,7 +103,7 @@ class TwoGuysCigarsExtractor:
         # If specific selectors don't work, try broad search
         if not price:
             # Look for any element containing price-like pattern
-            all_text = soup.get_text()
+            all_text = soup.get_text().replace(',', '')
             price_matches = re.findall(r'\$(\d+\.?\d*)', all_text)
             for match in price_matches:
                 try:

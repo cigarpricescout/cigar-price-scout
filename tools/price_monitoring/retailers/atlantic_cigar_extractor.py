@@ -63,7 +63,7 @@ class AtlanticCigarExtractor:
         # Priority 1: Look for the specific sale price element (price-value class)
         sale_price_elem = soup.find('span', class_='price-value')
         if sale_price_elem:
-            price_text = sale_price_elem.get_text().strip()
+            price_text = sale_price_elem.get_text().strip().replace(',', '')
             price_match = re.search(r'\$?(\d+(?:\.\d{2})?)', price_text)
             if price_match:
                 try:
@@ -76,18 +76,19 @@ class AtlanticCigarExtractor:
         for script in scripts:
             script_text = script.get_text()
             if 'BCData' in script_text and 'sale_price_without_tax' in script_text:
-                # Extract sale price from JavaScript BCData
-                match = re.search(r'"sale_price_without_tax":\s*{\s*"formatted":\s*"\$(\d+\.\d+)"', script_text)
+                # Extract sale price from JavaScript BCData.
+                # The "formatted" field includes "$" and thousands separators, e.g. "$1,329.27".
+                match = re.search(r'"sale_price_without_tax":\s*{\s*"formatted":\s*"\$([\d,]+(?:\.\d+)?)"', script_text)
                 if match:
                     try:
-                        return float(match.group(1))
+                        return float(match.group(1).replace(',', ''))
                     except ValueError:
                         continue
         
         # Priority 3: Look for any price-value elements
         price_value_elems = soup.find_all('span', class_=re.compile(r'price-value'))
         for elem in price_value_elems:
-            price_text = elem.get_text().strip()
+            price_text = elem.get_text().strip().replace(',', '')
             price_match = re.search(r'\$?(\d+(?:\.\d{2})?)', price_text)
             if price_match:
                 try:
@@ -178,7 +179,7 @@ class AtlanticCigarExtractor:
         # Priority 1: Look for MSRP in price-rrp class
         msrp_elem = soup.find('span', class_='price-rrp')
         if msrp_elem:
-            price_text = msrp_elem.get_text().strip()
+            price_text = msrp_elem.get_text().strip().replace(',', '')
             price_match = re.search(r'\$?(\d+(?:\.\d{2})?)', price_text)
             if price_match:
                 try:
@@ -194,11 +195,12 @@ class AtlanticCigarExtractor:
         for script in scripts:
             script_text = script.get_text()
             if 'BCData' in script_text and 'rrp_without_tax' in script_text:
-                # Extract RRP from JavaScript BCData
-                match = re.search(r'"rrp_without_tax":\s*{\s*"formatted":\s*"\$(\d+\.\d+)"', script_text)
+                # Extract RRP from JavaScript BCData.
+                # The "formatted" field includes "$" and thousands separators, e.g. "$1,329.27".
+                match = re.search(r'"rrp_without_tax":\s*{\s*"formatted":\s*"\$([\d,]+(?:\.\d+)?)"', script_text)
                 if match:
                     try:
-                        msrp = float(match.group(1))
+                        msrp = float(match.group(1).replace(',', ''))
                         if msrp > sale_price:
                             discount_percent = ((msrp - sale_price) / msrp) * 100
                             return round(discount_percent, 1)

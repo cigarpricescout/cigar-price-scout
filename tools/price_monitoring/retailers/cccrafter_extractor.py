@@ -215,7 +215,7 @@ class CCCrafterExtractor:
             # Look for price display elements within variation forms
             price_elems = form.find_all(['span', 'div'], class_=lambda x: x and 'price' in x.lower())
             for elem in price_elems:
-                price_text = elem.get_text(strip=True)
+                price_text = elem.get_text(strip=True).replace(',', '')
                 if '$' in price_text:
                     prices = re.findall(r'\$\s*(\d+(?:\.\d{2})?)', price_text)
                     for price_str in prices:
@@ -232,8 +232,9 @@ class CCCrafterExtractor:
             price_container = soup.find('p', class_='price') or soup.find('span', class_='price')
             
             if price_container:
-                container_text = price_container.get_text(strip=True)
-                price_data['raw_text'] = container_text
+                raw_text = price_container.get_text(strip=True)
+                price_data['raw_text'] = raw_text
+                container_text = raw_text.replace(',', '')
                 logger.debug(f"Found price container with text: {container_text}")
                 
                 # Extract all price values from the container
@@ -276,8 +277,8 @@ class CCCrafterExtractor:
         if not price_text:
             return None
             
-        # Remove common currency symbols and whitespace
-        clean_text = re.sub(r'[^\d\.,]', '', price_text)
+        # Remove common currency symbols, whitespace, and thousands separators
+        clean_text = re.sub(r'[^\d\.]', '', price_text.replace(',', ''))
         
         # Extract price using regex
         price_match = re.search(r'(\d+(?:\.\d{2})?)', clean_text)

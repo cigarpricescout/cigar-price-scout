@@ -106,7 +106,8 @@ class CoronaCigarExtractor:
         Extract current price from Corona Cigar product page
         Strategy: The sale price appears AFTER MSRP and before "Save X%"
         """
-        page_text = soup.get_text()
+        # Strip thousands separators so prices >= $1,000 parse correctly.
+        page_text = soup.get_text().replace(',', '')
         
         # Method 1: Look for price pattern between MSRP and "Save X%"
         # Pattern: MSRP: $227.90 ... $198.95 ... Save 13%
@@ -130,7 +131,7 @@ class CoronaCigarExtractor:
             main_section = product_title.find_parent(['div', 'section', 'article'])
             
             if main_section:
-                price_text = main_section.get_text()
+                price_text = main_section.get_text().replace(',', '')
                 price_matches = re.findall(r'\$(\d+(?:,\d{3})*(?:\.\d{2})?)', price_text)
                 
                 # Skip navigation prices ($50, $100, etc.) and get product prices

@@ -138,7 +138,7 @@ class BestCigarPricesExtractor:
         prices_found = []
         
         for elem in price_elements:
-            text = elem.get_text().strip()
+            text = elem.get_text().strip().replace(',', '')
             # Extract all prices from text
             price_matches = re.findall(r'\$(\d+\.?\d*)', text)
             for price_text in price_matches:
@@ -153,7 +153,7 @@ class BestCigarPricesExtractor:
         # Look specifically for MSRP (usually crossed out or labeled)
         msrp_elements = soup.find_all(text=re.compile(r'msrp|retail', re.IGNORECASE))
         for msrp_text in msrp_elements:
-            msrp_match = re.search(r'\$(\d+\.?\d*)', str(msrp_text))
+            msrp_match = re.search(r'\$(\d+\.?\d*)', str(msrp_text).replace(',', ''))
             if msrp_match:
                 try:
                     msrp_price = float(msrp_match.group(1))
@@ -167,7 +167,7 @@ class BestCigarPricesExtractor:
                                  soup.find_all(attrs={'style': re.compile(r'text-decoration:\s*line-through', re.I)}))
             
             for elem in strikethrough_elems:
-                msrp_text = elem.get_text().strip()
+                msrp_text = elem.get_text().strip().replace(',', '')
                 msrp_match = re.search(r'\$(\d+\.?\d*)', msrp_text)
                 if msrp_match:
                     try:

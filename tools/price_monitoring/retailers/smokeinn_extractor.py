@@ -80,8 +80,9 @@ class SmokeInnExtractor:
         sale_price = None
         msrp_price = None
         
-        # Strategy 1: Look for "Our price" and "Retail price" text patterns
-        page_text = soup.get_text()
+        # Strategy 1: Look for "Our price" and "Retail price" text patterns.
+        # Strip thousands separators so prices >= $1,000 parse correctly.
+        page_text = soup.get_text().replace(',', '')
         
         # Find "Our price" (sale price)
         our_price_match = re.search(r'our\s+price[:\s]*\$?(\d+(?:\.\d{2})?)', page_text, re.IGNORECASE)
@@ -106,7 +107,7 @@ class SmokeInnExtractor:
             
             for elem in price_elements:
                 parent = elem.parent
-                parent_text = parent.get_text().strip()
+                parent_text = parent.get_text().strip().replace(',', '')
                 
                 # Check for sale price indicators
                 if any(term in parent_text.lower() for term in ['our price', 'sale', 'special', 'now']):
@@ -131,7 +132,7 @@ class SmokeInnExtractor:
             strikethrough_elements = soup.find_all(['del', 's']) + soup.find_all(attrs={'style': re.compile(r'line-through', re.I)})
             
             for elem in strikethrough_elements:
-                price_text = elem.get_text()
+                price_text = elem.get_text().replace(',', '')
                 price_match = re.search(r'\$(\d+(?:\.\d{2})?)', price_text)
                 if price_match:
                     try:

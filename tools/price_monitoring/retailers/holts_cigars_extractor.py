@@ -240,7 +240,7 @@ class HoltsCigarsExtractor:
     def _extract_row_data(self, row_element, target_vitola: str, target_size: str) -> Optional[Dict]:
         """Extract pricing and stock data from a table row element"""
         
-        row_text = row_element.get_text()
+        row_text = row_element.get_text().replace(',', '')
         
         # Extract all prices from the row
         price_matches = re.findall(r'\$(\d+(?:\.\d{2})?)', row_text)

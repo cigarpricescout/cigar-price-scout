@@ -38,7 +38,14 @@ jobs:
         run: |
           git config user.name "GitHub Actions Bot"
           git config user.email "actions@github.com"
-      
+
+      - name: Sync master_cigars.db from master_cigars.csv
+        # The CSV is the source of truth for cigar metadata, but the price
+        # updaters read from the SQLite DB. Without this step, any cigar_id
+        # added to the CSV since the last commit of the DB shows up in
+        # retailer CSVs with blank title/brand/line/etc.
+        run: python tools/sync_master_db_from_csv.py
+
       - name: Run pricing automation
         run: |
           cd automation

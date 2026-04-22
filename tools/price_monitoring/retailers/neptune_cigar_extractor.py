@@ -140,7 +140,7 @@ def _extract_neptune_pricing(soup: BeautifulSoup, target_box_qty: int = None) ->
             # Extract prices from each cell in order
             cell_prices = []
             for i, cell in enumerate(cells):
-                cell_text = cell.get_text().strip()
+                cell_text = cell.get_text().strip().replace(',', '')
                 price_matches = re.findall(r'\$(\d+\.?\d*)', cell_text)
                 
                 for price_match in price_matches:
@@ -212,7 +212,7 @@ def _extract_neptune_pricing(soup: BeautifulSoup, target_box_qty: int = None) ->
         for elem in our_price_elements:
             parent = elem.parent if elem.parent else None
             if parent:
-                parent_text = parent.get_text()
+                parent_text = parent.get_text().replace(',', '')
                 price_match = re.search(r'\$(\d+\.?\d*)', parent_text)
                 if price_match:
                     try:

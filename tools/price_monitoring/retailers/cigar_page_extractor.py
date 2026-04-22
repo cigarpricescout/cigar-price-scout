@@ -172,8 +172,9 @@ def _extract_cigar_page_pricing_fixed(soup: BeautifulSoup, target_box_qty: int =
     # Strategy 2: Also check the main product area and forms
     all_containers = product_items + soup.find_all(['form', 'table', 'div'], class_=re.compile(r'product|option|variant', re.I))
     
-    # Strategy 3: Get all text and look for patterns (fallback)
-    page_text = soup.get_text()
+    # Strategy 3: Get all text and look for patterns (fallback).
+    # Strip thousands separators so prices >= $1,000 parse correctly.
+    page_text = soup.get_text().replace(',', '')
     
     # Extract all pricing information
     all_prices = []
