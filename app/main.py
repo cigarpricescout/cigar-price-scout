@@ -268,8 +268,9 @@ def run_feed_processor():
     """Run the CJ feed processing script"""
     try:
         logger.info("Starting CJ feed processor...")
+        feed_script = Path(__file__).resolve().parent.parent / 'scripts' / 'one_off' / 'process_cj_feeds.py'
         result = subprocess.run(
-            ['python', 'scripts/process_cj_feeds.py'],
+            ['python', str(feed_script)],
             capture_output=True,
             text=True,
             cwd=Path(__file__).parent.parent
@@ -288,8 +289,9 @@ def run_awin_processor():
     """Run the Awin BnB Tobacco feed processing script"""
     try:
         logger.info("Starting Awin BnB Tobacco feed processor...")
+        feed_script = Path(__file__).resolve().parent.parent / 'scripts' / 'one_off' / 'process_awin_feed.py'
         result = subprocess.run(
-            ['python', 'scripts/process_awin_feed.py'],
+            ['python', str(feed_script)],
             capture_output=True,
             text=True,
             cwd=Path(__file__).parent.parent
@@ -781,6 +783,31 @@ def load_all_products():
     _product_cache["data"] = all_products
     _product_cache["timestamp"] = now
     return all_products
+
+
+_sitemap_cigar_pairs_cache = {"pairs": None, "_prod_ts": None}
+
+
+def _get_sorted_cigar_sitemap_pairs():
+    """Unique (brand_slug, line_slug) pairs; invalidated whenever load_all_products() refreshes."""
+    pts = _product_cache["timestamp"]
+    c = _sitemap_cigar_pairs_cache
+    if c["pairs"] is not None and c.get("_prod_ts") == pts:
+        return c["pairs"]
+
+    all_products = load_all_products()
+    cigar_pages = set()
+    for p in all_products:
+        if not p.brand or not p.line:
+            continue
+        brand_slug = p.brand.lower().replace(' ', '-').replace('&', 'and')
+        line_slug = normalize_line_slug(p.line)
+        cigar_pages.add((brand_slug, line_slug))
+    pairs = sorted(cigar_pages, key=lambda x: (x[0], x[1]))
+    c["pairs"] = pairs
+    c["_prod_ts"] = pts
+    return pairs
+
 
 def load_master_wrapper_aliases():
     """Load wrapper aliases from master_cigars.db (SQLite) for lookup"""
@@ -1645,62 +1672,80 @@ async def deals_page():
 async def submit_deal_page():
     return FileResponse(f"{STATIC_PATH}/submit-deal.html")
 
-# SEO: Sitemap.xml
+# SEO: Sitemap index (/sitemap.xml) + child maps — avoids truncating cigar URLs at an arbitrary cap
+STATIC_SITEMAP_PAGES = [
+    {"url": "/", "priority": "1.0", "changefreq": "daily"},
+    {"url": "/about.html", "priority": "0.8", "changefreq": "monthly"},
+    {"url": "/contact.html", "priority": "0.7", "changefreq": "monthly"},
+    {"url": "/privacy-policy.html", "priority": "0.5", "changefreq": "yearly"},
+    {"url": "/terms-of-service.html", "priority": "0.5", "changefreq": "yearly"},
+    {"url": "/request-box-pricing.html", "priority": "0.7", "changefreq": "monthly"},
+    {"url": "/deals.html", "priority": "0.9", "changefreq": "daily"},
+    {"url": "/submit-deal.html", "priority": "0.6", "changefreq": "monthly"},
+]
+
+
 @app.get("/sitemap.xml", response_class=PlainTextResponse)
-async def sitemap():
-    from datetime import datetime
-    
+async def sitemap_index():
     base_url = "https://cigarpricescout.com"
     today = datetime.now().strftime("%Y-%m-%d")
-    
-    # Static pages with high priority
-    static_pages = [
-        {"url": "/", "priority": "1.0", "changefreq": "daily"},
-        {"url": "/about.html", "priority": "0.8", "changefreq": "monthly"},
-        {"url": "/contact.html", "priority": "0.7", "changefreq": "monthly"},
-        {"url": "/privacy-policy.html", "priority": "0.5", "changefreq": "yearly"},
-        {"url": "/terms-of-service.html", "priority": "0.5", "changefreq": "yearly"},
-        {"url": "/request-box-pricing.html", "priority": "0.7", "changefreq": "monthly"},
-        {"url": "/deals.html", "priority": "0.9", "changefreq": "daily"},
-        {"url": "/submit-deal.html", "priority": "0.6", "changefreq": "monthly"},
+    lines = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+        f'  <sitemap><loc>{base_url}/sitemap-static.xml</loc><lastmod>{today}</lastmod></sitemap>',
     ]
-    
-    sitemap_xml = '<?xml version="1.0" encoding="UTF-8"?>\n'
-    sitemap_xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
-    
-    # Add static pages
-    for page in static_pages:
-        sitemap_xml += f'  <url>\n'
-        sitemap_xml += f'    <loc>{base_url}{page["url"]}</loc>\n'
-        sitemap_xml += f'    <lastmod>{today}</lastmod>\n'
-        sitemap_xml += f'    <changefreq>{page["changefreq"]}</changefreq>\n'
-        sitemap_xml += f'    <priority>{page["priority"]}</priority>\n'
-        sitemap_xml += f'  </url>\n'
-    
-    # Add dynamic cigar pages (if we have them)
     try:
-        all_products = load_all_products()
-        # Get unique brand/line combinations
-        cigar_pages = set()
-        for p in all_products:
-            brand_slug = p.brand.lower().replace(' ', '-').replace('&', 'and')
-            line_slug = normalize_line_slug(p.line)  # Use normalize for proper SEO slugs
-            cigar_pages.add((brand_slug, line_slug, p.brand, p.line))
-        
-        # Limit to top 500 to keep sitemap reasonable
-        for brand_slug, line_slug, brand, line in list(cigar_pages)[:500]:
-            sitemap_xml += f'  <url>\n'
-            sitemap_xml += f'    <loc>{base_url}/cigars/{brand_slug}/{line_slug}</loc>\n'
-            sitemap_xml += f'    <lastmod>{today}</lastmod>\n'
-            sitemap_xml += f'    <changefreq>weekly</changefreq>\n'
-            sitemap_xml += f'    <priority>0.8</priority>\n'
-            sitemap_xml += f'  </url>\n'
+        if _get_sorted_cigar_sitemap_pairs():
+            lines.append(f'  <sitemap><loc>{base_url}/sitemap-cigars.xml</loc><lastmod>{today}</lastmod></sitemap>')
     except Exception as e:
-        print(f"[sitemap] Error adding cigar pages: {e}")
-    
-    sitemap_xml += '</urlset>'
-    
-    return sitemap_xml
+        print(f"[sitemap] Error listing cigar pages for index: {e}")
+    lines.append("</sitemapindex>")
+    return "\n".join(lines) + "\n"
+
+
+@app.get("/sitemap-static.xml", response_class=PlainTextResponse)
+async def sitemap_static():
+    base_url = "https://cigarpricescout.com"
+    today = datetime.now().strftime("%Y-%m-%d")
+    parts = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+    ]
+    for page in STATIC_SITEMAP_PAGES:
+        parts.extend([
+            "  <url>",
+            f'    <loc>{base_url}{page["url"]}</loc>',
+            f'    <lastmod>{today}</lastmod>',
+            f'    <changefreq>{page["changefreq"]}</changefreq>',
+            f'    <priority>{page["priority"]}</priority>',
+            "  </url>",
+        ])
+    parts.append("</urlset>")
+    return "\n".join(parts) + "\n"
+
+
+@app.get("/sitemap-cigars.xml", response_class=PlainTextResponse)
+async def sitemap_cigars():
+    base_url = "https://cigarpricescout.com"
+    today = datetime.now().strftime("%Y-%m-%d")
+    parts = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+    ]
+    try:
+        for brand_slug, line_slug in _get_sorted_cigar_sitemap_pairs():
+            parts.extend([
+                "  <url>",
+                f"    <loc>{base_url}/cigars/{brand_slug}/{line_slug}</loc>",
+                f"    <lastmod>{today}</lastmod>",
+                "    <changefreq>weekly</changefreq>",
+                "    <priority>0.8</priority>",
+                "  </url>",
+            ])
+    except Exception as e:
+        print(f"[sitemap] Error building cigar sitemap: {e}")
+    parts.append("</urlset>")
+    return "\n".join(parts) + "\n"
 
 # SEO: robots.txt (serve from file, but ensure it exists)
 @app.get("/robots.txt", response_class=PlainTextResponse)

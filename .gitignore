@@ -1,4 +1,5 @@
 .venv/
+.tools/
 __pycache__/
 *.pyc
 *.pyo
@@ -25,6 +26,9 @@ build/
 # Environment variables (contains secrets!)
 .env
 .env.local
+
+# Local automation secrets — copy automation_config.example.json to automation_config.json
+automation/automation_config.json
 
 # IDE
 .vscode/

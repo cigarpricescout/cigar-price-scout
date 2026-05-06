@@ -31,7 +31,9 @@ from email.mime.multipart import MIMEMultipart
 AUTOMATION_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = AUTOMATION_DIR.parent
 sys.path.insert(0, str(PROJECT_ROOT))
+sys.path.insert(0, str(AUTOMATION_DIR))
 
+from email_env import apply_email_env_overrides
 from tools.ai.url_discoverer import run_discovery, STAGED_FILE, PENDING_FILE, REPORT_FILE
 
 logging.basicConfig(
@@ -157,11 +159,26 @@ URL_DOMAIN_TO_KEY = {
 
 def load_config():
     """Load automation config for email settings."""
+    defaults = {
+        "email_notifications": {
+            "enabled": False,
+            "smtp_server": "smtp.gmail.com",
+            "smtp_port": 587,
+            "sender_email": "",
+            "sender_password": "",
+            "recipient_email": "",
+        }
+    }
     config_path = AUTOMATION_DIR / "automation_config.json"
+    cfg = {}
     if config_path.exists():
         with open(config_path, "r") as f:
-            return json.load(f)
-    return {}
+            cfg = json.load(f)
+    en = cfg.setdefault("email_notifications", {})
+    for key, val in defaults["email_notifications"].items():
+        en.setdefault(key, val)
+    apply_email_env_overrides(en)
+    return cfg
 
 
 def _retailer_key_from_url(url: str) -> str | None:
@@ -556,6 +573,9 @@ def send_digest_email(config: dict, all_pending: list, new_count: int = 0):
     if not email_config.get("enabled") or not email_config.get("sender_email"):
         logger.info("Email notifications disabled, skipping digest email")
         return
+    if not (email_config.get("sender_password") or "").strip():
+        logger.warning("Email enabled but sender_password missing — skipping digest email")
+        return
 
     total = len(all_pending)
     date_str = datetime.now().strftime("%Y-%m-%d")
@@ -581,7 +601,7 @@ def send_digest_email(config: dict, all_pending: list, new_count: int = 0):
         msg.attach(MIMEText(plain_body, "plain"))
         msg.attach(MIMEText(html_body, "html"))
 
-        server = smtplib.SMTP(email_config["smtp_server"], email_config["smtp_port"])
+        server = smtplib.SMTP(email_config["smtp_server"], int(email_config["smtp_port"]))
         server.starttls()
         server.login(email_config["sender_email"], email_config["sender_password"])
         server.sendmail(

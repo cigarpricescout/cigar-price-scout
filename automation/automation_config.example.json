@@ -1,11 +1,11 @@
 {
   "email_notifications": {
-    "enabled": true,
+    "enabled": false,
     "smtp_server": "smtp.gmail.com",
     "smtp_port": 587,
-    "sender_email": "mikeyjoneill@gmail.com",
-    "sender_password": "fsyx makm xscr mbao",
-    "recipient_email": "mikeyjoneill@gmail.com",
+    "sender_email": "",
+    "sender_password": "",
+    "recipient_email": "",
     "send_on_success": true,
     "send_on_failure": true
   },

@@ -1,17 +1,23 @@
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+from pathlib import Path
 import subprocess
 import logging
 
 logger = logging.getLogger(__name__)
 
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
 def run_feed_processor():
     """Run the CJ feed processing script"""
     try:
+        feed_script = _PROJECT_ROOT / "scripts" / "one_off" / "process_cj_feeds.py"
         result = subprocess.run(
-            ['python', 'scripts/process_cj_feeds.py'],
+            ["python", str(feed_script)],
             capture_output=True,
-            text=True
+            text=True,
+            cwd=_PROJECT_ROOT,
         )
         logger.info(f"Feed processor completed: {result.stdout}")
         if result.stderr:

@@ -17,6 +17,7 @@ Date: November 24, 2025
 
 import os
 import sys
+import copy
 import sqlite3
 import json
 import subprocess
@@ -30,6 +31,9 @@ import logging
 import pandas as pd
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+
+from email_env import apply_email_env_overrides
+
 
 class AutomatedCigarPriceSystem:
     def __init__(self, project_root: Optional[str] = None):
@@ -141,15 +145,15 @@ class AutomatedCigarPriceSystem:
                         for subkey, subvalue in value.items():
                             if subkey not in loaded_config[key]:
                                 loaded_config[key][subkey] = subvalue
+                apply_email_env_overrides(loaded_config["email_notifications"])
                 return loaded_config
             except Exception as e:
                 self.logger.warning(f"Failed to load config, using defaults: {e}")
-        
-        # Save default config
-        with open(self.config_file, 'w') as f:
-            json.dump(default_config, f, indent=2)
-        
-        return default_config
+
+        cfg = copy.deepcopy(default_config)
+        apply_email_env_overrides(cfg["email_notifications"])
+        # Copy automation_config.example.json to automation_config.json locally if you want file-based settings (gitignored).
+        return cfg
 
     def init_historical_database(self):
         """Initialize SQLite database for historical price tracking"""
@@ -699,10 +703,15 @@ class AutomatedCigarPriceSystem:
     def send_notification_email(self, subject: str, body: str):
         """Send email notification if configured"""
         email_config = self.config['email_notifications']
-        
+
         if not email_config['enabled'] or not email_config['sender_email']:
             return
-        
+
+        password = (email_config.get('sender_password') or '').strip()
+        if not password:
+            self.logger.warning("Email notifications enabled but sender_password missing — skipping email")
+            return
+
         try:
             msg = MIMEMultipart()
             msg['From'] = email_config['sender_email']
@@ -710,10 +719,11 @@ class AutomatedCigarPriceSystem:
             msg['Subject'] = subject
             
             msg.attach(MIMEText(body, 'plain'))
-            
-            server = smtplib.SMTP(email_config['smtp_server'], email_config['smtp_port'])
+
+            port = int(email_config['smtp_port'])
+            server = smtplib.SMTP(email_config['smtp_server'], port)
             server.starttls()
-            server.login(email_config['sender_email'], email_config['sender_password'])
+            server.login(email_config['sender_email'], password)
             
             text = msg.as_string()
             server.sendmail(email_config['sender_email'], 
