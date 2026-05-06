@@ -6,9 +6,10 @@ public /products.json API, and fuzzy-matches products against unmonitored
 CIDs from master_cigars.csv.
 
 Usage:
-    python tools/catalog_harvester.py                   # detect + harvest + match, write CSV
+    python tools/catalog_harvester.py                   # detect + harvest + match + Shopify verify
     python tools/catalog_harvester.py --detect-only      # just print which retailers are Shopify
     python tools/catalog_harvester.py --upload            # also upload matches to staging API
+    python tools/catalog_harvester.py --upload --no-verify  # upload without JSON verification (CI)
 """
 
 import argparse
@@ -21,8 +22,6 @@ import time
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
-from urllib.parse import urlparse
-
 import requests
 from rapidfuzz import fuzz
 
@@ -34,6 +33,62 @@ OUTPUT_DIR = PROJECT_ROOT / "tools" / "catalog_harvester_output"
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
 }
+
+# Non-cigar catalog noise (accessories, merch) — exclude from harvest matching.
+_DENYLIST_TITLE_RE = re.compile(
+    r"\b(lighter|cutters?|cutter\b|humidor|humidors|ashtray|torch|butane|"
+    r"travel\s+case|carrying\s+case|gift\s+set|coffee|mug|hat\b|shirt|apparel|"
+    r"cutter\s+set|hygrometer)\b",
+    re.I,
+)
+
+# Typical cigar dimension pattern in titles when product_type is blank.
+_RING_LEN_RE = re.compile(r"\b\d{1,2}(?:\.\d)?\s*[x×]\s*\d{1,3}\b", re.I)
+
+
+def is_probable_cigar_product(p: dict) -> bool:
+    """Filter Shopify catalog rows to tobacco listings (fixes former bug: '' in kw matched everything)."""
+    title = (p.get("title") or "").lower()
+    pt = (p.get("product_type") or "").lower()
+    tags = p.get("tags") or []
+    if isinstance(tags, str):
+        tags = [t.strip() for t in tags.split(",")]
+    tag_blob = " ".join(tags).lower()
+
+    if _DENYLIST_TITLE_RE.search(title):
+        return False
+
+    if "cigar" in pt or "tobacco" in pt:
+        return True
+    if "cigar" in title or "cigar" in tag_blob:
+        return True
+    if _RING_LEN_RE.search(title):
+        return True
+    # Common vitola tokens when storefront omits the word "cigar"
+    vitola_hint = (
+        "robusto", "toro", "churchill", "corona", "belicoso", "torpedo",
+        "figurado", "lancero", "perfecto", "lonsdale", "gordo", "petit corona",
+    )
+    if any(v in title for v in vitola_hint):
+        return True
+    return False
+
+
+def verify_shopify_product_url(url: str) -> tuple[bool, str]:
+    """Confirm storefront JSON returns a price for this product URL (same PDP users scrape)."""
+    try:
+        sys.path.insert(0, str(PROJECT_ROOT))
+        from tools.price_monitoring.retailers.shopify_generic_extractor import (
+            extract_shopify_store_data,
+        )
+
+        r = extract_shopify_store_data(url)
+        if r.get("success") and r.get("price"):
+            return True, "verify=ok"
+        err = (r.get("error") or "no_price") if isinstance(r, dict) else "bad_response"
+        return False, f"verify=fail:{err}"
+    except Exception as e:
+        return False, f"verify=error:{e}"
 
 RETAILER_DOMAINS = {
     "absolutecigars":   "absolutecigars.com",
@@ -645,6 +700,38 @@ def score_match(product: dict, box_variant: dict, cid: dict) -> dict:
     }
 
 
+def _finalize_box_qty_variant(
+    best_match: dict,
+    best_cid_obj: dict,
+    variant_box_qty,
+    used_cids: set,
+    monitored_for_retailer: set,
+    all_cid_strings: set,
+    generated_cids: list[dict],
+) -> dict | None:
+    """Apply BOX{n} CID variant handling; return finalized row or None to skip."""
+    cid_bq = best_cid_obj.get("box_qty")
+    if variant_box_qty and cid_bq and variant_box_qty != cid_bq:
+        new_cid_str = best_cid_obj["cid"].rsplit("|", 1)[0] + f"|BOX{variant_box_qty}"
+
+        if new_cid_str in all_cid_strings:
+            if new_cid_str not in used_cids and new_cid_str not in monitored_for_retailer:
+                best_match["cid"] = new_cid_str
+                best_match["cid_box_qty"] = variant_box_qty
+                best_match["reason"] += ", box_qty=existing_variant"
+            else:
+                return None
+        else:
+            new_cid = build_cid_variant(best_cid_obj, variant_box_qty)
+            generated_cids.append(new_cid)
+            all_cid_strings.add(new_cid_str)
+            best_match["cid"] = new_cid_str
+            best_match["cid_box_qty"] = variant_box_qty
+            best_match["reason"] += ", box_qty=new_variant"
+
+    return best_match
+
+
 def match_catalog_to_cids(
     products: list[dict],
     unmonitored_cids: list[dict],
@@ -655,14 +742,16 @@ def match_catalog_to_cids(
 ) -> list[dict]:
     """Match harvested products against unmonitored CIDs for a retailer.
 
+    Uses score-greedy global assignment so higher-confidence pairs win before
+    lower pairs consume the same CID or product row.
+
     When brand/line/vitola match strongly but box qty differs, generates a new
     CID variant with the retailer's actual box quantity instead of forcing a
     mismatch.
     """
-    matches = []
-    already_matched_cids = set()
+    edges: list[tuple[float, int, dict, dict, dict, dict]] = []
 
-    for product in products:
+    for pi, product in enumerate(products):
         box_variant = find_box_variant(product.get("variants", []))
         if not box_variant:
             continue
@@ -675,70 +764,90 @@ def match_catalog_to_cids(
         if price_float < 30:
             continue
 
-        variant_box_qty = box_variant.get("box_qty")
-        best_match = None
-        best_score = 0
-        best_cid_obj = None
-
         for cid in unmonitored_cids:
             if cid["cid"] in monitored_for_retailer:
                 continue
-            if cid["cid"] in already_matched_cids:
-                continue
 
             result = score_match(product, box_variant, cid)
-            if result["score"] > best_score and result["confidence"] != "NONE":
-                best_score = result["score"]
-                best_cid_obj = cid
-                best_match = {
-                    "cid": cid["cid"],
-                    "brand": cid["brand_display"],
-                    "line": cid["line_display"],
-                    "vitola": cid["vitola_display"],
-                    "wrapper": cid["wrapper_display"],
-                    "cid_box_qty": cid.get("box_qty"),
-                    "retailer_key": retailer_key,
-                    "product_title": product["title"],
-                    "product_url": product["url"],
-                    "product_vendor": product.get("vendor", ""),
-                    "variant_title": box_variant.get("title", ""),
-                    "variant_price": price,
-                    "variant_box_qty": variant_box_qty,
-                    "available": box_variant.get("available"),
-                    "score": result["score"],
-                    "confidence": result["confidence"],
-                    "reason": result["reason"],
-                }
+            if result["confidence"] not in ("HIGH", "MEDIUM"):
+                continue
 
-        if not best_match or best_match["confidence"] not in ("HIGH", "MEDIUM"):
+            edges.append(
+                (
+                    float(result["score"]),
+                    pi,
+                    product,
+                    box_variant,
+                    cid,
+                    result,
+                )
+            )
+
+    edges.sort(key=lambda x: -x[0])
+
+    matches = []
+    used_product_idx: set[int] = set()
+    used_cids: set[str] = set()
+
+    for score, pi, product, box_variant, cid_obj, result in edges:
+        if pi in used_product_idx or cid_obj["cid"] in used_cids:
             continue
 
-        cid_bq = best_cid_obj.get("box_qty")
-        if variant_box_qty and cid_bq and variant_box_qty != cid_bq:
-            # Strong match on everything except box qty — check/create a variant CID
-            new_cid_str = best_cid_obj["cid"].rsplit("|", 1)[0] + f"|BOX{variant_box_qty}"
+        price = box_variant.get("price", "0")
+        variant_box_qty = box_variant.get("box_qty")
 
-            if new_cid_str in all_cid_strings:
-                # CID with this box qty already exists, use it if not already matched
-                if new_cid_str not in already_matched_cids and new_cid_str not in monitored_for_retailer:
-                    best_match["cid"] = new_cid_str
-                    best_match["cid_box_qty"] = variant_box_qty
-                    best_match["reason"] += ", box_qty=existing_variant"
-                else:
-                    continue
-            else:
-                # Generate a brand-new CID variant
-                new_cid = build_cid_variant(best_cid_obj, variant_box_qty)
-                generated_cids.append(new_cid)
-                all_cid_strings.add(new_cid_str)
-                best_match["cid"] = new_cid_str
-                best_match["cid_box_qty"] = variant_box_qty
-                best_match["reason"] += ", box_qty=new_variant"
+        best_match = {
+            "cid": cid_obj["cid"],
+            "brand": cid_obj["brand_display"],
+            "line": cid_obj["line_display"],
+            "vitola": cid_obj["vitola_display"],
+            "wrapper": cid_obj["wrapper_display"],
+            "cid_box_qty": cid_obj.get("box_qty"),
+            "retailer_key": retailer_key,
+            "product_title": product["title"],
+            "product_url": product["url"],
+            "product_vendor": product.get("vendor", ""),
+            "variant_title": box_variant.get("title", ""),
+            "variant_price": price,
+            "variant_box_qty": variant_box_qty,
+            "available": box_variant.get("available"),
+            "score": result["score"],
+            "confidence": result["confidence"],
+            "reason": result["reason"],
+        }
 
-        matches.append(best_match)
-        already_matched_cids.add(best_match["cid"])
+        finalized = _finalize_box_qty_variant(
+            best_match,
+            cid_obj,
+            variant_box_qty,
+            used_cids,
+            monitored_for_retailer,
+            all_cid_strings,
+            generated_cids,
+        )
+        if finalized is None:
+            continue
+
+        final_cid = finalized["cid"]
+        if final_cid in used_cids:
+            continue
+
+        matches.append(finalized)
+        used_product_idx.add(pi)
+        used_cids.add(final_cid)
 
     return matches
+
+
+def filter_matches_by_shopify_verify(matches: list[dict]) -> list[dict]:
+    """Drop rows whose PDP does not return a price via Shopify JSON (optional accuracy gate)."""
+    kept = []
+    for m in matches:
+        ok, note = verify_shopify_product_url(m["product_url"])
+        m["reason"] = f"{m['reason']} | {note}"
+        if ok:
+            kept.append(m)
+    return kept
 
 
 # ---------------------------------------------------------------------------
@@ -858,6 +967,11 @@ def main():
                         help="Filter to a confidence level when using --upload-csv (e.g. HIGH)")
     parser.add_argument("--retailer", type=str, default=None,
                         help="Only process a specific retailer key")
+    parser.add_argument(
+        "--no-verify",
+        action="store_true",
+        help="Skip Shopify JSON price verification (more matches; use for flaky CI networks)",
+    )
     args = parser.parse_args()
 
     if args.upload_csv:
@@ -919,17 +1033,19 @@ def main():
             continue
 
         retailer_monitored = monitored.get(key, set())
-        cigar_products = [
-            p for p in catalog
-            if any(kw in (p.get("product_type") or "").lower()
-                   for kw in ["cigar", ""])
-        ]
+        cigar_products = [p for p in catalog if is_probable_cigar_product(p)]
 
+        print(f"  Cigar-like products (filtered): {len(cigar_products)} / {len(catalog)}")
         print(f"  Matching against {len(unmonitored)} unmonitored CIDs...")
         matches = match_catalog_to_cids(
             cigar_products, unmonitored, key, retailer_monitored,
             all_cid_strings, generated_cids,
         )
+        if not args.no_verify:
+            before_v = len(matches)
+            matches = filter_matches_by_shopify_verify(matches)
+            print(f"  Shopify JSON verify: kept {len(matches)} / {before_v}")
+
         high = sum(1 for m in matches if m["confidence"] == "HIGH")
         med = sum(1 for m in matches if m["confidence"] == "MEDIUM")
         new_variants = sum(1 for m in matches if "new_variant" in m.get("reason", ""))

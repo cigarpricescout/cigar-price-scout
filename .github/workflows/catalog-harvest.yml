@@ -1,0 +1,41 @@
+# Runs Shopify catalog harvest + uploads URL matches to staging for /admin/review
+# Staging API uses ADMIN_SECRET_KEY (same secret as ?key= on the review page).
+name: Catalog harvest (Shopify)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 15 * * 0"
+
+jobs:
+  harvest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install harvester dependencies
+        run: pip install rapidfuzz requests
+
+      - name: Harvest + upload to staging API
+        env:
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+          ADMIN_SECRET_KEY: ${{ secrets.ADMIN_SECRET_KEY }}
+        run: python tools/catalog_harvester.py --upload --no-verify
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Catalog harvest job finished" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Matches were POSTed to \`/api/admin/upload-matches\` (opens in **/admin/review**)." >> $GITHUB_STEP_SUMMARY
+          echo "This workflow uses \`--no-verify\` for reliability on GitHub runners; run locally without it for stricter Shopify JSON checks." >> $GITHUB_STEP_SUMMARY
