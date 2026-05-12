@@ -568,6 +568,8 @@ class AutomatedCigarPriceSystem:
                 continue
 
             df = pd.read_csv(csv_path)
+            if "cigar_id" in df.columns:
+                df["cigar_id"] = df["cigar_id"].astype(str).str.strip()
             existing_cids = (
                 set(df["cigar_id"].dropna().unique()) if "cigar_id" in df.columns else set()
             )
@@ -577,15 +579,28 @@ class AutomatedCigarPriceSystem:
             updated = 0
 
             for m in rmatches:
-                cid = m["cid"]
-                url = m.get("url", "")
+                cid = str(m.get("cid") or "").strip()
+                url = str(m.get("url") or "").strip()
+
+                if not cid:
+                    continue
+                    self.logger.warning(
+                        f"Skipping approved match id={m.get('id')} ({retailer_key}): empty URL"
+                    )
+                    continue
 
                 if cid in existing_cids:
                     if has_url_col:
                         mask = df["cigar_id"] == cid
                         if mask.any():
                             existing_url = df.loc[mask, "url"].iloc[0]
-                            if pd.isna(existing_url) or str(existing_url).strip() == "":
+                            existing_s = (
+                                ""
+                                if pd.isna(existing_url)
+                                else str(existing_url).strip()
+                            )
+                            # Approved URL is authoritative: overwrite stale/placeholder links.
+                            if existing_s != url:
                                 df.loc[mask, "url"] = url
                                 updated += 1
                                 self.logger.info(
@@ -863,6 +878,18 @@ class AutomatedCigarPriceSystem:
             
             # 2. Capture pre-update state for historical tracking
             pre_state = self.capture_pre_update_state(retailers)
+
+            # 2.5. Merge approved URL matches into retailer CSVs *before* scrapers run
+            # so the same cycle picks up price/stock from the new URLs. (Previously this
+            # ran after all updates, so approved links did not scrape until the next day.)
+            try:
+                approved_count = self.process_approved_matches()
+                if approved_count > 0:
+                    self.logger.info(
+                        f"Merged {approved_count} approved URL match(es) into retailer CSVs"
+                    )
+            except Exception as e:
+                self.logger.warning(f"Approved match processing failed (non-critical): {e}")
             
             # 3. Run all retailer updates
             self.logger.info(f"Running updates for {len(retailers)} retailers...")
@@ -886,14 +913,6 @@ class AutomatedCigarPriceSystem:
             promo_success = self.apply_promotions()
             if not promo_success:
                 errors.append("Promotional processing failed")
-            
-            # 4.7. Process any approved URL matches from the review API
-            try:
-                approved_count = self.process_approved_matches()
-                if approved_count > 0:
-                    self.logger.info(f"Published {approved_count} approved URL matches")
-            except Exception as e:
-                self.logger.warning(f"Approved match processing failed (non-critical): {e}")
 
             # 5. Git commit and push
             git_success = self.git_commit_and_push()

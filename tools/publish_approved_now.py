@@ -44,24 +44,33 @@ def publish(matches):
             continue
 
         df = pd.read_csv(csv_path)
+        if "cigar_id" in df.columns:
+            df["cigar_id"] = df["cigar_id"].astype(str).str.strip()
         existing_cids = set(df["cigar_id"].dropna().unique())
 
         new_rows = []
         updated = 0
 
         for m in rmatches:
-            cid = m["cid"]
-            url = m.get("url", "")
+            cid = str(m.get("cid") or "").strip()
+            url = str(m.get("url") or "").strip()
+
+            if not cid or not url:
+                print(f"  SKIP {retailer_key}: missing cid or url (id={m.get('id')})")
+                continue
 
             if cid in existing_cids:
                 mask = df["cigar_id"] == cid
                 existing_url = df.loc[mask, "url"].iloc[0] if mask.any() else ""
-                if pd.isna(existing_url) or str(existing_url).strip() == "":
+                existing_s = (
+                    "" if pd.isna(existing_url) else str(existing_url).strip()
+                )
+                if existing_s != url:
                     df.loc[mask, "url"] = url
                     updated += 1
                     print(f"  UPDATED {retailer_key}: {cid[:50]} -> {url[:70]}")
                 else:
-                    print(f"  EXISTS  {retailer_key}: {cid[:50]} (already has URL)")
+                    print(f"  EXISTS  {retailer_key}: {cid[:50]} (URL already matches)")
                 published_ids.append(m["id"])
                 continue
 

@@ -38,7 +38,7 @@ class CigarBoxPAPriceUpdater:
         self.dry_run = dry_run
         self.project_root = project_root
         self.csv_path = self.project_root / "static" / "data" / "cigarboxpa.csv"
-        self.master_csv_path = self.project_root / "data" / "master_cigars.db"
+        self.master_db_path = self.project_root / "data" / "master_cigars.db"
         
         # Ensure directories exist
         self.csv_path.parent.mkdir(parents=True, exist_ok=True)
@@ -58,20 +58,24 @@ class CigarBoxPAPriceUpdater:
         }
     
     def load_master_file(self):
-        """Load the master cigars file for metadata sync"""
+        """Load the master cigars DB for metadata sync (same pattern as other *_prices_final updaters)."""
         try:
-            if not self.master_csv_path.exists():
-                print(f"Warning: Master file not found at {self.master_csv_path}")
+            if not self.master_db_path.exists():
+                print(f"Warning: Master file not found at {self.master_db_path}")
                 return False
-                
-            self.master_df = pd.read_csv(self.master_csv_path)
-            
+
+            conn = sqlite3.connect(self.master_db_path)
+            self.master_df = pd.read_sql_query("SELECT * FROM cigars", conn)
+            conn.close()
+
             # Convert Box Quantity to numeric
-            self.master_df['box_quantity'] = pd.to_numeric(self.master_df['box_quantity'], errors='coerce').fillna(0)
-            
+            self.master_df["box_quantity"] = pd.to_numeric(
+                self.master_df["box_quantity"], errors="coerce"
+            ).fillna(0)
+
             print(f"Loaded master file with {len(self.master_df)} total cigars")
             return True
-            
+
         except Exception as e:
             print(f"Error loading master file: {e}")
             return False
