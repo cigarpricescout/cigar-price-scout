@@ -43,3 +43,13 @@ Thumbs.db
 # Backup CSV data files (prevent repo bloat)
 static/data/*_backup_*.csv
 static/data/*.backup_*.csv
+data/master_cigars_backup_*.csv
+
+# Runtime artifacts
+server.pid
+
+# Auto-generated extractor debug dumps
+app/debug_html_*.html
+
+# Affiliate feed downloads
+*-shopping.txt

@@ -1,1 +1,0 @@
-# CSV adapters package
