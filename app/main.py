@@ -531,7 +531,25 @@ def startup_event():
         logger.info("✓ Analytics and community tables initialized")
     except Exception as e:
         logger.warning(f"⚠ Analytics DB not available (local dev mode): {e}")
+    # Initialize the Chrome-extension staging tables (idempotent). Failure here
+    # must not block app boot — the extension is opt-in and the rest of the
+    # site is unaffected if these tables can't be created.
+    try:
+        from app.extension_endpoints import init_extension_tables
+        init_extension_tables()
+        logger.info("✓ Extension staging tables initialized")
+    except Exception as e:
+        logger.warning(f"⚠ Extension tables init skipped: {e}")
     # Later, if you re-enable the scheduler, you can also call start_scheduler() here.
+
+
+# Mount the Chrome-extension router. All routes are admin-gated and additive;
+# no existing route paths or behaviors change.
+try:
+    from app.extension_endpoints import router as _extension_router
+    app.include_router(_extension_router)
+except Exception as _ext_err:
+    logger.warning(f"⚠ Extension router not mounted: {_ext_err}")
 
 #@app.on_event("startup")
 #async def startup_event():
