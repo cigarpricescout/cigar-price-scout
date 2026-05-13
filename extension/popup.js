@@ -158,8 +158,22 @@ function renderCandidate(tab, response) {
         ${field("box_qty",       "Box Qty",       parts.box_qty,       "number")}
       </div>
 
+      <div id="dup-warning" style="display:none"></div>
+
+      <div class="section-label" style="margin-top:10px">
+        Similar CIDs in master
+        <span style="font-weight:normal;color:#888;text-transform:none;letter-spacing:0">
+          — updates as you type
+        </span>
+      </div>
+      <div class="candidates" id="similar-cids">
+        <div class="empty-similar" style="font-size:11px;color:#888;padding:6px 0">
+          Fill Brand and Line to see existing CIDs in this family.
+        </div>
+      </div>
+
       ${alts.length ? `
-        <div class="section-label" style="margin-top:10px">Other candidates</div>
+        <div class="section-label" style="margin-top:10px">URL-based candidates</div>
         <div class="candidates" id="alt-candidates">
           ${alts.map((c, i) => `
             <div class="cand" data-idx="${i + 1}">
@@ -289,14 +303,19 @@ function wireMatchedActions(tab, response) {
 }
 
 function wireCandidateActions(tab, response) {
-  // Live-update the CID preview as the user edits.
+  // Live-update the CID preview AND the similar-CIDs panel as the user edits.
   const fields = document.querySelectorAll("#cid-fields input, #cid-fields select");
   const preview = document.getElementById("cid-preview");
+  const refreshSimilar = debounce(() => {
+    const parts = readFields();
+    updateSimilarCids(parts);
+  }, 300);
   fields.forEach(f => f.addEventListener("input", () => {
     preview.textContent = buildCidString(readFields());
+    refreshSimilar();
   }));
 
-  // Click alt candidate → populate the form with its parts.
+  // Click alt candidate (URL-based) → populate the form with its parts.
   const alts = document.getElementById("alt-candidates");
   if (alts) {
     alts.querySelectorAll(".cand").forEach(el => {
@@ -307,6 +326,7 @@ function wireCandidateActions(tab, response) {
         const parts = partsFromCandidate(cand);
         applyFields(parts);
         preview.textContent = buildCidString(readFields());
+        refreshSimilar();
       });
     });
   }
@@ -314,6 +334,114 @@ function wireCandidateActions(tab, response) {
   document.getElementById("approve").addEventListener("click", () => approve(tab, response));
   document.getElementById("skip").addEventListener("click", () => skipUrl(tab.url));
   document.getElementById("open-options").addEventListener("click", openOptions);
+
+  // Kick off an initial similar-CIDs search if Brand+Line are already populated.
+  refreshSimilar();
+}
+
+// ── Similar-CIDs panel (debounced live search) ────────────────────────
+
+function debounce(fn, ms) {
+  let t;
+  return (...args) => {
+    clearTimeout(t);
+    t = setTimeout(() => fn(...args), ms);
+  };
+}
+
+function buildSimilarQuery(parts) {
+  // Combine brand + line + vitola (whichever are populated with >=2 chars).
+  // The backend's /cid-search does AND-of-tokens substring matching, so the
+  // more the user has typed, the narrower the result set.
+  return [parts.brand, parts.line, parts.vitola]
+    .map(s => (s || "").trim())
+    .filter(s => s.length >= 2)
+    .join(" ")
+    .trim();
+}
+
+async function updateSimilarCids(parts) {
+  const container = document.getElementById("similar-cids");
+  const warning   = document.getElementById("dup-warning");
+  if (!container) return;
+
+  const q = buildSimilarQuery(parts);
+  if (!q) {
+    container.innerHTML = `
+      <div class="empty-similar" style="font-size:11px;color:#888;padding:6px 0">
+        Fill Brand and Line to see existing CIDs in this family.
+      </div>`;
+    if (warning) { warning.style.display = "none"; warning.innerHTML = ""; }
+    return;
+  }
+
+  let results = [];
+  try {
+    const data = await apiFetch("/api/admin/cid-search", { query: { q, limit: 6 } });
+    results = data.results || [];
+  } catch (e) {
+    container.innerHTML = `<div style="font-size:11px;color:#c62828;padding:6px 0">Search failed: ${escapeHtml(e.message || String(e))}</div>`;
+    return;
+  }
+
+  const currentCid = buildCidString(parts);
+  const dup = results.find(r => r.cigar_id === currentCid);
+
+  if (warning) {
+    if (dup) {
+      warning.style.display = "block";
+      warning.className = "banner error";
+      warning.style.padding = "8px 10px";
+      warning.style.marginTop = "8px";
+      warning.style.borderRadius = "4px";
+      warning.style.fontSize = "12px";
+      warning.innerHTML =
+        `⚠ This CID already exists in master. Approving will re-use it (no duplicate created), ` +
+        `but double-check the fields are right.`;
+    } else {
+      warning.style.display = "none";
+      warning.innerHTML = "";
+    }
+  }
+
+  if (!results.length) {
+    container.innerHTML = `
+      <div class="empty-similar" style="font-size:11px;color:#888;padding:6px 0">
+        No existing CIDs matched "${escapeHtml(q)}". This will be a new CID.
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = results.map((r, i) => {
+    const isDup = r.cigar_id === currentCid;
+    const meta = [
+      r.brand, r.line, r.vitola,
+      r.size ? `${r.size}` : "",
+      r.wrapper ? `${r.wrapper}` : "",
+      r.box_qty ? `box ${r.box_qty}` : "",
+    ].filter(Boolean).join(" · ");
+    return `
+      <div class="cand similar" data-idx="${i}" ${isDup ? 'style="outline:2px solid #c62828"' : ""}>
+        <div style="flex:1;min-width:0">
+          <div class="cand-cid">${escapeHtml(r.cigar_id)}</div>
+          <div style="font-size:10px;color:#666;margin-top:2px">${escapeHtml(meta)}</div>
+        </div>
+        ${isDup ? '<span class="confidence" style="background:#ffebee;color:#c62828">EXISTS</span>' : ""}
+      </div>
+    `;
+  }).join("");
+
+  container.querySelectorAll(".cand").forEach(el => {
+    el.addEventListener("click", () => {
+      const idx = parseInt(el.getAttribute("data-idx"), 10);
+      const cand = results[idx];
+      if (!cand) return;
+      applyFields(partsFromCandidate(cand));
+      document.getElementById("cid-preview").textContent = buildCidString(readFields());
+      // After populating, re-check duplicates against the new state.
+      updateSimilarCids(readFields());
+    });
+  });
 }
 
 function readFields() {
