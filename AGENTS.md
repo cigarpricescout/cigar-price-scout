@@ -193,7 +193,12 @@ Rules:
 - All segments uppercase, whitespace-stripped.
 - `SIZE` is `LENGTH×RING` (e.g., `6x46`).
 - `WRAPPERCODE` is a short code (SUN, HAB, MAD, CON, etc.). Human-readable
-  wrapper name lives in the master catalog, not the CID.
+  wrapper name lives in the master catalog, not the CID. Consumers never
+  see the codes — they pick from 4 friendly buckets defined in
+  `app/wrapper_buckets.py` (Natural/Connecticut, Habano, Sun Grown,
+  Maduro) which map to canonical codes. The bucket name is stored as
+  `community_url_proposals.proposed_wrapper`; the operator picks the
+  canonical code during review.
 - `BOXQTY` is `BOX25` / `PACK5` / `SINGLE`. The box quantity is part of the
   identity — a Box-of-25 and a Pack-of-5 of the "same" cigar are different
   CIDs because they have different prices and trust signals.

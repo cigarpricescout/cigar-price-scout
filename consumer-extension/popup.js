@@ -285,6 +285,16 @@ function renderCandidate(tab, response, scraped) {
           <label for="f-vitola">Vitola</label>
           <input type="text" id="f-vitola" value="${escapeAttr(guesses.vitola)}" placeholder="e.g. Signature" />
         </div>
+        <div class="field">
+          <label for="f-wrapper">Wrapper <span class="hint-inline">(optional)</span></label>
+          <select id="f-wrapper">
+            <option value="">Not sure</option>
+            <option value="Natural / Connecticut" ${guesses.wrapper_bucket === "Natural / Connecticut" ? "selected" : ""}>Natural / Connecticut</option>
+            <option value="Habano" ${guesses.wrapper_bucket === "Habano" ? "selected" : ""}>Habano</option>
+            <option value="Sun Grown" ${guesses.wrapper_bucket === "Sun Grown" ? "selected" : ""}>Sun Grown</option>
+            <option value="Maduro" ${guesses.wrapper_bucket === "Maduro" ? "selected" : ""}>Maduro</option>
+          </select>
+        </div>
         <div class="field-row">
           <div class="field">
             <label for="f-box_qty">Box quantity</label>
@@ -320,6 +330,7 @@ async function submitProposal(tab, response, scraped) {
   const brand = get("f-brand");
   const line = get("f-line");
   const vitola = get("f-vitola");
+  const wrapperBucket = get("f-wrapper");
   const boxQtyRaw = get("f-box_qty");
   const priceRaw = get("f-price");
 
@@ -344,6 +355,11 @@ async function submitProposal(tab, response, scraped) {
         brand,
         line,
         vitola,
+        // Friendly consumer-facing bucket name (e.g. "Maduro"). Empty
+        // string means "Not sure" — operator handles wrapper-code lookup
+        // during review by matching brand+line+vitola+box_qty in the
+        // master catalog.
+        wrapper: wrapperBucket || null,
         box_qty,
         confirmed_price,
         scraped_title: scraped?.title || scraped?.jsonldName || null,
@@ -426,8 +442,37 @@ function renderNoScraper(tab, response) {
 
 // ── Form pre-fill heuristics ───────────────────────────────────────────
 
+// Wrapper-bucket detection keywords. Order matters: more specific phrases
+// must come BEFORE broader ones because the first match wins. Mirrors the
+// server-side list in app/wrapper_buckets.py SCRAPE_KEYWORDS.
+const WRAPPER_BUCKET_KEYWORDS = [
+  ["sun grown",          "Sun Grown"],
+  ["sungrown",           "Sun Grown"],
+  ["ecuadorian sumatra", "Sun Grown"],
+  ["maduro",             "Maduro"],
+  ["oscuro",             "Maduro"],
+  ["san andres",         "Maduro"],
+  ["san andr",           "Maduro"],
+  ["broadleaf",          "Maduro"],
+  ["habano",             "Habano"],
+  ["corojo",             "Habano"],
+  ["connecticut",        "Natural / Connecticut"],
+  ["cameroon",           "Natural / Connecticut"],
+  ["claro",              "Natural / Connecticut"],
+  ["natural",            "Natural / Connecticut"],
+];
+
+function detectWrapperBucket(...texts) {
+  const haystack = texts.filter(Boolean).join(" ").toLowerCase();
+  if (!haystack) return "";
+  for (const [phrase, bucket] of WRAPPER_BUCKET_KEYWORDS) {
+    if (haystack.includes(phrase)) return bucket;
+  }
+  return "";
+}
+
 function guessFromScrape(rawUrl, scraped) {
-  const out = { brand: "", line: "", vitola: "", box_qty: "", price: "" };
+  const out = { brand: "", line: "", vitola: "", wrapper_bucket: "", box_qty: "", price: "" };
   if (!scraped) return out;
 
   // Brand from JSON-LD if it's not the storefront name (heuristic: JSON-LD
@@ -453,6 +498,15 @@ function guessFromScrape(rawUrl, scraped) {
       out.vitola = tokens.slice(4).join(" ");
     }
   }
+
+  // Wrapper bucket from page text + JSON-LD description. Saves the user
+  // a click in the common case where the page mentions the wrapper word
+  // directly; they can still correct it with the dropdown.
+  out.wrapper_bucket = detectWrapperBucket(
+    title,
+    scraped.ogDescription,
+    (scraped.jsonldRaw && scraped.jsonldRaw.description) || "",
+  );
 
   if (scraped.boxQty) out.box_qty = String(scraped.boxQty);
   if (scraped.price)  out.price = scraped.price.toFixed(2);
