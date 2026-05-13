@@ -583,15 +583,25 @@ async function approve(tab, response) {
   const errors = validateParts(parts);
   if (errors.length) return toast(errors[0], "error");
 
+  // Capture what the matcher initially proposed (top candidate) so the
+  // review_decisions log can compare it to what the operator ended up
+  // approving. This is training-data spine for the future AI reviewer.
+  const top = (response.candidates && response.candidates[0]) || null;
+
   const body = {
     url: tab.url,
     retailer_key: response.retailer_key,
     cid_parts: parts,
     title: response.scraped_title || (response._scraped && response._scraped.title) || "",
+    price: (response._scraped && response._scraped.price) || null,
+    in_stock: (response._scraped && response._scraped.inStock) ?? null,
     create_if_missing: true,
     force: !!response._force,
     confidence: "EXTENSION",
     reason: "Approved via Chrome extension",
+    proposed_cid: top ? top.cigar_id : null,
+    proposed_score: top ? top.score : null,
+    proposed_confidence: top ? top.confidence : null,
   };
   const btn = document.getElementById("approve");
   btn.disabled = true;

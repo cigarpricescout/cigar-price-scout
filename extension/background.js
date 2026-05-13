@@ -9,7 +9,7 @@
 //   "+"   no scraper for this hostname (offer to queue)
 //   ""    unknown URL (not a retailer) or admin key missing
 
-import { apiFetch, getAdminKey, scrapeActiveTab } from "./config.js";
+import { apiFetch, getAdminKey, scrapeActiveTab, postObservation } from "./config.js";
 
 const CACHE = new Map(); // url -> { fetchedAt, response }
 const CACHE_TTL_MS = 5 * 60 * 1000;
@@ -18,6 +18,11 @@ const CACHE_TTL_MS = 5 * 60 * 1000;
 let VOCAB = null;
 let VOCAB_FETCHED_AT = 0;
 const VOCAB_TTL_MS = 60 * 60 * 1000;
+
+// Per-URL passive-observation dedupe. Without this, every status refresh
+// (popup open, tab activation, tab update) would re-post the same reading.
+const OBSERVE_DEDUPE = new Map(); // url -> last posted timestamp
+const OBSERVE_DEDUPE_MS = 60 * 60 * 1000; // one fresh observation per URL per hour
 
 async function ensureVocab(force = false) {
   if (!force && VOCAB && (Date.now() - VOCAB_FETCHED_AT) < VOCAB_TTL_MS) {
@@ -95,6 +100,34 @@ async function refreshForTab(tab) {
   response._scraped = scraped;
   CACHE.set(tab.url, { fetchedAt: Date.now(), response });
   await setBadgeForTab(tab.id, response.state);
+
+  // Passive observation: any retailer page we land on, write a row to
+  // observed_prices so the operator extension is the first contributor
+  // to the community data pipeline. Skipped for no_scraper/unknown URLs
+  // and for repeat visits inside the dedupe window.
+  if (
+    scraped && (scraped.price != null || scraped.title) &&
+    response.state && response.state !== "no_scraper" && response.state !== "error" &&
+    response.retailer_key
+  ) {
+    const last = OBSERVE_DEDUPE.get(tab.url) || 0;
+    if (Date.now() - last > OBSERVE_DEDUPE_MS) {
+      OBSERVE_DEDUPE.set(tab.url, Date.now());
+      // Fire-and-forget; never block the popup on this.
+      postObservation({
+        url: tab.url,
+        scraped_title: scraped.title || scraped.jsonldName || null,
+        price: scraped.price ?? null,
+        currency: scraped.currency || "USD",
+        in_stock: scraped.inStock,
+        quantity_type: scraped.quantityType || "unknown",
+        box_qty: scraped.boxQty || null,
+        jsonld: scraped.jsonldRaw || null,
+        observer_source: "operator",
+      }).catch(() => {});
+    }
+  }
+
   return response;
 }
 

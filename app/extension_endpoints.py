@@ -231,6 +231,24 @@ class StageApprovalBody(BaseModel):
     # row before writing the retailer CSV row.
     create_if_missing: bool = True
     force: bool = False  # supersede an existing approved/published row
+    # Optional review-decision context: what the matcher proposed vs what
+    # the operator actually saved. Captured for review_decisions logging,
+    # which becomes training data for the future ML reviewer.
+    proposed_cid: Optional[str] = None
+    proposed_score: Optional[float] = None
+    proposed_confidence: Optional[str] = None
+
+
+class ResolveProposalBody(BaseModel):
+    proposal_id: int
+    # 'approve_existing' — map to existing CID; cid required.
+    # 'approve_new'      — operator creates a new CID via cid_parts.
+    # 'reject'           — discard the proposal.
+    # 'duplicate'        — already covered by another proposal/CID.
+    action: str
+    cid: Optional[str] = None
+    cid_parts: Optional[CIDParts] = None
+    notes: Optional[str] = None
 
 
 class SkipUrlBody(BaseModel):
@@ -534,6 +552,26 @@ async def stage_approval(request: Request, body: StageApprovalBody):
         conn.commit()
         conn.close()
 
+        _log_review_decision(
+            decision_type="extension_approval",
+            url=body.url,
+            retailer_key=body.retailer_key,
+            proposed_cid=body.proposed_cid,
+            final_cid=cid,
+            final_metadata={
+                **{k: parts_dict.get(k) for k in (
+                    "brand", "parent_brand", "line", "vitola", "vitola2",
+                    "size", "wrapper_code", "wrapper", "box_qty",
+                )},
+                "is_new_cid": is_new_cid,
+                "title": body.title,
+            },
+            score=body.proposed_score,
+            confidence_label=body.proposed_confidence or body.confidence,
+            source_table="extension_staged_approvals",
+            notes=body.reason,
+        )
+
         return {
             "ok": True,
             "mode": "new_cid" if is_new_cid else "existing_cid",
@@ -572,6 +610,15 @@ async def skip_url(request: Request, body: SkipUrlBody):
         """, (body.url, body.retailer_key, body.reason or "skipped"))
         conn.commit()
         conn.close()
+
+        _log_review_decision(
+            decision_type="skip",
+            url=body.url,
+            retailer_key=body.retailer_key,
+            source_table="url_skip_list",
+            notes=body.reason,
+        )
+
         return {"ok": True}
     except Exception as e:
         logger.exception("skip_url failed: %s", e)
@@ -821,3 +868,264 @@ async def retailer_registry(request: Request, refresh: bool = Query(False)):
         ],
         "total": len(_cache_state["retailers"]),
     }
+
+
+# ── Review-decision logging ───────────────────────────────────────────
+# Every operator approve/edit/skip/reject is logged with both the proposed
+# and the final state. This is the training-data spine for the future ML
+# reviewer; it costs ~1 INSERT per operator action and adds no user-visible
+# behavior. Best-effort: failures are logged but never bubble up.
+
+def _log_review_decision(
+    *,
+    decision_type: str,
+    url: Optional[str] = None,
+    retailer_key: Optional[str] = None,
+    proposed_cid: Optional[str] = None,
+    final_cid: Optional[str] = None,
+    proposed_metadata: Optional[Dict] = None,
+    final_metadata: Optional[Dict] = None,
+    score: Optional[float] = None,
+    confidence_label: Optional[str] = None,
+    source_table: Optional[str] = None,
+    source_id: Optional[int] = None,
+    notes: Optional[str] = None,
+) -> None:
+    import json
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO review_decisions
+              (decision_type, source_table, source_id, url, retailer_key,
+               proposed_cid, final_cid, proposed_metadata, final_metadata,
+               score, confidence_label, notes)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s,%s,%s)
+        """, (
+            decision_type, source_table, source_id, url, retailer_key,
+            proposed_cid, final_cid,
+            json.dumps(proposed_metadata, default=str) if proposed_metadata else None,
+            json.dumps(final_metadata, default=str) if final_metadata else None,
+            score, confidence_label, notes,
+        ))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.warning("log_review_decision failed (non-fatal): %s", e)
+
+
+# ── Community proposal review (admin) ─────────────────────────────────
+# These admin endpoints power the operator's review of metadata proposals
+# submitted by consumer extension users. Pending proposals show up
+# alongside (and filterable from) the existing weekly-discovery staged
+# matches in the admin UI.
+
+@router.get("/community-proposals")
+async def community_proposals(
+    request: Request,
+    status: str = Query("pending"),
+    limit: int = Query(50, ge=1, le=500),
+):
+    """Paginated list of consumer-submitted metadata proposals."""
+    auth = _check_admin(request)
+    if auth:
+        return auth
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT id, url, retailer_key, proposed_brand, proposed_line,
+                   proposed_vitola, proposed_size, proposed_wrapper,
+                   proposed_box_qty, scraped_title, observer_id,
+                   observer_source, status, operator_notes, resolved_cid,
+                   created_at, reviewed_at
+              FROM community_url_proposals
+             WHERE status = %s
+             ORDER BY created_at DESC
+             LIMIT %s
+        """, (status, limit))
+        cols = [c[0] for c in cur.description]
+        rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+        conn.close()
+        return {"results": rows, "count": len(rows), "status": status}
+    except Exception as e:
+        logger.exception("community_proposals failed: %s", e)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@router.post("/resolve-community-proposal")
+async def resolve_community_proposal(request: Request, body: ResolveProposalBody):
+    """Operator action on a single community proposal.
+
+    Actions:
+      * approve_existing  — map URL to an existing CID (no master change).
+                            Stages an extension_staged_approvals row so the
+                            local publisher writes a bare retailer-CSV row.
+      * approve_new       — operator promotes the proposal into a real CID.
+                            Stages an extension_staged_approvals row with
+                            is_new_cid=TRUE so the publisher creates the
+                            master_cigars row first.
+      * reject / duplicate — closes the proposal, no staging.
+    Every action also writes a review_decisions row for ML training.
+    """
+    auth = _check_admin(request)
+    if auth:
+        return auth
+
+    action = (body.action or "").lower().strip()
+    if action not in {"approve_existing", "approve_new", "reject", "duplicate"}:
+        return JSONResponse({"error": f"invalid action '{action}'"}, status_code=400)
+
+    _refresh_cache()
+
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT id, url, retailer_key, proposed_brand, proposed_line,
+                   proposed_vitola, proposed_size, proposed_wrapper,
+                   proposed_box_qty, scraped_title
+              FROM community_url_proposals
+             WHERE id = %s AND status = 'pending'
+             FOR UPDATE
+        """, (body.proposal_id,))
+        prop = cur.fetchone()
+        if not prop:
+            conn.close()
+            return JSONResponse(
+                {"error": f"proposal {body.proposal_id} not pending or not found"},
+                status_code=404,
+            )
+        (pid, p_url, p_retailer, p_brand, p_line, p_vitola, p_size,
+         p_wrapper, p_box_qty, p_title) = prop
+
+        proposed_metadata = {
+            "brand": p_brand, "line": p_line, "vitola": p_vitola,
+            "size": p_size, "wrapper": p_wrapper, "box_qty": p_box_qty,
+            "scraped_title": p_title,
+        }
+
+        resolved_cid: Optional[str] = None
+        final_metadata: Optional[Dict] = None
+
+        if action in ("approve_existing", "approve_new"):
+            if not p_retailer:
+                conn.rollback()
+                conn.close()
+                return JSONResponse(
+                    {"error": "proposal has no retailer_key; can't stage approval"},
+                    status_code=400,
+                )
+
+            if action == "approve_existing":
+                if not body.cid:
+                    conn.rollback()
+                    conn.close()
+                    return JSONResponse(
+                        {"error": "approve_existing requires `cid`"},
+                        status_code=400,
+                    )
+                resolved_cid = body.cid.strip()
+                parsed = parse_cid(resolved_cid)
+                if not parsed:
+                    conn.rollback()
+                    conn.close()
+                    return JSONResponse(
+                        {"error": f"invalid CID '{resolved_cid}'"},
+                        status_code=400,
+                    )
+                is_new = resolved_cid not in _cache_state["master_by_cid"]
+                parts_dict = {
+                    "brand": parsed["brand"], "parent_brand": parsed["parent_brand"],
+                    "line": parsed["line"], "vitola": parsed["vitola"],
+                    "vitola2": parsed["vitola2"], "size": parsed["size"],
+                    "wrapper_code": parsed["wrapper_code"],
+                    "box_qty": _extract_box_qty(parsed["box_qty_str"]) or 0,
+                    "wrapper": None,
+                }
+            else:  # approve_new
+                if not body.cid_parts:
+                    conn.rollback()
+                    conn.close()
+                    return JSONResponse(
+                        {"error": "approve_new requires `cid_parts`"},
+                        status_code=400,
+                    )
+                parts_dict = body.cid_parts.dict()
+                parts_dict["box_qty_str"] = f"BOX{int(parts_dict['box_qty'])}"
+                resolved_cid = build_cid(parts_dict)
+                is_new = resolved_cid not in _cache_state["master_by_cid"]
+
+            final_metadata = {k: parts_dict.get(k) for k in (
+                "brand", "parent_brand", "line", "vitola", "vitola2",
+                "size", "wrapper_code", "wrapper", "box_qty",
+            )}
+
+            # Stage into extension_staged_approvals so the existing
+            # local publisher handles CSV writes uniformly.
+            cur.execute("""
+                INSERT INTO extension_staged_approvals
+                  (cid, retailer_key, url, is_new_cid,
+                   brand, parent_brand, line, vitola, vitola2, size,
+                   wrapper_code, wrapper, box_qty,
+                   title, price, in_stock, status)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'pending')
+                ON CONFLICT (retailer_key, url, cid) DO UPDATE
+                  SET is_new_cid=EXCLUDED.is_new_cid,
+                      brand=EXCLUDED.brand,
+                      parent_brand=EXCLUDED.parent_brand,
+                      line=EXCLUDED.line,
+                      vitola=EXCLUDED.vitola,
+                      vitola2=EXCLUDED.vitola2,
+                      size=EXCLUDED.size,
+                      wrapper_code=EXCLUDED.wrapper_code,
+                      wrapper=EXCLUDED.wrapper,
+                      box_qty=EXCLUDED.box_qty,
+                      title=EXCLUDED.title,
+                      status=CASE
+                        WHEN extension_staged_approvals.status='published' THEN 'published'
+                        ELSE 'pending'
+                      END
+            """, (
+                resolved_cid, p_retailer, p_url, is_new,
+                parts_dict["brand"], parts_dict.get("parent_brand") or parts_dict["brand"],
+                parts_dict["line"], parts_dict["vitola"],
+                parts_dict.get("vitola2") or parts_dict["vitola"],
+                parts_dict["size"], parts_dict["wrapper_code"],
+                parts_dict.get("wrapper"), int(parts_dict.get("box_qty") or 0),
+                p_title, None, None,
+            ))
+
+        # Close the proposal regardless of approve/reject path.
+        new_status = "approved" if action in ("approve_existing", "approve_new") else action
+        cur.execute("""
+            UPDATE community_url_proposals
+               SET status=%s, operator_notes=%s,
+                   resolved_cid=%s, reviewed_at=NOW()
+             WHERE id=%s
+        """, (new_status, body.notes, resolved_cid, body.proposal_id))
+
+        conn.commit()
+        conn.close()
+
+        _log_review_decision(
+            decision_type="community_proposal_" + action,
+            url=p_url,
+            retailer_key=p_retailer,
+            final_cid=resolved_cid,
+            proposed_metadata=proposed_metadata,
+            final_metadata=final_metadata,
+            source_table="community_url_proposals",
+            source_id=pid,
+            notes=body.notes,
+        )
+
+        return {
+            "ok": True,
+            "proposal_id": body.proposal_id,
+            "status": new_status,
+            "resolved_cid": resolved_cid,
+        }
+    except Exception as e:
+        logger.exception("resolve_community_proposal failed: %s", e)
+        return JSONResponse({"error": str(e)}, status_code=500)

@@ -490,6 +490,12 @@ def startup_event():
         logger.info("✓ Extension staging tables initialized")
     except Exception as e:
         logger.warning(f"⚠ Extension tables init skipped: {e}")
+    try:
+        from app.community_endpoints import init_community_tables
+        init_community_tables()
+        logger.info("✓ Community staging tables initialized")
+    except Exception as e:
+        logger.warning(f"⚠ Community tables init skipped: {e}")
 
 
 # Mount the Chrome-extension router. All routes are admin-gated and additive;
@@ -499,6 +505,15 @@ try:
     app.include_router(_extension_router)
 except Exception as _ext_err:
     logger.warning(f"⚠ Extension router not mounted: {_ext_err}")
+
+# Mount the public community router (consumer extension's passive observe
+# + metadata-proposal endpoints). These routes are anonymous + rate-limited,
+# and never write to retailer CSVs or master_cigars — only to Postgres.
+try:
+    from app.community_endpoints import router as _community_router
+    app.include_router(_community_router)
+except Exception as _comm_err:
+    logger.warning(f"⚠ Community router not mounted: {_comm_err}")
 
 
 RETAILERS = [
