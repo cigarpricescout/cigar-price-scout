@@ -131,7 +131,62 @@ def slug_from_url(url: str) -> str:
 
 
 def _normalize_text(s: str) -> str:
-    return re.sub(r"[^a-z0-9\s]", " ", (s or "").lower())
+    return re.sub(r"[^a-z0-9\s.]", " ", (s or "").lower())
+
+
+# Matches "5x52", "5.5x52", "5 x 52", "5.5 x 50" anywhere in a haystack.
+_SIZE_RE = re.compile(r"(\d+(?:\.\d+)?)\s*x\s*(\d+)")
+
+# Maximum length-in-inches difference between a CID's size and a size on the
+# retailer page that we still treat as the same vitola. Retailers routinely
+# round 5.5 to 5 (or vice versa) when they reprint manufacturer specs, so
+# without tolerance the same physical cigar would score as a near-miss.
+SIZE_LENGTH_TOLERANCE_IN = 0.5
+
+
+def _parse_size(s: str) -> Optional[Tuple[float, int]]:
+    """Return (length_inches, ring_gauge) for the first 'LxR' in ``s``.
+
+    Returns None if no parseable size is present.
+    """
+    if not s:
+        return None
+    m = _SIZE_RE.search(s)
+    if not m:
+        return None
+    try:
+        return float(m.group(1)), int(m.group(2))
+    except (ValueError, TypeError):
+        return None
+
+
+def _size_match(
+    cid_size: str,
+    haystack: str,
+) -> Tuple[bool, bool]:
+    """Compare a CID size against any size present in the haystack.
+
+    Returns (is_match, is_exact). ``is_match`` is True when ring gauges agree
+    and lengths are within ``SIZE_LENGTH_TOLERANCE_IN``. ``is_exact`` is True
+    only when the length matches to the tenth of an inch (so callers can
+    still distinguish 5.5x52 vs 5x52 if they want to).
+    """
+    cid_parsed = _parse_size(cid_size)
+    if not cid_parsed:
+        return False, False
+    cid_len, cid_ring = cid_parsed
+    for m in _SIZE_RE.finditer(haystack):
+        try:
+            url_len = float(m.group(1))
+            url_ring = int(m.group(2))
+        except (ValueError, TypeError):
+            continue
+        if cid_ring != url_ring:
+            continue
+        delta = abs(cid_len - url_len)
+        if delta <= SIZE_LENGTH_TOLERANCE_IN:
+            return True, delta < 0.05
+    return False, False
 
 
 def programmatic_score(
@@ -141,7 +196,10 @@ def programmatic_score(
 ) -> Tuple[float, Dict[str, bool]]:
     """Score how well a URL (and optional scraped title) matches a CID.
 
-    Returns (score 0-1, details dict with per-component booleans).
+    Returns (score 0-1, details dict with per-component booleans). ``details``
+    also includes ``size_exact`` to distinguish exact size matches from
+    tolerance matches; ``size_match`` remains True for either case so the
+    confidence buckets pick up both.
     """
     slug_text = slug_from_url(url)
     haystack = slug_text + " " + _normalize_text(title or "")
@@ -162,16 +220,21 @@ def programmatic_score(
         "wrapper_match": False,
         "box_qty_match": False,
         "size_match": False,
+        "size_exact": False,
     }
 
     score = 0.0
+    # Vitola is what physically defines a cigar (Robusto vs Toro vs Torpedo).
+    # Retailers often round the printed size (5.5"x52 vs 5"x52) for the same
+    # SKU, so we weight vitola higher than size and treat size as a tiebreaker
+    # rather than a primary signal.
     weights = {
         "brand": 0.25,
         "line": 0.30,
-        "vitola": 0.18,
+        "vitola": 0.22,
         "wrapper": 0.10,
         "box_qty": 0.07,
-        "size": 0.10,
+        "size": 0.06,
     }
 
     brand_words = [w for w in brand.split() if w]
@@ -217,13 +280,15 @@ def programmatic_score(
             score += weights["box_qty"]
             details["box_qty_match"] = True
 
-    # Size match (e.g. "6x50" -> look for "6 x 50" or "6x50")
-    if size and "x" in size:
-        size_compact = size.replace(" ", "")
-        size_spaced = re.sub(r"x", " x ", size)
-        if size_compact in haystack.replace(" ", "") or size_spaced in haystack:
-            score += weights["size"]
-            details["size_match"] = True
+    # Size: ring gauge must match exactly, length is allowed to drift by
+    # SIZE_LENGTH_TOLERANCE_IN. Exact length matches get full weight; tolerance
+    # matches get 60% so they still help but don't fully outweigh a vitola
+    # mismatch on a near-duplicate.
+    matched, exact = _size_match(size, haystack)
+    if matched:
+        score += weights["size"] if exact else weights["size"] * 0.6
+        details["size_match"] = True
+        details["size_exact"] = exact
 
     return min(score, 1.0), details
 

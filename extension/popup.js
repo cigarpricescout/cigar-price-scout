@@ -154,7 +154,6 @@ function renderCandidate(tab, response) {
 
       <div class="fields" id="cid-fields">
         ${field("brand",         "Brand",         parts.brand,         "text")}
-        ${field("parent_brand",  "Parent Brand",  parts.parent_brand,  "text")}
         ${field("line",          "Line",          parts.line,          "text")}
         ${field("vitola",        "Vitola",        parts.vitola,        "text")}
         ${field("vitola2",       "Vitola2",       parts.vitola2,       "text")}
@@ -372,7 +371,6 @@ function rebuildDatalists(parts) {
   const bySize  = has(parts.size)   ? byVit.filter(r => eq(r.size, parts.size))   : byVit;
 
   setDatalistFromRows("dl-brand",        VOCAB_ROWS, "brand");
-  setDatalistFromRows("dl-parent_brand", VOCAB_ROWS, "brand");
   setDatalistFromRows("dl-line",         byBrand,    "line");
   setDatalistFromRows("dl-vitola",       byLine,     "vitola");
   setDatalistFromRows("dl-vitola2",      byLine,     "vitola");
@@ -414,6 +412,30 @@ function debounce(fn, ms) {
   };
 }
 
+// Find existing CIDs that share brand+line+vitola+wrapper+box with the
+// current draft but have a different size. Used to warn the operator before
+// they create a near-duplicate CID (e.g. PADRON|...|5x52|... when
+// PADRON|...|5.5x52|... already exists).
+function findSizeVariants(parts, results) {
+  const sameKey = (a, b) => norm(a) === norm(b);
+  const targetSize = norm(parts.size);
+  if (!targetSize) return [];
+  return results.filter(r => {
+    if (!r.cigar_id) return false;
+    const rs = norm(r.size);
+    if (!rs || rs === targetSize) return false;
+    if (!sameKey(r.brand,        parts.brand))        return false;
+    if (!sameKey(r.line,         parts.line))         return false;
+    if (!sameKey(r.vitola,       parts.vitola))       return false;
+    // wrapper_code/box_qty may not always be returned; if absent, skip the
+    // check so we still surface obvious near-dups on the main fields.
+    if (r.wrapper_code != null && !sameKey(r.wrapper_code, parts.wrapper_code)) return false;
+    if (r.box_qty != null && parts.box_qty &&
+        String(r.box_qty) !== String(parts.box_qty)) return false;
+    return true;
+  }).slice(0, 3);
+}
+
 function buildSimilarQuery(parts) {
   // Combine brand + line + vitola (whichever are populated with >=2 chars).
   // The backend's /cid-search does AND-of-tokens substring matching, so the
@@ -452,6 +474,12 @@ async function updateSimilarCids(parts) {
   const currentCid = buildCidString(parts);
   const dup = results.find(r => r.cigar_id === currentCid);
 
+  // Size-variant near-dup: same brand|line|vitola|wrapper|box, only size
+  // differs. This catches "5x52 vs 5.5x52" where the operator might be
+  // about to create a duplicate CID for a SKU that already exists under a
+  // rounded size.
+  const sizeVariants = !dup ? findSizeVariants(parts, results) : [];
+
   if (warning) {
     if (dup) {
       warning.style.display = "block";
@@ -463,6 +491,20 @@ async function updateSimilarCids(parts) {
       warning.innerHTML =
         `⚠ This CID already exists in master. Approving will re-use it (no duplicate created), ` +
         `but double-check the fields are right.`;
+    } else if (sizeVariants.length) {
+      warning.style.display = "block";
+      warning.className = "banner seen";
+      warning.style.padding = "8px 10px";
+      warning.style.marginTop = "8px";
+      warning.style.borderRadius = "4px";
+      warning.style.fontSize = "12px";
+      const list = sizeVariants
+        .map(v => `<code style="font-size:11px">${escapeHtml(v.cigar_id)}</code>`)
+        .join(", ");
+      warning.innerHTML =
+        `⚠ Same brand/line/vitola already exists with a different size: ${list}. ` +
+        `Consider using the existing CID's size (retailers often round 5.5 to 5) ` +
+        `instead of creating a near-duplicate.`;
     } else {
       warning.style.display = "none";
       warning.innerHTML = "";
