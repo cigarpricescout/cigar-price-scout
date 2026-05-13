@@ -899,6 +899,102 @@ def _load_observed_overlay(window_days: int = 14) -> list:
     return products
 
 
+_RETAILER_LOOKUP_CACHE: Dict[str, Dict[str, str]] = {"by_name": {}, "by_host": {}}
+
+
+def _norm_retailer_name(name: str) -> str:
+    """Lowercase, strip non-alphanumerics. Used to fuzzy-match the
+    website form's free-text retailer_name against the canonical RETAILERS
+    catalog. 'JR Cigars' / 'jr-cigar' / 'JR  Cigar' all collapse to 'jrcigar'."""
+    return re.sub(r"[^a-z0-9]", "", (name or "").lower())
+
+
+def _build_retailer_lookups() -> Dict[str, Dict[str, str]]:
+    """Cache-once: build {normalized_name -> key} and {hostname -> key} for
+    every entry in RETAILERS. Hostname is taken from the explicit
+    `hostname` field (for blocked retailers) or inferred from the cached
+    extension registry (for retailers with sample URLs in their CSV)."""
+    if _RETAILER_LOOKUP_CACHE["by_name"] and _RETAILER_LOOKUP_CACHE["by_host"]:
+        return _RETAILER_LOOKUP_CACHE
+    by_name: Dict[str, str] = {}
+    by_host: Dict[str, str] = {}
+    for r in RETAILERS:
+        key = r["key"]
+        normalized = _norm_retailer_name(r["name"])
+        if normalized:
+            by_name.setdefault(normalized, key)
+        host = (r.get("hostname") or "").strip().lower()
+        if host:
+            by_host[host] = key
+            by_host["www." + host if not host.startswith("www.") else host[4:]] = key
+    # Pull the extension's full registry too (covers retailers whose
+    # hostname is only present in their CSV's sample URL).
+    try:
+        from app.extension_endpoints import _cache_state, _refresh_cache  # type: ignore
+        _refresh_cache()
+        for h, k in (_cache_state.get("retailers") or {}).items():
+            by_host.setdefault(h.lower(), k)
+    except Exception:
+        pass
+    _RETAILER_LOOKUP_CACHE["by_name"] = by_name
+    _RETAILER_LOOKUP_CACHE["by_host"] = by_host
+    return _RETAILER_LOOKUP_CACHE
+
+
+def _community_canonical_url(url: str) -> Optional[str]:
+    """Best-effort URL canonicalization for dedup. Strips trailing slash
+    and lowercases the host; falls back to the extension's full canonical
+    form when available (handles ?variant=, utm_*, etc.)."""
+    if not url:
+        return None
+    try:
+        from app.cid_matcher import canonicalize_url  # type: ignore
+        return canonicalize_url(url)
+    except Exception:
+        try:
+            from urllib.parse import urlparse, urlunparse
+            u = urlparse(url.strip())
+            host = (u.netloc or "").lower()
+            path = (u.path or "").rstrip("/")
+            return urlunparse((u.scheme.lower() or "https", host, path, "", "", ""))
+        except Exception:
+            return url.strip().lower()
+
+
+def _resolve_community_retailer_key(retailer_name: str, url: str) -> Optional[str]:
+    """Map a website-form community submission to a canonical retailer_key.
+
+    Prefers URL hostname (authoritative — the submitter pasted a real
+    retailer URL) and falls back to normalized retailer_name (for cases
+    where the URL is malformed or pointing to a redirect).
+    """
+    lookups = _build_retailer_lookups()
+    if url:
+        try:
+            from urllib.parse import urlparse
+            host = (urlparse(url).hostname or "").lower()
+        except Exception:
+            host = ""
+        if host:
+            if host in lookups["by_host"]:
+                return lookups["by_host"][host]
+            if host.startswith("www.") and host[4:] in lookups["by_host"]:
+                return lookups["by_host"][host[4:]]
+    if retailer_name:
+        norm = _norm_retailer_name(retailer_name)
+        if norm:
+            # Exact match first.
+            if norm in lookups["by_name"]:
+                return lookups["by_name"][norm]
+            # Singular/plural variance: 'jrcigars' (form) vs 'jrcigar' (catalog).
+            # Cheap, catches 90% of the divergence we actually see.
+            stripped = norm.rstrip("s")
+            for cand_norm, key in lookups["by_name"].items():
+                if cand_norm.rstrip("s") == stripped:
+                    return key
+    return None
+
+
 def load_all_products():
     """Load all products from all retailer CSV files + community submissions, with in-memory caching"""
     now = time.time()
@@ -945,7 +1041,48 @@ def load_all_products():
                 if not cp.cigar_id:
                     cp.cigar_id = match.cigar_id
 
-    all_products.extend(community_products)
+    # Dedup website-form community submissions against CSV + observed.
+    # The website form has been around longer than the extension and uses
+    # its own per-submission retailer_key ('community_42'), so naive
+    # extension.extend(community_products) used to show "JR Cigar" twice
+    # on /compare — once from the extension's observed overlay, once as
+    # "community_42 — JR Cigar". We drop the community row when EITHER
+    # of two signals matches an existing CSV/observed row:
+    #   1. Same canonical URL (strongest — exact same product page)
+    #   2. Same (retailer_key, cigar_id) — the community submission
+    #      maps to a known retailer (via URL hostname or fuzzy name
+    #      match) and we already have data for that retailer + cigar.
+    # CSV/observed wins on collision: CSV is operator-curated, observed
+    # has a timestamp the user can judge for freshness; legacy community
+    # rows have no surfaced provenance.
+    existing_urls = set()
+    existing_pairs = set()
+    for p in all_products:
+        canon = _community_canonical_url(p.url)
+        if canon:
+            existing_urls.add(canon)
+        if p.cigar_id:
+            existing_pairs.add((p.retailer_key, p.cigar_id))
+
+    deduped_community = []
+    dropped = 0
+    for cp in community_products:
+        canon = _community_canonical_url(cp.url)
+        if canon and canon in existing_urls:
+            dropped += 1
+            continue
+        if cp.cigar_id:
+            mapped_key = _resolve_community_retailer_key(cp.retailer_name, cp.url)
+            if mapped_key and (mapped_key, cp.cigar_id) in existing_pairs:
+                dropped += 1
+                continue
+        deduped_community.append(cp)
+    if dropped:
+        logger.info(
+            "load_all_products: dropped %d community submission(s) that duplicated CSV/observed rows",
+            dropped,
+        )
+    all_products.extend(deduped_community)
     
     _product_cache["data"] = all_products
     _product_cache["timestamp"] = now
