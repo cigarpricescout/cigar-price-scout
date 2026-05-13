@@ -2,9 +2,8 @@
 """
 URL Discovery Agent - Finds product URLs for unmonitored CIDs across retailers.
 
-Uses a two-pass approach:
-  1. Programmatic matching: decompose CID and URL slugs, score keyword overlap
-  2. Claude verification: confirm ambiguous matches and resolve edge cases
+Matches programmatically: decompose CID and URL slugs, score keyword overlap,
+and stage the top candidate per CID for human review.
 
 Outputs staged results for human review before publishing to production CSVs.
 
@@ -23,7 +22,7 @@ Usage:
     python tools/ai/url_discoverer.py --reject-flagged
 
 Environment:
-    ANTHROPIC_API_KEY - Required. Your Anthropic API key from console.anthropic.com
+    None required. All matching is programmatic (no AI verification).
 """
 
 import os
@@ -42,12 +41,6 @@ from urllib.parse import urlparse
 
 import requests
 import pandas as pd
-
-try:
-    import anthropic
-except ImportError:
-    print("[ERROR] anthropic package not installed. Run: pip install anthropic")
-    sys.exit(1)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -512,137 +505,20 @@ def get_unmonitored_cids(top_n: int = 50) -> pd.DataFrame:
     return top.drop(columns=["_priority"])
 
 
-# ── Claude API matching ───────────────────────────────────────────────
+# ── Confidence label helper ───────────────────────────────────────────
 
-MATCH_PROMPT = """You are matching cigar products to URLs. Given a cigar CID (canonical ID) and a list of candidate product URLs, determine which URL (if any) sells the exact same cigar.
+def score_to_confidence(score: float) -> str:
+    """Map a programmatic score to a HIGH/MEDIUM/LOW/VERY_LOW label.
 
-CID format: BRAND|PARENT_BRAND|LINE|VITOLA|VITOLA|SIZE|WRAPPER_CODE|BOX_QTY
-
-Wrapper codes:
-- MAD = Maduro
-- NAT = Natural / Connecticut Shade
-- CAM = Cameroon
-- ECU = Ecuadorian (Habano or Connecticut)
-- HAB = Habano / Corojo
-- SUM = Sumatra
-- BRD = Broadleaf / San Andres
-- OSC = Oscuro
-- NIC = Nicaraguan
-- MEX = Mexican / San Andres
-- CLA = Claro
-
-CRITICAL RULES:
-1. The brand AND line must match. "Padron 1964 Anniversary" is different from "Padron 1926 Anniversary".
-2. The vitola (shape/name) must match. "Robusto" is different from "Toro".
-3. The wrapper must match. Maduro is different from Natural.
-4. The URL should be for a BOX purchase, not singles or 5-packs.
-5. If no URL is a confident match, say NONE.
-
-For each CID, respond with EXACTLY this JSON format:
-{
-  "matches": [
-    {
-      "cid": "THE_CID",
-      "url": "matched_url_or_NONE",
-      "confidence": "HIGH|MEDIUM|LOW|NONE",
-      "reason": "brief explanation"
-    }
-  ]
-}
-
-Confidence levels:
-- HIGH: All components clearly match (brand, line, vitola, wrapper, box)
-- MEDIUM: Most components match but one is ambiguous (e.g., vitola name differs slightly)
-- LOW: Brand and line match but other components are uncertain
-- NONE: No good match found
-"""
-
-
-def claude_batch_match(
-    client: anthropic.Anthropic,
-    cid_batch: List[Dict],
-    candidate_urls: List[str],
-    retailer_name: str,
-) -> List[Dict]:
+    Mirrors the buckets used by app/cid_matcher.py and the admin review UI.
     """
-    Use Claude to match a batch of CIDs against candidate URLs.
-    Returns list of {cid, url, confidence, reason}.
-    """
-    if not candidate_urls:
-        return [
-            {"cid": c["raw"], "url": None, "confidence": "NONE", "reason": "No product URLs found for retailer"}
-            for c in cid_batch
-        ]
-
-    # Build the prompt with CIDs and URLs
-    cid_list = "\n".join(f"  - {c['raw']}" for c in cid_batch)
-
-    # Limit URL list to keep prompt manageable — send the top candidates
-    # Pre-filter: only include URLs that share at least one keyword with any CID
-    all_keywords = set()
-    for c in cid_batch:
-        all_keywords.update(cid_to_search_terms(c))
-
-    relevant_urls = []
-    for url in candidate_urls:
-        slug = slug_from_url(url)
-        if any(kw in slug for kw in all_keywords if len(kw) > 3):
-            relevant_urls.append(url)
-
-    # Cap at 200 URLs to keep costs reasonable
-    relevant_urls = relevant_urls[:200]
-
-    if not relevant_urls:
-        return [
-            {"cid": c["raw"], "url": None, "confidence": "NONE", "reason": "No relevant product URLs on this retailer"}
-            for c in cid_batch
-        ]
-
-    url_list = "\n".join(f"  - {u}" for u in relevant_urls)
-
-    user_msg = f"""Retailer: {retailer_name}
-
-CIDs to match:
-{cid_list}
-
-Candidate product URLs:
-{url_list}
-
-Find the best matching URL for each CID. Return JSON only."""
-
-    try:
-        response = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=4096,
-            system=MATCH_PROMPT,
-            messages=[{"role": "user", "content": user_msg}],
-        )
-
-        text = response.content[0].text.strip()
-
-        # Extract JSON from response (handle markdown code blocks)
-        json_match = re.search(r"\{[\s\S]*\}", text)
-        if not json_match:
-            logger.warning(f"No JSON found in Claude response for {retailer_name}")
-            return []
-
-        result = json.loads(json_match.group())
-        matches = result.get("matches", [])
-
-        # Normalize
-        for m in matches:
-            if m.get("url") == "NONE" or not m.get("url"):
-                m["url"] = None
-                m["confidence"] = "NONE"
-
-        return matches
-
-    except json.JSONDecodeError as e:
-        logger.error(f"Failed to parse Claude response for {retailer_name}: {e}")
-        return []
-    except anthropic.APIError as e:
-        logger.error(f"Claude API error for {retailer_name}: {e}")
-        return []
+    if score >= 0.80:
+        return "HIGH"
+    if score >= 0.60:
+        return "MEDIUM"
+    if score >= 0.40:
+        return "LOW"
+    return "VERY_LOW"
 
 
 # ── Staged output management ──────────────────────────────────────────
@@ -950,19 +826,12 @@ def run_discovery(
     retailer_filter: Optional[str] = None,
     api_key: Optional[str] = None,
 ):
-    """Main discovery pipeline."""
+    """Main discovery pipeline (programmatic-only; no AI verification)."""
     start_time = time.time()
 
-    # Load API key
-    key = api_key or os.environ.get("ANTHROPIC_API_KEY")
-    if not key:
-        print("[ERROR] ANTHROPIC_API_KEY not set.")
-        print("        Set it as an environment variable or pass --api-key")
-        sys.exit(1)
+    # api_key kept in the signature for backwards-compatible callers; unused.
+    _ = api_key
 
-    client = anthropic.Anthropic(api_key=key)
-
-    # Load feedback history for context
     feedback = load_feedback_history()
 
     # Get retailers and unmonitored CIDs
@@ -1035,17 +904,13 @@ def run_discovery(
             scored.sort(key=lambda x: x[1], reverse=True)
             candidates_by_cid[c["raw"]] = scored[:10]
 
-        # Split into auto-match (very high programmatic score) and needs-Claude
-        needs_claude = []
+        # Programmatic-only: take the top candidate per CID, label its
+        # confidence by score band, and stage it for manual review. Anything
+        # without a candidate is recorded as a NONE match so the report can
+        # surface coverage gaps.
         for c in cids_for_retailer:
             candidates = candidates_by_cid.get(c["raw"], [])
-            if candidates and candidates[0][1] >= 0.85:
-                # Very high programmatic match — still send to Claude for verification
-                # but batch these with better context
-                needs_claude.append(c)
-            elif candidates:
-                needs_claude.append(c)
-            else:
+            if not candidates:
                 all_matches.append({
                     "cid": c["raw"],
                     "retailer_key": rkey,
@@ -1053,36 +918,16 @@ def run_discovery(
                     "confidence": "NONE",
                     "reason": "No keyword overlap with any product URL",
                 })
-
-        if not needs_claude:
-            continue
-
-        # Pass 2: Claude verification in batches of 10
-        batch_size = 10
-        for i in range(0, len(needs_claude), batch_size):
-            batch = needs_claude[i:i + batch_size]
-
-            # Collect candidate URLs for this batch
-            batch_urls = set()
-            for c in batch:
-                for url, score, _ in candidates_by_cid.get(c["raw"], []):
-                    batch_urls.add(url)
-
-            if not batch_urls:
                 continue
 
-            print(f"  Sending {len(batch)} CIDs to Claude ({len(batch_urls)} candidate URLs)...")
-
-            claude_results = claude_batch_match(
-                client, batch, list(batch_urls), rkey,
-            )
-
-            for m in claude_results:
-                m["retailer_key"] = rkey
-                all_matches.append(m)
-
-            # Rate limit between Claude calls
-            time.sleep(1)
+            top_url, top_score, top_details = candidates[0]
+            all_matches.append({
+                "cid": c["raw"],
+                "retailer_key": rkey,
+                "url": top_url,
+                "confidence": score_to_confidence(top_score),
+                "reason": f"Programmatic score={top_score:.2f} ({top_details})",
+            })
 
     elapsed = time.time() - start_time
 
@@ -1124,10 +969,6 @@ def main():
         "--retailer", type=str, metavar="KEY",
         help="Only scan a specific retailer (e.g., foxcigar, atlantic)",
     )
-    parser.add_argument(
-        "--api-key", type=str,
-        help="Anthropic API key (or set ANTHROPIC_API_KEY env var)",
-    )
 
     args = parser.parse_args()
 
@@ -1141,7 +982,6 @@ def main():
         run_discovery(
             top_n_cids=args.top_cids,
             retailer_filter=args.retailer,
-            api_key=args.api_key,
         )
 
 

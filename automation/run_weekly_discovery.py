@@ -616,45 +616,6 @@ def send_digest_email(config: dict, all_pending: list, new_count: int = 0):
         logger.error(f"Failed to send digest email: {e}")
 
 
-def run_queue_processor() -> str:
-    """Process the extractor generator queue if there are entries."""
-    queue_file = PROJECT_ROOT / "tools" / "ai" / "new_retailer_queue.txt"
-    if not queue_file.exists():
-        return "No queue file found."
-
-    # Check if there are actual entries (not just comments)
-    has_entries = False
-    with open(queue_file, "r") as f:
-        for line in f:
-            line = line.strip()
-            if line and not line.startswith("#") and "|" in line:
-                has_entries = True
-                break
-
-    if not has_entries:
-        return "Queue file is empty (no retailer entries)."
-
-    try:
-        from tools.ai.extractor_generator import parse_queue_file, generate_for_retailer
-
-        entries = parse_queue_file()
-        if not entries:
-            return "No valid entries in queue file."
-
-        results = []
-        for entry in entries:
-            try:
-                generate_for_retailer(entry["name"], entry["key"], entry["urls"])
-                results.append(f"  [OK] {entry['name']} ({entry['key']}): Extractor generated")
-            except Exception as e:
-                results.append(f"  [FAIL] {entry['name']} ({entry['key']}): {e}")
-
-        return "\n".join(results)
-
-    except Exception as e:
-        return f"Queue processing failed: {e}"
-
-
 def read_staged_matches() -> list:
     """Read staged matches from CSV, return only those with status='staged'."""
     if not STAGED_FILE.exists():
@@ -687,7 +648,6 @@ def main():
     parser = argparse.ArgumentParser(description="Daily URL Discovery Runner")
     parser.add_argument("--top-cids", type=int, default=50, help="Number of CIDs to search for")
     parser.add_argument("--dry-run", action="store_true", help="Run without sending email")
-    parser.add_argument("--skip-queue", action="store_true", help="Skip extractor generator queue")
     parser.add_argument("--skip-prices", action="store_true", help="Skip live price fetching for new matches")
     parser.add_argument("--email-only", action="store_true", help="Skip discovery, just send pending matches email")
     args = parser.parse_args()
@@ -731,12 +691,7 @@ def main():
         except Exception as e:
             logger.error(f"URL discovery failed: {e}")
 
-        # 2. Process extractor generator queue
-        if not args.skip_queue:
-            logger.info("Checking extractor generator queue...")
-            run_queue_processor()
-
-        # 3. Read NEW staged matches from local CSV and upload to API
+        # 2. Read NEW staged matches from local CSV and upload to API
         staged = read_staged_matches()
         logger.info(f"Found {len(staged)} new staged matches in local CSV")
 
@@ -748,11 +703,11 @@ def main():
             new_count = len(tokens)
             logger.info(f"{new_count} new matches uploaded to API")
 
-    # 4. Fetch ALL pending matches from API (new + old unreviewed)
+    # 3. Fetch ALL pending matches from API (new + old unreviewed)
     all_pending = fetch_all_pending_from_api()
     logger.info(f"Total pending matches for review: {len(all_pending)}")
 
-    # 5. Send daily email with the full pending queue
+    # 4. Send daily email with the full pending queue
     if not args.dry_run:
         if all_pending or new_count > 0:
             send_digest_email(config, all_pending, new_count)
