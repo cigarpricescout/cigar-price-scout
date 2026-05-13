@@ -24,6 +24,7 @@ import {
   getRetailerRegistry,
   resolveRetailerKey,
   getZip,
+  getObserverId,
 } from "./config.js";
 
 // ── First-run consent flow ─────────────────────────────────────────────
@@ -234,6 +235,116 @@ chrome.tabs.onActivated.addListener(async ({ tabId }) => {
     const tab = await chrome.tabs.get(tabId);
     refreshForTab(tab);
   } catch (_) {}
+});
+
+// ── Requested-retailer notifications ──────────────────────────────────
+// When a user lands on an unknown retailer and clicks "Request this
+// retailer", popup.js posts to /api/community/request-retailer with their
+// observer_id. The operator later onboards the retailer (adds it to
+// RETAILERS, deploys). The next time the consumer's background worker
+// polls /api/community/my-requests, the backend lazily marks the request
+// fulfilled; this code detects the new transition and fires a
+// chrome.notification.
+//
+// Why client-side dedupe: chrome.notifications has no "have I shown this
+// already" history accessible to extensions. We keep the set of hostnames
+// we've notified about in chrome.storage.local and only fire for fresh
+// transitions.
+//
+// Polling cadence: once on service-worker startup, then every 6h via a
+// chrome.alarms timer. Cheap GET, no auth.
+
+const NOTIFIED_KEY = "notifiedFulfilledHosts";
+const REQUEST_CHECK_ALARM = "checkRetailerRequests";
+
+async function getNotifiedHosts() {
+  try {
+    const out = await chrome.storage.local.get(NOTIFIED_KEY);
+    return new Set(out[NOTIFIED_KEY] || []);
+  } catch (_) {
+    return new Set();
+  }
+}
+
+async function setNotifiedHosts(set) {
+  try {
+    await chrome.storage.local.set({ [NOTIFIED_KEY]: Array.from(set) });
+  } catch (_) {}
+}
+
+async function checkRequestedRetailers() {
+  // Skip if the user is opted out — they may not want any extension chatter.
+  if (!(await hasConsented())) return;
+  let observerId;
+  try { observerId = await getObserverId(); } catch (_) { return; }
+  if (!observerId) return;
+
+  let data;
+  try {
+    data = await publicFetch("/api/community/my-requests", {
+      query: { observer_id: observerId },
+    });
+  } catch (_) {
+    return;
+  }
+  if (!data || !Array.isArray(data.requests)) return;
+
+  const notified = await getNotifiedHosts();
+  let dirty = false;
+  for (const req of data.requests) {
+    if (req.status !== "fulfilled" || !req.hostname) continue;
+    if (notified.has(req.hostname)) continue;
+    notified.add(req.hostname);
+    dirty = true;
+    try {
+      // iconUrl is required by chrome.notifications. Until we ship a real
+      // icon128.png with the extension, the create() call may fail at the
+      // OS level (user just doesn't see the toast). The hostname is still
+      // added to the notified set so we don't re-attempt every poll, and
+      // the registry refresh below still fires — the next time the user
+      // browses the retailer, the popup will surface comparison data.
+      await chrome.notifications.create(`retailer-live-${req.hostname}`, {
+        type: "basic",
+        iconUrl: chrome.runtime.getURL("icon128.png"),
+        title: "Cigar Price Scout",
+        message: `${req.hostname} is now tracked! Browse it to see comparison prices.`,
+        priority: 1,
+      });
+    } catch (_) {
+      // Notifications disabled at the OS level, or icon missing. Soft-fail.
+    }
+    // Also refresh the registry cache so the badge updates on next visit.
+    try { await getRetailerRegistry({ forceRefresh: true }); } catch (_) {}
+  }
+  if (dirty) await setNotifiedHosts(notified);
+}
+
+chrome.runtime.onStartup.addListener(() => {
+  checkRequestedRetailers().catch(() => {});
+});
+
+chrome.runtime.onInstalled.addListener(({ reason }) => {
+  if (reason === "update" || reason === "install") {
+    checkRequestedRetailers().catch(() => {});
+  }
+  try {
+    chrome.alarms.create(REQUEST_CHECK_ALARM, { periodInMinutes: 60 * 6 });
+  } catch (_) {}
+});
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === REQUEST_CHECK_ALARM) {
+    checkRequestedRetailers().catch(() => {});
+  }
+});
+
+chrome.notifications.onClicked.addListener((notifId) => {
+  const prefix = "retailer-live-";
+  if (notifId.startsWith(prefix)) {
+    const host = notifId.slice(prefix.length);
+    chrome.tabs.create({ url: `https://${host}` });
+    chrome.notifications.clear(notifId);
+  }
 });
 
 // ── Message bridge: popup asks for cached status ──────────────────────

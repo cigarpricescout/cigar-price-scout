@@ -8,7 +8,7 @@ import csv
 import re
 import time
 import uuid
-from typing import Optional
+from typing import Dict, Optional
 from pydantic import BaseModel
 import smtplib
 from email.mime.text import MIMEText
@@ -518,49 +518,72 @@ except Exception as _comm_err:
     logger.warning(f"⚠ Community/public router not mounted: {_comm_err}")
 
 
+# Retailer config.
+#
+# Per-entry fields:
+#   key                — internal id; matches static/data/{key}.csv stem.
+#   name               — display name.
+#   csv                — CSV path (may be empty file for blocked retailers).
+#   authorized         — affiliate / authorized-dealer flag.
+#   extractor_status   — 'active'  (default; we run a scraper, CSV is source of truth)
+#                       'blocked' (anti-bot or no extractor; consumer
+#                                  observations are the source of truth — they
+#                                  overlay into load_all_products at query time)
+#                       'dormant' (was active, now skipped entirely)
+#   hostname           — optional explicit primary hostname. Required for
+#                       blocked retailers whose CSVs are empty; otherwise
+#                       inferred from the first URL row in the CSV.
+#
+# When adding a new anti-bot retailer:
+#   1. Add the row here with extractor_status='blocked' and a hostname.
+#   2. Create an empty `static/data/{key}.csv` (header-only is fine).
+#   3. Deploy. The registry picks up the hostname and the consumer
+#      extension will let users contribute observations + propose CIDs.
 RETAILERS = [
     {"key": "abcfws", "name": "ABC Fine Wine & Spirits", "csv": f"{CSV_PATH_PREFIX}/abcfws.csv", "authorized": False},
     {"key": "absolutecigars", "name": "Absolute Cigars", "csv": f"{CSV_PATH_PREFIX}/absolutecigars.csv", "authorized": False},
     {"key": "atlantic", "name": "Atlantic Cigar", "csv": f"{CSV_PATH_PREFIX}/atlantic.csv", "authorized": False},
-    {"key": "bestcigar", "name": "Best Cigar Prices", "csv": f"{CSV_PATH_PREFIX}/bestcigar.csv", "authorized": False},
+    {"key": "bestcigar", "name": "Best Cigar Prices", "csv": f"{CSV_PATH_PREFIX}/bestcigar.csv", "authorized": False, "extractor_status": "blocked", "hostname": "bestcigarprices.com"},
     {"key": "bighumidor", "name": "Big Humidor", "csv": f"{CSV_PATH_PREFIX}/bighumidor.csv", "authorized": False},
     {"key": "bnbtobacco", "name": "BnB Tobacco", "csv": f"{CSV_PATH_PREFIX}/bnbtobacco.csv", "authorized": True},
     {"key": "bonitasmokeshop", "name": "Bonita Smoke Shop", "csv": f"{CSV_PATH_PREFIX}/bonitasmokeshop.csv", "authorized": False},
+    {"key": "boutiquecigar", "name": "The Boutique Cigar", "csv": f"{CSV_PATH_PREFIX}/boutiquecigar.csv", "authorized": False, "extractor_status": "blocked", "hostname": "theboutiquecigar.com"},
     {"key": "buitragocigars", "name": "Buitrago Cigars", "csv": f"{CSV_PATH_PREFIX}/buitragocigars.csv", "authorized": False},
     {"key": "casademontecristo", "name": "Casa de Montecristo", "csv": f"{CSV_PATH_PREFIX}/casademontecristo.csv", "authorized": False},
     {"key": "cccrafter", "name": "CC Crafter", "csv": f"{CSV_PATH_PREFIX}/cccrafter.csv", "authorized": False},
     {"key": "cdmcigars", "name": "CDM Cigars", "csv": f"{CSV_PATH_PREFIX}/cdmcigars.csv", "authorized": False},
     {"key": "cheaplittlecigars", "name": "Cheap Little Cigars", "csv": f"{CSV_PATH_PREFIX}/cheaplittlecigars.csv", "authorized": False},
-    {"key": "ci", "name": "Cigars International", "csv": f"{CSV_PATH_PREFIX}/ci.csv", "authorized": True},
+    {"key": "ci", "name": "Cigars International", "csv": f"{CSV_PATH_PREFIX}/ci.csv", "authorized": True, "extractor_status": "blocked", "hostname": "cigarsinternational.com"},
     {"key": "cigar", "name": "Cigar.com", "csv": f"{CSV_PATH_PREFIX}/cigar.csv", "authorized": False},
     {"key": "cigarboxpa", "name": "Cigar Box PA", "csv": f"{CSV_PATH_PREFIX}/cigarboxpa.csv", "authorized": False},
     {"key": "cigardepot", "name": "Cigar Depot", "csv": f"{CSV_PATH_PREFIX}/cigardepot.csv", "authorized": False},
-    {"key": "cigarcellarofmiami", "name": "Cigar Cellar of Miami", "csv": f"{CSV_PATH_PREFIX}/cigarcellarofmiami.csv", "authorized": False},
-    {"key": "cigarcountry", "name": "Cigar Country", "csv": f"{CSV_PATH_PREFIX}/cigarcountry.csv", "authorized": False},
+    {"key": "cigarcellarofmiami", "name": "Cigar Cellar of Miami", "csv": f"{CSV_PATH_PREFIX}/cigarcellarofmiami.csv", "authorized": False, "extractor_status": "blocked", "hostname": "cigarcellarofmiami.com"},
+    {"key": "cigarcountry", "name": "Cigar Country", "csv": f"{CSV_PATH_PREFIX}/cigarcountry.csv", "authorized": False, "extractor_status": "blocked", "hostname": "cigarcountry.com"},
     {"key": "cigarhustler", "name": "Cigar Hustler", "csv": f"{CSV_PATH_PREFIX}/cigarhustler.csv", "authorized": False},
     {"key": "cigarking", "name": "Cigar King", "csv": f"{CSV_PATH_PREFIX}/cigarking.csv", "authorized": False},    
     {"key": "cigaroasis", "name": "Cigar Oasis", "csv": f"{CSV_PATH_PREFIX}/cigaroasis.csv", "authorized": False},
-    {"key": "cigarpage", "name": "Cigar Page", "csv": f"{CSV_PATH_PREFIX}/cigarpage.csv", "authorized": False},
+    {"key": "cigarpage", "name": "Cigar Page", "csv": f"{CSV_PATH_PREFIX}/cigarpage.csv", "authorized": False, "extractor_status": "blocked", "hostname": "cigarpage.com"},
     {"key": "cigarpairingparlor", "name": "The Cigar Pairing Parlor LLC", "csv": f"{CSV_PATH_PREFIX}/cigarpairingparlor.csv", "authorized": False},
     {"key": "cigarplace", "name": "Cigar Place", "csv": f"{CSV_PATH_PREFIX}/cigarplace.csv", "authorized": False},
     {"key": "cigarprimestore", "name": "Cigar Prime Store", "csv": f"{CSV_PATH_PREFIX}/cigarprimestore.csv", "authorized": False},
     {"key": "cigarsdirect", "name": "Cigars Direct", "csv": f"{CSV_PATH_PREFIX}/cigarsdirect.csv", "authorized": False},
-    {"key": "cigora", "name": "Cigora", "csv": f"{CSV_PATH_PREFIX}/cigora.csv", "authorized": True},
+    {"key": "cigarwarehouseusa", "name": "Cigar Warehouse USA", "csv": f"{CSV_PATH_PREFIX}/cigarwarehouseusa.csv", "authorized": False, "extractor_status": "blocked", "hostname": "cigarwarehouseusa.com"},
+    {"key": "cigora", "name": "Cigora", "csv": f"{CSV_PATH_PREFIX}/cigora.csv", "authorized": True, "extractor_status": "blocked", "hostname": "cigora.com"},
     {"key": "corona", "name": "Corona Cigar", "csv": f"{CSV_PATH_PREFIX}/corona.csv", "authorized": False},
     {"key": "coronacigar", "name": "Corona Cigar Co.", "csv": f"{CSV_PATH_PREFIX}/coronacigar.csv", "authorized": False},
     {"key": "cubancrafters", "name": "Cuban Crafters", "csv": f"{CSV_PATH_PREFIX}/cubancrafters.csv", "authorized": False},
     {"key": "cuencacigars", "name": "Cuenca Cigars", "csv": f"{CSV_PATH_PREFIX}/cuencacigars.csv", "authorized": False},
     {"key": "escobarcigars", "name": "Escobar Cigars", "csv": f"{CSV_PATH_PREFIX}/escobarcigars.csv", "authorized": False},
-    {"key": "famous", "name": "Famous Smoke Shop", "csv": f"{CSV_PATH_PREFIX}/famous.csv", "authorized": True},
+    {"key": "famous", "name": "Famous Smoke Shop", "csv": f"{CSV_PATH_PREFIX}/famous.csv", "authorized": True, "extractor_status": "blocked", "hostname": "famous-smoke.com"},
     {"key": "foxcigar", "name": "Fox Cigar", "csv": f"{CSV_PATH_PREFIX}/foxcigar.csv", "authorized": False},
     {"key": "gothamcigars", "name": "Gotham Cigars", "csv": f"{CSV_PATH_PREFIX}/gothamcigars.csv", "authorized": True},
     {"key": "hilands", "name": "Hiland's Cigars", "csv": f"{CSV_PATH_PREFIX}/hilands.csv", "authorized": False},
     {"key": "holts", "name": "Holt's Cigar Company", "csv": f"{CSV_PATH_PREFIX}/holts.csv", "authorized": False},
-    {"key": "jr", "name": "JR Cigar", "csv": f"{CSV_PATH_PREFIX}/jr.csv", "authorized": False},
+    {"key": "jr", "name": "JR Cigar", "csv": f"{CSV_PATH_PREFIX}/jr.csv", "authorized": False, "extractor_status": "blocked", "hostname": "jrcigars.com"},
     {"key": "lmcigars", "name": "LM Cigars", "csv": f"{CSV_PATH_PREFIX}/lmcigars.csv", "authorized": False},
-    {"key": "mikescigars", "name": "Mike's Cigars", "csv": f"{CSV_PATH_PREFIX}/mikescigars.csv", "authorized": False},
+    {"key": "mikescigars", "name": "Mike's Cigars", "csv": f"{CSV_PATH_PREFIX}/mikescigars.csv", "authorized": False, "extractor_status": "blocked", "hostname": "mikescigars.com"},
     {"key": "momscigars", "name": "Mom's Cigars", "csv": f"{CSV_PATH_PREFIX}/momscigars.csv", "authorized": False},
-    {"key": "neptune", "name": "Neptune Cigar", "csv": f"{CSV_PATH_PREFIX}/neptune.csv", "authorized": False},
+    {"key": "neptune", "name": "Neptune Cigar", "csv": f"{CSV_PATH_PREFIX}/neptune.csv", "authorized": False, "extractor_status": "blocked", "hostname": "neptunecigar.com"},
     {"key": "niceashcigars", "name": "Nice Ash Cigars", "csv": f"{CSV_PATH_PREFIX}/niceashcigars.csv", "authorized": False},
     {"key": "nickscigarworld", "name": "Nick's Cigar World", "csv": f"{CSV_PATH_PREFIX}/nickscigarworld.csv", "authorized": False},
     {"key": "oldhavana", "name": "Old Havana Cigar Co.", "csv": f"{CSV_PATH_PREFIX}/oldhavana.csv", "authorized": False},
@@ -573,13 +596,13 @@ RETAILERS = [
     {"key": "tampasweethearts", "name": "Tampa Sweethearts", "csv": f"{CSV_PATH_PREFIX}/tampasweethearts.csv", "authorized": False},
     {"key": "thecigarshop", "name": "The Cigar Shop", "csv": f"{CSV_PATH_PREFIX}/thecigarshop.csv", "authorized": False},
     {"key": "thecigarstore", "name": "The Cigar Store", "csv": f"{CSV_PATH_PREFIX}/thecigarstore.csv", "authorized": False},
-    {"key": "thompson", "name": "Thompson Cigar", "csv": f"{CSV_PATH_PREFIX}/thompson.csv", "authorized": True},
+    {"key": "thompson", "name": "Thompson Cigar", "csv": f"{CSV_PATH_PREFIX}/thompson.csv", "authorized": True, "extractor_status": "blocked", "hostname": "thompsoncigar.com"},
     {"key": "tobaccolocker", "name": "Tobacco Locker", "csv": f"{CSV_PATH_PREFIX}/tobaccolocker.csv", "authorized": False},
     {"key": "tobaccostock", "name": "Tobacco Stock", "csv": f"{CSV_PATH_PREFIX}/tobaccostock.csv", "authorized": False},
     {"key": "twoguys", "name": "Two Guys Smoke Shop", "csv": f"{CSV_PATH_PREFIX}/twoguys.csv", "authorized": False},
     {"key": "watchcity", "name": "Watch City Cigar", "csv": f"{CSV_PATH_PREFIX}/watchcity.csv", "authorized": False},
     {"key": "windycitycigars", "name": "Windy City Cigars", "csv": f"{CSV_PATH_PREFIX}/windycitycigars.csv", "authorized": False},
-    {"key": "baysidecigars", "name": "Bayside Cigars", "csv": f"{CSV_PATH_PREFIX}/baysidecigars.csv", "authorized": False},
+    {"key": "baysidecigars", "name": "Bayside Cigars", "csv": f"{CSV_PATH_PREFIX}/baysidecigars.csv", "authorized": False, "extractor_status": "blocked", "hostname": "baysidecigars.com"},
     {"key": "cigarboxinc", "name": "Cigar Box Inc", "csv": f"{CSV_PATH_PREFIX}/cigarboxinc.csv", "authorized": False},
     {"key": "karmacigar", "name": "Karma Cigar Bar", "csv": f"{CSV_PATH_PREFIX}/karmacigar.csv", "authorized": False},
     {"key": "mailcubancigars", "name": "Mail Cuban Cigars", "csv": f"{CSV_PATH_PREFIX}/mailcubancigars.csv", "authorized": False},
@@ -590,9 +613,41 @@ RETAILERS = [
     {"key": "stogies", "name": "Stogies World Class Cigars", "csv": f"{CSV_PATH_PREFIX}/stogies.csv", "authorized": False},
 ]
 
+
+def get_extractor_status(retailer_key: str) -> str:
+    """Return the extractor status for a retailer_key.
+
+    Defaults to 'active' for retailers without an explicit value, since the
+    historical contract for any entry in RETAILERS is "we scrape this".
+    """
+    for r in RETAILERS:
+        if r["key"] == retailer_key:
+            return r.get("extractor_status", "active")
+    return "active"
+
+
+def get_blocked_retailer_hosts() -> Dict[str, str]:
+    """{hostname: retailer_key} for every blocked retailer with a known hostname.
+
+    Used by the retailer registry to surface anti-bot retailers in the
+    consumer extension even when their CSV is empty.
+    """
+    out: Dict[str, str] = {}
+    for r in RETAILERS:
+        if r.get("extractor_status") != "blocked":
+            continue
+        host = (r.get("hostname") or "").strip().lower()
+        if host:
+            out[host] = r["key"]
+    return out
+
+
+def get_blocked_retailer_keys() -> set:
+    return {r["key"] for r in RETAILERS if r.get("extractor_status") == "blocked"}
+
 # Enhanced CSV loader with wrapper and vitola support
 class Product:
-    def __init__(self, retailer_key, retailer_name, title, url, brand, line, wrapper, vitola, size, box_qty, price, in_stock=True, current_promotions_applied='', cigar_id='', community_id=None):
+    def __init__(self, retailer_key, retailer_name, title, url, brand, line, wrapper, vitola, size, box_qty, price, in_stock=True, current_promotions_applied='', cigar_id='', community_id=None, price_source='csv', observed_at=None, observation_count=0):
         self.retailer_key = retailer_key
         self.retailer_name = retailer_name
         self.title = title
@@ -608,6 +663,16 @@ class Product:
         self.current_promotions_applied = current_promotions_applied
         self.cigar_id = cigar_id
         self.community_id = community_id
+        # Provenance for the consumer extension's "Last observed …" badge
+        # and the operator's data-quality view:
+        #   'csv'      — sourced from a per-retailer CSV; no per-row timestamp.
+        #   'observed' — aggregate of recent /api/community/observe rows.
+        #   'community'— legacy community_prices fallback.
+        self.price_source = price_source
+        # ISO 8601 string, only set when price_source='observed'. Used by the
+        # popup to render an absolute "Last observed YYYY-MM-DD" stamp.
+        self.observed_at = observed_at
+        self.observation_count = observation_count
 
 def load_csv(csv_path, retailer_key, retailer_name):
     """Load products from a CSV file with enhanced format"""
@@ -729,6 +794,111 @@ def _load_community_products():
         logger.error(f"Error loading community prices from PG: {e}")
     return products
 
+def _load_observed_overlay(window_days: int = 14) -> list:
+    """Aggregate recent consumer observations into Product objects.
+
+    Only emits rows for retailers with extractor_status='blocked' (anti-bot
+    sites we can't scrape — observations are the source of truth) AND only
+    where the URL has been mapped to a CID by the operator. Without a CID
+    we can't slot the observation into any /compare row.
+
+    Aggregation strategy (matches the user's stated preference in the
+    Sprint 3 brief):
+      * window: last ``window_days`` days of quantity_type='box' rows
+      * one row per (retailer_key, cigar_id) — newest observation wins
+        for price + in_stock + observed_at
+      * skips rows where the operator hasn't approved the URL yet
+        (cigar_id IS NULL)
+      * skips rows where the latest observation is older than the window
+    """
+    blocked_keys = get_blocked_retailer_keys()
+    if not blocked_keys:
+        return []
+    try:
+        conn = get_analytics_conn()
+    except Exception as e:
+        print(f"_load_observed_overlay: analytics conn failed: {e}")
+        return []
+    rows = []
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT DISTINCT ON (retailer_key, cigar_id)
+                   retailer_key, cigar_id, price_cents, in_stock,
+                   box_qty, scraped_title, url, observed_at
+            FROM observed_prices
+            WHERE retailer_key = ANY(%s)
+              AND cigar_id IS NOT NULL
+              AND quantity_type = 'box'
+              AND price_cents IS NOT NULL
+              AND observed_at > NOW() - (%s || ' days')::interval
+            ORDER BY retailer_key, cigar_id, observed_at DESC
+            """,
+            (list(blocked_keys), str(window_days)),
+        )
+        rows = cur.fetchall()
+        # Pull per-pair observation counts so the popup can show "based on
+        # N reports". Cheap secondary query keyed by the same window.
+        cur.execute(
+            """
+            SELECT retailer_key, cigar_id, COUNT(*)
+            FROM observed_prices
+            WHERE retailer_key = ANY(%s)
+              AND cigar_id IS NOT NULL
+              AND quantity_type = 'box'
+              AND price_cents IS NOT NULL
+              AND observed_at > NOW() - (%s || ' days')::interval
+            GROUP BY retailer_key, cigar_id
+            """,
+            (list(blocked_keys), str(window_days)),
+        )
+        counts = {(r[0], r[1]): int(r[2]) for r in cur.fetchall()}
+    except Exception as e:
+        print(f"_load_observed_overlay: query failed: {e}")
+        counts = {}
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    retailer_name_by_key = {r["key"]: r["name"] for r in RETAILERS}
+    products = []
+    for r in rows:
+        (retailer_key, cigar_id, price_cents, in_stock,
+         box_qty, scraped_title, url, observed_at) = r
+        try:
+            cid_parts = (cigar_id or "").split("|")
+            brand = cid_parts[0] if cid_parts else ""
+            line = cid_parts[2] if len(cid_parts) > 2 else ""
+            vitola = cid_parts[3] if len(cid_parts) > 3 else ""
+            size = cid_parts[5] if len(cid_parts) > 5 else ""
+            wrapper = cid_parts[6] if len(cid_parts) > 6 else ""
+            products.append(Product(
+                retailer_key=retailer_key,
+                retailer_name=retailer_name_by_key.get(retailer_key, retailer_key),
+                title=scraped_title or "",
+                url=url,
+                brand=brand,
+                line=line,
+                wrapper=wrapper,
+                vitola=vitola,
+                size=size,
+                box_qty=box_qty or 25,
+                price=(price_cents or 0) / 100.0,
+                in_stock=bool(in_stock) if in_stock is not None else True,
+                cigar_id=cigar_id or "",
+                price_source="observed",
+                observed_at=observed_at.isoformat() if observed_at else None,
+                observation_count=counts.get((retailer_key, cigar_id), 1),
+            ))
+        except Exception as e:
+            print(f"_load_observed_overlay: skipping row: {e}")
+            continue
+    return products
+
+
 def load_all_products():
     """Load all products from all retailer CSV files + community submissions, with in-memory caching"""
     now = time.time()
@@ -739,7 +909,23 @@ def load_all_products():
     for retailer in RETAILERS:
         products = load_csv(retailer["csv"], retailer["key"], retailer["name"])
         all_products.extend(products)
-    
+
+    # Overlay consumer observations on top of CSV data. For blocked retailers
+    # this is the ONLY price data; for non-blocked retailers we leave the
+    # CSV row alone (observed_overlay only emits blocked-retailer rows).
+    # Deduplicate by (retailer_key, cigar_id): CSV wins if both exist
+    # (defensive — shouldn't happen since blocked CSVs are empty today,
+    # but if an extractor comes online later it should take priority).
+    observed_products = _load_observed_overlay()
+    if observed_products:
+        seen_csv = {
+            (p.retailer_key, p.cigar_id)
+            for p in all_products if p.cigar_id
+        }
+        for op in observed_products:
+            if (op.retailer_key, op.cigar_id) not in seen_csv:
+                all_products.append(op)
+
     community_products = _load_community_products()
 
     # Backfill missing size/CID on community products from CSV data
@@ -1323,6 +1509,14 @@ def compare(
             "community_id": product.community_id,
             "price_context": price_context,
             "current_promotions_applied": product.current_promotions_applied,
+            # Sprint 3 provenance: when this row was sourced from consumer
+            # observations (anti-bot retailer), expose the latest-seen date
+            # so the UI can render an absolute "Last observed YYYY-MM-DD"
+            # stamp. Rows sourced from a per-retailer CSV are 'csv' with
+            # no per-row timestamp (CSVs roll over together).
+            "price_source": getattr(product, "price_source", "csv"),
+            "observed_at": getattr(product, "observed_at", None),
+            "observation_count": getattr(product, "observation_count", 0),
         }
         results.append(result)
     

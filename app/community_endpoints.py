@@ -219,6 +219,30 @@ def init_community_tables() -> None:
             CREATE INDEX IF NOT EXISTS review_decisions_decision_type_idx
                 ON review_decisions (decision_type, decided_at DESC)
         """)
+        # Per-observer "I want this retailer added" requests. Sibling to
+        # pending_new_retailers (which is the operator-facing queue) — we
+        # split observer linkage out so chrome.notifications can fire only
+        # for users who actually asked. Same hostname can be requested by
+        # many observers; each (observer_id, hostname) pair is unique.
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS community_retailer_requests (
+                id BIGSERIAL PRIMARY KEY,
+                observer_id TEXT NOT NULL,
+                hostname TEXT NOT NULL,
+                url TEXT,
+                requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                fulfilled_at TIMESTAMPTZ,
+                UNIQUE (observer_id, hostname)
+            )
+        """)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS community_retailer_requests_observer_idx
+                ON community_retailer_requests (observer_id)
+        """)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS community_retailer_requests_hostname_idx
+                ON community_retailer_requests (hostname)
+        """)
         conn.commit()
         conn.close()
         logger.info("Community tables initialized")
@@ -274,6 +298,14 @@ class ProposeMetadataBody(BaseModel):
 class DeleteObservationsBody(BaseModel):
     """Consumer's 'forget me' request: delete every observation + proposal
     they've ever submitted, identified by their per-install observer_id."""
+    observer_id: str = Field(..., min_length=1, max_length=128)
+
+
+class RequestRetailerBody(BaseModel):
+    """Consumer's 'please add this retailer' request when they land on an
+    unknown hostname. observer_id lets us notify them via chrome.notifications
+    when the operator brings the retailer online."""
+    url: str = Field(..., min_length=1, max_length=2048)
     observer_id: str = Field(..., min_length=1, max_length=128)
 
 
@@ -762,6 +794,12 @@ def _build_comparison_for_cid(
                 "delivered_cents": delivered,
                 "in_stock": bool(p.in_stock),
                 "url": p.url,
+                # Sprint 3 provenance. The popup uses these to render a
+                # "Last observed YYYY-MM-DD" stamp on anti-bot rows so
+                # users know the price is consumer-contributed, not live.
+                "price_source": getattr(p, "price_source", "csv"),
+                "observed_at": getattr(p, "observed_at", None),
+                "observation_count": getattr(p, "observation_count", 0),
             })
         # Sort: in-stock first, then cheapest delivered.
         results.sort(key=lambda r: (not r["in_stock"], r["delivered_cents"]))
@@ -785,6 +823,138 @@ def _build_comparison_for_cid(
         return None
 
 
+# ── POST /api/community/request-retailer ───────────────────────────────
+
+@router.post("/request-retailer")
+async def request_retailer(request: Request, body: RequestRetailerBody):
+    """Consumer asks us to add a new retailer.
+
+    Writes two rows:
+      * community_retailer_requests — observer-linked, used by /my-requests
+        polling so the consumer extension can show a chrome.notification
+        when this retailer comes online.
+      * pending_new_retailers — operator queue (same table the operator
+        admin tools already consume).
+
+    Both inserts are idempotent (ON CONFLICT DO NOTHING). No rate-limit
+    layer here yet — the operator queue dedupes by (hostname, url) so
+    a script can't pump duplicate rows.
+    """
+    url = canonicalize_url(body.url)
+    observer = body.observer_id.strip()
+    if not observer:
+        return JSONResponse({"error": "observer_id required"}, status_code=400)
+    try:
+        host = (urlparse(url).hostname or "").lower()
+    except Exception:
+        host = ""
+    if not host:
+        return JSONResponse({"error": "hostname could not be derived"}, status_code=400)
+
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO community_retailer_requests (observer_id, hostname, url)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (observer_id, hostname) DO NOTHING
+            """,
+            (observer, host, url),
+        )
+        cur.execute(
+            """
+            INSERT INTO pending_new_retailers (hostname, url)
+            VALUES (%s, %s)
+            ON CONFLICT (hostname, url) DO NOTHING
+            """,
+            (host, url),
+        )
+        conn.commit()
+        conn.close()
+        return {"ok": True, "hostname": host}
+    except Exception as e:
+        logger.exception("request_retailer failed: %s", e)
+        return JSONResponse({"error": "internal"}, status_code=500)
+
+
+# ── GET /api/community/my-requests ─────────────────────────────────────
+
+@router.get("/my-requests")
+async def my_requests(observer_id: str):
+    """List a consumer's pending and recently-fulfilled retailer requests.
+
+    Polled by the consumer extension's background worker on startup and
+    every few hours; the worker fires a chrome.notification for each
+    hostname that has transitioned to fulfilled since the previous poll
+    (tracking the "previously seen" set in chrome.storage.local).
+
+    Auto-fulfillment lazy path: any of this observer's pending requests
+    whose hostname is now present in the retailer registry get their
+    fulfilled_at set as a side effect of this GET. That way the operator
+    onboards a retailer via the normal RETAILERS edit + deploy and
+    notifications fire on the next consumer poll — no separate admin
+    action needed.
+    """
+    observer = (observer_id or "").strip()
+    if not observer:
+        return JSONResponse({"error": "observer_id required"}, status_code=400)
+    try:
+        from app.extension_endpoints import _cache_state, _refresh_cache  # type: ignore
+        _refresh_cache()
+        live_hosts = set((_cache_state.get("retailers") or {}).keys())
+    except Exception:
+        live_hosts = set()
+
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
+        if live_hosts:
+            cur.execute(
+                """
+                UPDATE community_retailer_requests
+                   SET fulfilled_at = NOW()
+                 WHERE observer_id = %s
+                   AND fulfilled_at IS NULL
+                   AND hostname = ANY(%s)
+                """,
+                (observer, list(live_hosts)),
+            )
+        cur.execute(
+            """
+            SELECT hostname, url, requested_at, fulfilled_at
+              FROM community_retailer_requests
+             WHERE observer_id = %s
+             ORDER BY requested_at DESC
+             LIMIT 200
+            """,
+            (observer,),
+        )
+        rows = cur.fetchall()
+        conn.commit()
+        conn.close()
+        requests = [
+            {
+                "hostname": r[0],
+                "url": r[1],
+                "requested_at": r[2].isoformat() if r[2] else None,
+                "fulfilled_at": r[3].isoformat() if r[3] else None,
+                "status": "fulfilled" if r[3] else "pending",
+            }
+            for r in rows
+        ]
+        return {
+            "ok": True,
+            "observer_id": observer,
+            "requests": requests,
+            "fulfilled_count": sum(1 for r in requests if r["status"] == "fulfilled"),
+            "pending_count": sum(1 for r in requests if r["status"] == "pending"),
+        }
+    except Exception as e:
+        logger.exception("my_requests failed: %s", e)
+        return JSONResponse({"error": "internal"}, status_code=500)
+
+
 # ── POST /api/community/delete-my-observations ─────────────────────────
 
 @router.post("/delete-my-observations")
@@ -803,6 +973,8 @@ async def delete_my_observations(body: DeleteObservationsBody):
         obs_deleted = cur.rowcount
         cur.execute("DELETE FROM community_url_proposals WHERE observer_id=%s", (observer,))
         prop_deleted = cur.rowcount
+        cur.execute("DELETE FROM community_retailer_requests WHERE observer_id=%s", (observer,))
+        req_deleted = cur.rowcount
         conn.commit()
         conn.close()
         return {
@@ -810,7 +982,8 @@ async def delete_my_observations(body: DeleteObservationsBody):
             "deleted": {
                 "observed_prices": obs_deleted,
                 "community_url_proposals": prop_deleted,
-                "total": obs_deleted + prop_deleted,
+                "community_retailer_requests": req_deleted,
+                "total": obs_deleted + prop_deleted + req_deleted,
             },
         }
     except Exception as e:

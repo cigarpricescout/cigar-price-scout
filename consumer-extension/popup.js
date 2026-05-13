@@ -216,12 +216,21 @@ function renderResultRow(r, idx, cheapestDeliv) {
   const shipTax = (r.shipping_cents + r.tax_cents) > 0
     ? `<span class="ship-tax">+${formatMoney(r.shipping_cents + r.tax_cents)} ship/tax</span>`
     : "";
+  // Anti-bot retailers don't have live scrapers — their prices come from
+  // other shoppers' observations. Show an absolute "Last observed" date
+  // so users know how fresh the data is. ("Some retailers don't change
+  // prices often" — staleness is informational, not a hard cutoff.)
+  const isObserved = r.price_source === "observed";
+  const observedStamp = isObserved && r.observed_at
+    ? `<span class="observed-badge" title="Crowd-sourced from shoppers">📊 Last seen ${formatDateAbs(r.observed_at)}</span>`
+    : "";
   return `
     <a href="${escapeAttr(r.url || '#')}" target="_blank" rel="noopener" class="result-row ${cheapestClass} ${oosClass}">
       <div class="result-rank">${idx + 1}</div>
       <div class="result-name">
         ${escapeHtml(r.retailer_name)}
         ${authBadge}${oosBadge}
+        ${observedStamp}
       </div>
       <div class="result-price">
         ${formatMoney(r.delivered_cents)}
@@ -380,10 +389,11 @@ function renderNoScraper(tab, response) {
     <div class="banner no_scraper">New retailer</div>
     <div class="empty-state" style="padding: 20px 14px;">
       We don't track <b>${escapeHtml(response.hostname || tab.hostname || "this site")}</b> yet.
-      Would you like us to add it? You're not asked to do anything else.
+      Request it and we'll notify you here when it goes live.
+      No email needed — your extension does the notifying.
     </div>
     <div class="actions">
-      <button class="approve" id="suggest">Suggest this retailer</button>
+      <button class="approve" id="suggest">Request this retailer</button>
       <button id="close">Close</button>
     </div>
     <div class="footer">
@@ -391,19 +401,22 @@ function renderNoScraper(tab, response) {
     </div>
   `;
   document.getElementById("suggest").addEventListener("click", async () => {
+    const btn = document.getElementById("suggest");
+    btn.disabled = true;
+    btn.textContent = "Requesting…";
     try {
-      await publicFetch("/api/community/propose-metadata", {
+      await publicFetch("/api/community/request-retailer", {
         method: "POST",
         body: {
           observer_id: await getObserverId(),
-          observer_source: "consumer",
           url: tab.url,
-          scraped_title: `[new retailer suggestion] ${response.hostname || ""}`,
         },
       });
-      toast("Thanks — we'll review.");
-      setTimeout(() => window.close(), 800);
+      toast("Thanks — we'll notify you when it goes live.");
+      setTimeout(() => window.close(), 1200);
     } catch (e) {
+      btn.disabled = false;
+      btn.textContent = "Request this retailer";
       toast(`Failed: ${e.message || e}`);
     }
   });
@@ -480,6 +493,23 @@ function quantityLabel(qtyType, boxQty) {
 function formatMoney(cents) {
   if (cents == null) return "—";
   return "$" + (cents / 100).toFixed(2);
+}
+
+function formatDateAbs(iso) {
+  if (!iso) return "";
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    // YYYY-MM-DD in user's locale tz. Chosen over relative ("3 days ago")
+    // because some anti-bot retailers rarely change prices; an absolute
+    // date lets the user judge freshness for themselves.
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  } catch (_) {
+    return "";
+  }
 }
 
 function escapeHtml(s) {

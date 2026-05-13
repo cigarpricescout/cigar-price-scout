@@ -86,7 +86,16 @@ def _refresh_cache(force: bool = False) -> None:
         return
     try:
         master = load_master_cigars(MASTER_CSV)
-        retailers = build_retailer_registry(STATIC_DATA)
+        # Blocked retailers (anti-bot, no extractor) won't have any sample
+        # URL in their CSV to derive a hostname from. Pull explicit hostnames
+        # from RETAILERS so the consumer extension still recognizes the
+        # site and can collect observations.
+        try:
+            from app.main import get_blocked_retailer_hosts  # type: ignore
+            extra_hosts = get_blocked_retailer_hosts()
+        except Exception:
+            extra_hosts = {}
+        retailers = build_retailer_registry(STATIC_DATA, extra_hosts=extra_hosts)
         url_index = load_retailer_url_index(STATIC_DATA)
         master_by_cid = {row["cigar_id"]: row for row in master}
         _cache_state.update({
@@ -809,6 +818,53 @@ async def pending_new_retailers(request: Request):
         ]}
     except Exception as e:
         logger.exception("pending_new_retailers failed: %s", e)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@router.get("/retailer-requests")
+async def retailer_requests(request: Request):
+    """Aggregated view of community_retailer_requests for operator triage.
+
+    Returns each requested hostname with: total requesters, latest request
+    timestamp, fulfilled flag (NULL if any are unfulfilled), and a sample
+    URL. Useful for prioritizing which anti-bot retailers to onboard next
+    — high requester count = strong signal that users want it.
+    """
+    auth = _check_admin(request)
+    if auth:
+        return auth
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT hostname,
+                   COUNT(DISTINCT observer_id) AS requesters,
+                   COUNT(*) AS total_requests,
+                   MAX(requested_at) AS latest_requested_at,
+                   MIN(fulfilled_at) AS earliest_fulfilled_at,
+                   BOOL_AND(fulfilled_at IS NOT NULL) AS all_fulfilled,
+                   (ARRAY_AGG(url ORDER BY requested_at DESC))[1] AS sample_url
+            FROM community_retailer_requests
+            GROUP BY hostname
+            ORDER BY requesters DESC, latest_requested_at DESC
+            LIMIT 200
+        """)
+        rows = cur.fetchall()
+        conn.close()
+        return {"requests": [
+            {
+                "hostname": r[0],
+                "requesters": int(r[1]),
+                "total_requests": int(r[2]),
+                "latest_requested_at": str(r[3]) if r[3] else None,
+                "earliest_fulfilled_at": str(r[4]) if r[4] else None,
+                "all_fulfilled": bool(r[5]),
+                "sample_url": r[6],
+            }
+            for r in rows
+        ]}
+    except Exception as e:
+        logger.exception("retailer_requests failed: %s", e)
         return JSONResponse({"error": str(e)}, status_code=500)
 
 

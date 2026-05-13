@@ -97,6 +97,13 @@ body {
   padding: 1px 5px; border-radius: 3px;
   background: var(--green-bg); color: var(--green);
 }
+.result-name .observed-badge {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--muted);
+  font-weight: 400;
+}
 .result-price { font-weight: 600; font-size: 14px; }
 .result-price .ship-tax {
   display: block; font-size: 10px; font-weight: 400; color: var(--muted);

@@ -464,38 +464,58 @@ def hostname_to_retailer_key(
     return None
 
 
-def build_retailer_registry(static_data_dir: Path) -> Dict[str, str]:
+def build_retailer_registry(
+    static_data_dir: Path,
+    extra_hosts: Optional[Dict[str, str]] = None,
+) -> Dict[str, str]:
     """Scan static/data/*.csv and build a hostname -> retailer_key map.
 
     Skips files containing DORMANT/BROKEN/backup in their name. Uses the
     hostname of the first valid http(s) URL in each CSV.
+
+    ``extra_hosts`` is an optional ``{hostname: retailer_key}`` mapping
+    merged into the registry. This is the mechanism for registering
+    anti-bot retailers whose CSV is empty (no URL row to infer the
+    hostname from) — see app.main.get_blocked_retailer_hosts().
     """
     registry: Dict[str, str] = {}
-    if not static_data_dir.exists():
-        return registry
-    for csv_file in sorted(static_data_dir.glob("*.csv")):
-        name = csv_file.stem
-        if any(tok in name for tok in ("DORMANT", "BROKEN", "backup")):
-            continue
-        try:
-            with csv_file.open("r", newline="", encoding="utf-8") as f:
-                reader = csv.DictReader(f)
-                if "url" not in (reader.fieldnames or []):
-                    continue
-                for row in reader:
-                    u = (row.get("url") or "").strip()
-                    if u.startswith("http"):
-                        host = urlparse(u).hostname
-                        if host:
-                            host = host.lower()
-                            registry.setdefault(host, name)
-                            if host.startswith("www."):
-                                registry.setdefault(host[4:], name)
-                            else:
-                                registry.setdefault("www." + host, name)
-                        break
-        except Exception:
-            continue
+    if static_data_dir.exists():
+        for csv_file in sorted(static_data_dir.glob("*.csv")):
+            name = csv_file.stem
+            if any(tok in name for tok in ("DORMANT", "BROKEN", "backup")):
+                continue
+            try:
+                with csv_file.open("r", newline="", encoding="utf-8") as f:
+                    reader = csv.DictReader(f)
+                    if "url" not in (reader.fieldnames or []):
+                        continue
+                    for row in reader:
+                        u = (row.get("url") or "").strip()
+                        if u.startswith("http"):
+                            host = urlparse(u).hostname
+                            if host:
+                                host = host.lower()
+                                registry.setdefault(host, name)
+                                if host.startswith("www."):
+                                    registry.setdefault(host[4:], name)
+                                else:
+                                    registry.setdefault("www." + host, name)
+                            break
+            except Exception:
+                continue
+    # Merge explicit blocked-retailer hostnames. setdefault() means CSV
+    # entries win on conflict — defensive choice in case an extractor
+    # comes online later and the CSV has data we should trust.
+    if extra_hosts:
+        for host, key in extra_hosts.items():
+            h = (host or "").strip().lower()
+            if not h or not key:
+                continue
+            registry.setdefault(h, key)
+            if h.startswith("www."):
+                registry.setdefault(h[4:], key)
+            else:
+                registry.setdefault("www." + h, key)
     return registry
 
 
