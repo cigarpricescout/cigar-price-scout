@@ -21,8 +21,47 @@ const VOCAB_TTL_MS = 60 * 60 * 1000;
 
 // Per-URL passive-observation dedupe. Without this, every status refresh
 // (popup open, tab activation, tab update) would re-post the same reading.
-const OBSERVE_DEDUPE = new Map(); // url -> last posted timestamp
-const OBSERVE_DEDUPE_MS = 60 * 60 * 1000; // one fresh observation per URL per hour
+//
+// Persisted in chrome.storage.session so it survives Chrome's aggressive
+// service-worker idle eviction (which kills in-memory Maps after ~30s of
+// inactivity). Session storage resets on browser close, which is the right
+// trade-off: one observation per URL per hour per browser session.
+const OBSERVE_DEDUPE_KEY = "observeDedupe";
+const OBSERVE_DEDUPE_MS = 60 * 60 * 1000;
+const OBSERVE_DEDUPE_MAX = 200; // cap so we don't grow unbounded
+
+async function getObserveDedupe() {
+  try {
+    const out = await chrome.storage.session.get(OBSERVE_DEDUPE_KEY);
+    return out[OBSERVE_DEDUPE_KEY] || {};
+  } catch (_) {
+    return {};
+  }
+}
+
+async function setObserveDedupe(map) {
+  try {
+    await chrome.storage.session.set({ [OBSERVE_DEDUPE_KEY]: map });
+  } catch (_) {}
+}
+
+async function shouldObserve(url) {
+  const map = await getObserveDedupe();
+  const last = map[url] || 0;
+  if (Date.now() - last < OBSERVE_DEDUPE_MS) return false;
+  map[url] = Date.now();
+  // Evict the oldest entries if we've grown past the cap.
+  const entries = Object.entries(map);
+  if (entries.length > OBSERVE_DEDUPE_MAX) {
+    entries.sort((a, b) => a[1] - b[1]);
+    const keep = entries.slice(-OBSERVE_DEDUPE_MAX);
+    const trimmed = Object.fromEntries(keep);
+    await setObserveDedupe(trimmed);
+  } else {
+    await setObserveDedupe(map);
+  }
+  return true;
+}
 
 async function ensureVocab(force = false) {
   if (!force && VOCAB && (Date.now() - VOCAB_FETCHED_AT) < VOCAB_TTL_MS) {
@@ -104,28 +143,26 @@ async function refreshForTab(tab) {
   // Passive observation: any retailer page we land on, write a row to
   // observed_prices so the operator extension is the first contributor
   // to the community data pipeline. Skipped for no_scraper/unknown URLs
-  // and for repeat visits inside the dedupe window.
+  // and for repeat visits inside the dedupe window (persisted in
+  // chrome.storage.session so it survives service-worker idle).
   if (
     scraped && (scraped.price != null || scraped.title) &&
     response.state && response.state !== "no_scraper" && response.state !== "error" &&
-    response.retailer_key
+    response.retailer_key &&
+    await shouldObserve(tab.url)
   ) {
-    const last = OBSERVE_DEDUPE.get(tab.url) || 0;
-    if (Date.now() - last > OBSERVE_DEDUPE_MS) {
-      OBSERVE_DEDUPE.set(tab.url, Date.now());
-      // Fire-and-forget; never block the popup on this.
-      postObservation({
-        url: tab.url,
-        scraped_title: scraped.title || scraped.jsonldName || null,
-        price: scraped.price ?? null,
-        currency: scraped.currency || "USD",
-        in_stock: scraped.inStock,
-        quantity_type: scraped.quantityType || "unknown",
-        box_qty: scraped.boxQty || null,
-        jsonld: scraped.jsonldRaw || null,
-        observer_source: "operator",
-      }).catch(() => {});
-    }
+    // Fire-and-forget; never block the popup on this.
+    postObservation({
+      url: tab.url,
+      scraped_title: scraped.title || scraped.jsonldName || null,
+      price: scraped.price ?? null,
+      currency: scraped.currency || "USD",
+      in_stock: scraped.inStock,
+      quantity_type: scraped.quantityType || "unknown",
+      box_qty: scraped.boxQty || null,
+      jsonld: scraped.jsonldRaw || null,
+      observer_source: "operator",
+    }).catch(() => {});
   }
 
   return response;

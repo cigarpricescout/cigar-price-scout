@@ -86,9 +86,10 @@ def fetch_pending() -> List[Dict]:
     return r.json().get("pending", [])
 
 
-def mark_published(ids: List[int]) -> int:
+def mark_published(ids: List[int]) -> Tuple[int, int]:
+    """Returns (rows marked published, observed_prices rows retro-attached)."""
     if not ids:
-        return 0
+        return 0, 0
     r = requests.post(
         f"{_api_base()}/api/admin/mark-extension-published",
         headers={"X-Admin-Key": _admin_key()},
@@ -96,7 +97,8 @@ def mark_published(ids: List[int]) -> int:
         timeout=30,
     )
     r.raise_for_status()
-    return r.json().get("published", 0)
+    data = r.json()
+    return data.get("published", 0), data.get("observations_attached", 0)
 
 
 # ── Master CSV/DB writes (new CIDs only) ──────────────────────────────
@@ -436,10 +438,16 @@ def publish_all(dry_run: bool = False) -> Dict[str, int]:
             r["cid"][:60], r["url"][:80],
         )
 
-    # Step 3: mark as published in Postgres
+    # Step 3: mark as published in Postgres. The API also retroactively
+    # attaches cigar_id to any observed_prices rows for the same URLs that
+    # were captured before the operator approved a CID.
     if published_ids:
-        stats["marked_published"] = mark_published(published_ids)
-        log.info("Marked %d approval(s) as published in Postgres", stats["marked_published"])
+        marked, attached = mark_published(published_ids)
+        stats["marked_published"] = marked
+        stats["observations_attached"] = attached
+        log.info("Marked %d approval(s) as published in Postgres", marked)
+        if attached:
+            log.info("Retro-attached cigar_id on %d existing observed_prices row(s)", attached)
 
     return stats
 

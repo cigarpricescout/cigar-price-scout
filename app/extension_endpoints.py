@@ -703,15 +703,32 @@ async def pending_extension_approvals(request: Request):
 
 @router.post("/mark-extension-published")
 async def mark_extension_published(request: Request, body: IdsBody):
-    """Local publisher marks approvals as published after CSV/DB writes."""
+    """Local publisher marks approvals as published after CSV/DB writes.
+
+    Also retroactively attaches cigar_id (and infers quantity_type='box' +
+    box_qty) on any observed_prices rows for the same (url, retailer_key)
+    pair that landed BEFORE the URL was mapped to a CID. Without this,
+    operator-side passive observations would stay orphaned (cigar_id=NULL)
+    until the next time the URL is visited.
+    """
     auth = _check_admin(request)
     if auth:
         return auth
     if not body.ids:
-        return {"published": 0}
+        return {"published": 0, "observations_attached": 0}
     try:
         conn = _get_conn()
         cur = conn.cursor()
+
+        # Capture (url, retailer_key, cid, box_qty) BEFORE we flip the status
+        # so we can attach observations for the same URLs.
+        cur.execute("""
+            SELECT url, retailer_key, cid, box_qty
+              FROM extension_staged_approvals
+             WHERE id = ANY(%s)
+        """, (list(body.ids),))
+        triples = cur.fetchall()
+
         cur.execute(
             "UPDATE extension_staged_approvals "
             "SET status='published', published_at=NOW() "
@@ -719,9 +736,35 @@ async def mark_extension_published(request: Request, body: IdsBody):
             (list(body.ids),),
         )
         updated = cur.rowcount
+
+        observations_attached = 0
+        for url, retailer_key, cid, box_qty in triples:
+            if not (url and retailer_key and cid):
+                continue
+            # Only touch rows where cigar_id is still NULL — never overwrite
+            # an existing mapping. Update quantity_type to 'box' only if it
+            # was 'unknown', since the operator's CID approval implies box.
+            cur.execute("""
+                UPDATE observed_prices
+                   SET cigar_id = %s,
+                       box_qty = COALESCE(box_qty, %s),
+                       quantity_type = CASE
+                         WHEN quantity_type IN ('unknown', '') OR quantity_type IS NULL
+                              THEN 'box'
+                         ELSE quantity_type
+                       END
+                 WHERE url = %s
+                   AND retailer_key = %s
+                   AND cigar_id IS NULL
+            """, (cid, box_qty, url, retailer_key))
+            observations_attached += cur.rowcount
+
         conn.commit()
         conn.close()
-        return {"published": updated}
+        return {
+            "published": updated,
+            "observations_attached": observations_attached,
+        }
     except Exception as e:
         logger.exception("mark_extension_published failed: %s", e)
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -851,6 +894,71 @@ async def master_vocab(request: Request, refresh: bool = Query(False)):
 
 
 # ── GET /api/admin/retailer-registry (used by extension at install) ───
+
+@router.get("/observed-prices-recent")
+async def observed_prices_recent(
+    request: Request,
+    limit: int = Query(50, ge=1, le=500),
+    retailer_key: Optional[str] = Query(None),
+    source: Optional[str] = Query(None, description="'operator' | 'consumer'"),
+):
+    """Debug peek at the newest observed_prices rows.
+
+    Lets the operator verify the consumer-extension pipeline is alive
+    without opening psql. Admin-gated; same auth as every other admin
+    endpoint. Returns at most 500 rows.
+    """
+    auth = _check_admin(request)
+    if auth:
+        return auth
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
+        where = []
+        params: List = []
+        if retailer_key:
+            where.append("retailer_key = %s")
+            params.append(retailer_key)
+        if source:
+            where.append("observer_source = %s")
+            params.append(source)
+        where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+        params.append(limit)
+        cur.execute(f"""
+            SELECT id, observed_at, retailer_key, cigar_id,
+                   quantity_type, box_qty,
+                   price_cents, currency, in_stock,
+                   scraped_title, url, observer_source
+              FROM observed_prices
+              {where_sql}
+             ORDER BY observed_at DESC
+             LIMIT %s
+        """, params)
+        cols = [c[0] for c in cur.description]
+        rows = []
+        for r in cur.fetchall():
+            row = dict(zip(cols, r))
+            # Add a human-friendly price field so the response is glance-able.
+            row["price"] = (row["price_cents"] / 100.0) if row.get("price_cents") else None
+            rows.append(row)
+
+        cur.execute("""
+            SELECT COUNT(*) AS total,
+                   COUNT(*) FILTER (WHERE cigar_id IS NOT NULL) AS mapped,
+                   COUNT(*) FILTER (WHERE quantity_type = 'box') AS boxes,
+                   COUNT(*) FILTER (WHERE quantity_type = 'unknown') AS unknown_qty,
+                   COUNT(*) FILTER (WHERE price_cents IS NULL) AS no_price,
+                   COUNT(*) FILTER (WHERE observer_source = 'operator') AS from_operator,
+                   COUNT(*) FILTER (WHERE observer_source = 'consumer') AS from_consumer
+              FROM observed_prices
+        """)
+        totals = dict(zip([c[0] for c in cur.description], cur.fetchone()))
+        conn.close()
+        return {"results": rows, "totals": totals, "count": len(rows)}
+    except Exception as e:
+        logger.exception("observed_prices_recent failed: %s", e)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
 
 @router.get("/retailer-registry")
 async def retailer_registry(request: Request, refresh: bool = Query(False)):
