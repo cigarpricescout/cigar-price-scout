@@ -159,8 +159,23 @@ Every retailer is a row in `RETAILERS`. Fields:
 | `name` | yes | Display name. |
 | `csv` | yes | Path to the per-retailer CSV. Empty file (header-only) is legal. |
 | `authorized` | yes | Affiliate / authorized-dealer flag. Affects UI badge. |
-| `extractor_status` | no, default `"active"` | `"active"` (we scrape) / `"blocked"` (anti-bot — observations are the source of truth) / `"dormant"` (skip entirely). |
+| `extractor_status` | no, default `"active"` | `"active"` (daily scraper fills price/title/in_stock) / `"blocked"` (anti-bot — no scraper; operator-entered price is the data source) / `"dormant"` (scraper broken/paused; treated like blocked). |
 | `hostname` | no | Explicit primary hostname. **Required** for `blocked` retailers (their CSVs are empty so the registry can't infer one). |
+
+`extractor_status` drives two consumer-of-the-data UIs:
+
+- **Operator extension popup** (`extension/popup.js`): when `blocked` or
+  `dormant`, the candidate form renders editable **Price (USD)** and
+  **In stock** fields (pre-filled from the page scrape). For `active`
+  retailers the fields are hidden because the daily extractor will
+  overwrite anything entered there.
+- **Local publisher** (`tools/extension/publish_extension_approvals.py`):
+  for `active` writes a *bare row* (only `cigar_id` + `url`, scraper
+  fills the rest later); for `blocked`/`dormant` writes a *full row*
+  with title/brand/line/wrapper/vitola/size/box_qty/price/in_stock so
+  the data appears immediately in `/compare`. Re-approving the same
+  (cid, url) on a blocked retailer **refreshes** the row's price/stock
+  so operators can update stale prices by re-visiting the page.
 
 **Onboarding a new retailer:**
 

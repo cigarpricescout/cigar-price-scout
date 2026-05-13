@@ -162,6 +162,8 @@ function renderCandidate(tab, response) {
         ${field("box_qty",       "Box Qty",       parts.box_qty,       "number")}
       </div>
 
+      ${manualPricingBlock(response)}
+
       <div id="dup-warning" style="display:none"></div>
 
       <div class="section-label" style="margin-top:10px">
@@ -244,6 +246,54 @@ function field(name, label, value, type, full = false) {
              value="${escapeAttr(value ?? "")}"
              list="dl-${name}" autocomplete="off" />
       <datalist id="dl-${name}"></datalist>
+    </div>
+  `;
+}
+
+// Returns true when the retailer has no working scraper (`blocked` because
+// of anti-bot protection, or `dormant` because we paused a broken one). In
+// both cases nothing downstream will ever fill price/in_stock for the
+// approved URL, so the operator MUST enter those values manually now.
+function needsManualPricing(response) {
+  const s = response && response.extractor_status;
+  return s === "blocked" || s === "dormant";
+}
+
+// Conditional price + in-stock block. Pre-fills from the page scrape so
+// most of the time the operator just confirms the values. Rendered inline
+// in the candidate form when needsManualPricing(response) is true; empty
+// string otherwise (the active-retailer path is unchanged — the daily
+// scraper fills these columns).
+function manualPricingBlock(response) {
+  if (!needsManualPricing(response)) return "";
+  const s = response._scraped || {};
+  const priceVal = (typeof s.price === "number" && !Number.isNaN(s.price))
+    ? s.price.toFixed(2)
+    : "";
+  // Default to "in stock" unless the scraper EXPLICITLY captured the
+  // page as out-of-stock. Operators are usually browsing live inventory,
+  // so missing-data → true is the safer default than missing-data → null.
+  const inStockVal = s.inStock === false ? "false" : "true";
+  return `
+    <div class="manual-pricing">
+      <div class="manual-pricing-banner">
+        <strong>No scraper for this retailer.</strong>
+        Your price + stock entry below is saved directly to the CSV.
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label for="f-price">Price (USD)</label>
+          <input id="f-price" name="price" type="number" step="0.01" min="0"
+                 value="${escapeAttr(priceVal)}" placeholder="0.00" />
+        </div>
+        <div class="field">
+          <label for="f-in_stock">In stock</label>
+          <select id="f-in_stock" name="in_stock">
+            <option value="true"  ${inStockVal === "true"  ? "selected" : ""}>Yes</option>
+            <option value="false" ${inStockVal === "false" ? "selected" : ""}>No</option>
+          </select>
+        </div>
+      </div>
     </div>
   `;
 }
@@ -588,13 +638,37 @@ async function approve(tab, response) {
   // approving. This is training-data spine for the future AI reviewer.
   const top = (response.candidates && response.candidates[0]) || null;
 
+  // Price + in-stock: prefer the operator's manual entry when the retailer
+  // is blocked/dormant (the fields are rendered by manualPricingBlock).
+  // For active retailers the fields aren't shown, so fall back to the
+  // silent scrape capture — the daily extractor will overwrite anyway.
+  let priceValue, inStockValue;
+  const priceEl = document.getElementById("f-price");
+  const stockEl = document.getElementById("f-in_stock");
+  if (needsManualPricing(response) && priceEl) {
+    const raw = (priceEl.value || "").trim();
+    if (raw === "") {
+      priceValue = null;
+    } else {
+      const parsed = parseFloat(raw);
+      if (Number.isNaN(parsed) || parsed < 0) {
+        return toast("Enter a valid price (e.g. 12.99) or leave blank.", "error");
+      }
+      priceValue = parsed;
+    }
+    inStockValue = stockEl ? (stockEl.value === "true") : null;
+  } else {
+    priceValue = (response._scraped && response._scraped.price) || null;
+    inStockValue = (response._scraped && response._scraped.inStock) ?? null;
+  }
+
   const body = {
     url: tab.url,
     retailer_key: response.retailer_key,
     cid_parts: parts,
     title: response.scraped_title || (response._scraped && response._scraped.title) || "",
-    price: (response._scraped && response._scraped.price) || null,
-    in_stock: (response._scraped && response._scraped.inStock) ?? null,
+    price: priceValue,
+    in_stock: inStockValue,
     create_if_missing: true,
     force: !!response._force,
     confidence: "EXTENSION",

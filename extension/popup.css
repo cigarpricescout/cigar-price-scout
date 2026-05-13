@@ -135,6 +135,39 @@ body { padding: 0; }
 }
 .scraped strong { color: #333; }
 
+/* Manual price + in-stock entry — only rendered for blocked/dormant
+   retailers (no scraper). The orange palette mirrors the no_scraper
+   banner so operators recognize it as "you are the data source here". */
+.manual-pricing {
+  margin-top: 10px;
+  padding: 10px;
+  background: #fff8e1;
+  border: 1px solid #ffe082;
+  border-radius: 4px;
+}
+.manual-pricing-banner {
+  font-size: 11px;
+  color: #6d4c00;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+.manual-pricing-banner strong { color: #4a3500; }
+.manual-pricing .field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.manual-pricing input,
+.manual-pricing select {
+  width: 100%;
+  font-size: 13px;
+  padding: 6px 8px;
+  border: 1px solid #d6c089;
+  border-radius: 4px;
+  background: #fff;
+  box-sizing: border-box;
+}
+
 .actions {
   display: flex;
   gap: 0;

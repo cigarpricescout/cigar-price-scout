@@ -265,12 +265,80 @@ def _preview_retailer_outcome(retailer_key: str, cid: str, url: str) -> str:
     return "append BARE row (cigar_id,,url)"
 
 
-def _append_bare_retailer_row(retailer_key: str, cid: str, url: str) -> str:
-    """Append a single bare row to static/data/{retailer_key}.csv.
+def _format_full_row_extras(r: Dict) -> Dict[str, str]:
+    """Convert a staged-approval row into CSV column→value dict for the
+    blocked/dormant 'full row' write path.
 
-    Returns one of: 'added', 'exists', 'updated_url', 'missing_csv'.
-    The row has cigar_id and url populated; every other column is empty so
-    the retailer's extractor fills in title/price/in_stock on next run.
+    Column names mirror the existing schema in static/data/*.csv (title,
+    brand, line, wrapper, vitola, size, box_qty, price, in_stock). The
+    `wrapper` column uses the human-readable form ("Maduro", "Connecticut
+    Shade") not the canonical CID code, matching what scrapers populate
+    for active retailers.
+    """
+    def _s(v) -> str:
+        return "" if v is None else str(v).strip()
+
+    def _price(v) -> str:
+        if v is None:
+            return ""
+        try:
+            return f"{float(v):.2f}"
+        except (TypeError, ValueError):
+            return ""
+
+    def _stock(v) -> str:
+        # CSV convention used by every extractor: capitalized Python repr.
+        # Empty string for "unknown" so it sorts/filters distinctly from
+        # an explicit False.
+        if v is True:
+            return "True"
+        if v is False:
+            return "False"
+        return ""
+
+    return {
+        "title":    _s(r.get("title")),
+        "brand":    _s(r.get("brand")),
+        "line":     _s(r.get("line")),
+        # Operator may not have a wrapper alias yet, fall back to the
+        # canonical code so the column is never empty for a full row.
+        "wrapper":  _s(r.get("wrapper")) or _s(r.get("wrapper_code")),
+        "vitola":   _s(r.get("vitola")),
+        "size":     _s(r.get("size")),
+        "box_qty":  _s(r.get("box_qty")),
+        "price":    _price(r.get("price")),
+        "in_stock": _stock(r.get("in_stock")),
+    }
+
+
+def _append_retailer_row(
+    retailer_key: str,
+    cid: str,
+    url: str,
+    extra_cols: Optional[Dict[str, str]] = None,
+) -> str:
+    """Append or update a row in static/data/{retailer_key}.csv.
+
+    Two modes:
+
+    - **Bare row** (extra_cols=None) for `active` retailers. Writes only
+      `cigar_id` and `url`; the daily extractor fills the rest on its next
+      run. This is the legacy behavior every retailer extractor expects.
+
+    - **Full row** (extra_cols={title,brand,line,wrapper,vitola,size,
+      box_qty,price,in_stock}) for `blocked`/`dormant` retailers, where no
+      extractor will ever fill the row. The operator's manual entry IS the
+      data source, so we persist it directly.
+
+    For both modes:
+    - Same (cid, url) pair already present → no-op for bare, **overwrite
+      extras** for full (so re-approval refreshes stale prices).
+    - Same cid, different url → update url on that row; in full mode also
+      refresh the extras.
+    - New row → append.
+
+    Returns one of: 'added', 'exists', 'updated_url', 'updated_full',
+    'missing_csv'.
     """
     csv_path = STATIC_DATA / f"{retailer_key}.csv"
     if not csv_path.exists():
@@ -285,28 +353,54 @@ def _append_bare_retailer_row(retailer_key: str, cid: str, url: str) -> str:
     df["cigar_id"] = df["cigar_id"].astype(str).str.strip()
     df["url"] = df["url"].astype(str).str.strip()
 
-    # Same (cid, url) already there: no-op.
+    def _apply_extras(idx: int) -> None:
+        if not extra_cols:
+            return
+        for col, val in extra_cols.items():
+            if col in df.columns:
+                df.at[idx, col] = val
+
+    # Same (cid, url) already there. For bare-row mode this is idempotent
+    # (no-op). For full-row mode we treat re-approval as a refresh — the
+    # operator just confirmed the price on the page, so trust the new value
+    # over whatever's in the CSV.
     same_pair = (df["cigar_id"] == cid) & (df["url"] == url)
     if same_pair.any():
+        if extra_cols:
+            idx = df.index[same_pair][0]
+            _apply_extras(idx)
+            df.to_csv(csv_path, index=False)
+            return "updated_full"
         return "exists"
 
-    # Same cid but different url: update the URL on that row (treat as URL fix).
+    # Same cid but different url: update the URL on that row (treat as
+    # URL fix). Also refresh extras when in full-row mode.
     same_cid = df["cigar_id"] == cid
     if same_cid.any():
         idx = df.index[same_cid][0]
         df.at[idx, "url"] = url
+        _apply_extras(idx)
         df.to_csv(csv_path, index=False)
         return "updated_url"
 
-    # Otherwise: append a BARE new row — only cigar_id and url, every other
-    # column blank. This is the format the user uses for manual additions and
-    # what their retailer extractors expect.
+    # Otherwise: append a new row. Bare for active retailers, full for
+    # blocked/dormant (extra_cols provided).
     new_row = {col: "" for col in df.columns}
     new_row["cigar_id"] = cid
     new_row["url"] = url
+    if extra_cols:
+        for col, val in extra_cols.items():
+            if col in df.columns:
+                new_row[col] = val
     df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
     df.to_csv(csv_path, index=False)
     return "added"
+
+
+# Back-compat alias for any external callers. Internal call sites now use
+# _append_retailer_row directly.
+def _append_bare_retailer_row(retailer_key: str, cid: str, url: str) -> str:
+    return _append_retailer_row(retailer_key, cid, url)
 
 
 # ── Orchestrator ──────────────────────────────────────────────────────
@@ -331,7 +425,16 @@ def publish_all(dry_run: bool = False) -> Dict[str, int]:
         "retailer_added": 0,
         "retailer_exists": 0,
         "retailer_url_updated": 0,
+        # Re-approval on a blocked/dormant retailer that overwrote the
+        # existing row's title/price/in_stock with operator-supplied
+        # values. Separate from `retailer_added` so dashboards can show
+        # "fresh contributions" vs. "price refreshes".
+        "retailer_full_updated": 0,
         "retailer_missing_csv": 0,
+        # Number of full rows written (added OR updated) for blocked/
+        # dormant retailers. Useful for understanding how much of the
+        # CSV is sourced from operator entry vs. extractors.
+        "retailer_full_rows_written": 0,
         "marked_published": 0,
     }
 
@@ -403,8 +506,13 @@ def publish_all(dry_run: bool = False) -> Dict[str, int]:
                     r.get("box_qty") or "",
                 )
             outcome = _preview_retailer_outcome(retailer_key, cid, url)
-            log.info("      retailer csv: would %s in static/data/%s.csv",
-                     outcome, retailer_key)
+            status = (r.get("extractor_status") or "active").strip().lower()
+            row_kind = "FULL row" if status in ("blocked", "dormant") else "BARE row"
+            log.info("      retailer csv: would %s (%s) in static/data/%s.csv",
+                     outcome, row_kind, retailer_key)
+            if status in ("blocked", "dormant"):
+                log.info("      price : %s  in_stock: %s",
+                         r.get("price"), r.get("in_stock"))
         return stats
 
     # Step 1: master writes
@@ -416,25 +524,47 @@ def publish_all(dry_run: bool = False) -> Dict[str, int]:
             stats["master_csv_added"], stats["master_db_added"], len(new_cids),
         )
 
-    # Step 2: per-retailer bare-row appends
+    # Step 2: per-retailer row writes. Active retailers get bare rows (the
+    # daily extractor will fill price/title/in_stock on its next run);
+    # blocked/dormant retailers get full rows because no extractor will
+    # ever populate them. The extractor_status field is set per-row by the
+    # /api/admin/pending-extension-approvals response.
     published_ids: List[int] = []
     for r in valid:
-        outcome = _append_bare_retailer_row(r["retailer_key"], r["cid"], r["url"])
+        status = (r.get("extractor_status") or "active").strip().lower()
+        is_full_row = status in ("blocked", "dormant")
+        extras = _format_full_row_extras(r) if is_full_row else None
+
+        outcome = _append_retailer_row(
+            r["retailer_key"], r["cid"], r["url"], extra_cols=extras,
+        )
         if outcome == "added":
             stats["retailer_added"] += 1
+            if is_full_row:
+                stats["retailer_full_rows_written"] += 1
         elif outcome == "exists":
             stats["retailer_exists"] += 1
         elif outcome == "updated_url":
             stats["retailer_url_updated"] += 1
+            if is_full_row:
+                stats["retailer_full_rows_written"] += 1
+        elif outcome == "updated_full":
+            stats["retailer_full_updated"] += 1
+            stats["retailer_full_rows_written"] += 1
         elif outcome == "missing_csv":
             stats["retailer_missing_csv"] += 1
             # Don't mark this one as published — the user needs to know the
             # retailer CSV is missing.
             continue
         published_ids.append(r["id"])
+        # Tag the log line so operators can see at a glance whether each
+        # row was a manual-entry write (FULL) or a scraper-placeholder
+        # (BARE). Helpful when triaging "why didn't this price appear?"
+        tag = "FULL" if is_full_row else "BARE"
         log.info(
-            "  %s  %s  %s  %s",
-            outcome.ljust(12), r["retailer_key"].ljust(20),
+            "  %s %s  %s  %s  %s",
+            outcome.ljust(12), tag,
+            r["retailer_key"].ljust(20),
             r["cid"][:60], r["url"][:80],
         )
 

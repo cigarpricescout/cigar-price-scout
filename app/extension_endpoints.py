@@ -320,6 +320,17 @@ async def url_status(
 
     retailer_key = hostname_to_retailer_key(hostname, _cache_state["retailers"])
 
+    # extractor_status drives the operator extension's UI: when 'blocked' or
+    # 'dormant' there is no scraper to fill the row, so the popup must
+    # surface editable price + in-stock fields and the publisher must write
+    # a full row instead of a bare one. Imported lazily to keep the
+    # extension_endpoints module decoupled from app.main import order.
+    try:
+        from app.main import get_extractor_status  # type: ignore
+        extractor_status = get_extractor_status(retailer_key) if retailer_key else None
+    except Exception:
+        extractor_status = None
+
     # If we have no retailer key, decide between "no_scraper" (we have *some*
     # CSV that uses this domain but no extractor) and "unknown" (totally new
     # domain). For the extension's purpose these collapse to "no_scraper":
@@ -332,6 +343,7 @@ async def url_status(
             "url": url,
             "matched_cid": None,
             "seen_status": None,
+            "extractor_status": None,
             "candidates": [],
             "available_in_master": [],
             "scraped_title": title,
@@ -350,6 +362,7 @@ async def url_status(
             "url": url,
             "matched_cid": live_hit[1],
             "seen_status": "published",
+            "extractor_status": extractor_status,
             "candidates": _candidates_for(url, title),
             "available_in_master": [],
             "scraped_title": title,
@@ -365,6 +378,7 @@ async def url_status(
             "url": url,
             "matched_cid": seen_cid,
             "seen_status": seen_status,
+            "extractor_status": extractor_status,
             "candidates": _candidates_for(url, title),
             "available_in_master": [],
             "scraped_title": title,
@@ -380,6 +394,7 @@ async def url_status(
         "url": url,
         "matched_cid": None,
         "seen_status": None,
+        "extractor_status": extractor_status,
         "candidates": cands,
         "available_in_master": [c["cigar_id"] for c in available],
         "scraped_title": title,
@@ -707,6 +722,15 @@ async def pending_extension_approvals(request: Request):
         """)
         rows = cur.fetchall()
         conn.close()
+        # Include extractor_status per row so the local publisher can decide
+        # between "bare row" (active retailer — scraper will fill price/title
+        # next run) and "full row" (blocked/dormant — manual entry is the
+        # only data source). Resolved here rather than at publish time so
+        # the publisher stays a thin shell over this endpoint.
+        try:
+            from app.main import get_extractor_status  # type: ignore
+        except Exception:
+            get_extractor_status = lambda _k: "active"  # type: ignore  # noqa: E731
         return {"pending": [
             {
                 "id": r[0], "cid": r[1], "retailer_key": r[2], "url": r[3],
@@ -718,6 +742,7 @@ async def pending_extension_approvals(request: Request):
                 "price": float(r[15]) if r[15] is not None else None,
                 "in_stock": r[16],
                 "created_at": str(r[17]) if r[17] else None,
+                "extractor_status": get_extractor_status(r[2]),
             } for r in rows
         ]}
     except Exception as e:
