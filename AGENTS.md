@@ -299,6 +299,12 @@ review via `tools/ai/review_matches.py`.
 Run this whenever the three input methods have changed and you want to
 verify they still cooperate cleanly. Estimated time: ~15 minutes.
 
+> **Easy mode:** Open `https://cigarpricescout.com/admin/smoke-tests?key=YOUR_ADMIN_SECRET_KEY`
+> for a click-driven version of every test below. Each card has an "Open
+> test URL" button and a "Refresh" button that pulls live state from the
+> admin API and shows pass/fail badges. The dashboard is the canonical UI
+> for this section; the manual SQL below is the fallback.
+
 ### Prereqs
 
 - Operator extension loaded at `chrome://extensions` (sideloaded from

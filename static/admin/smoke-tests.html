@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Smoke Test Dashboard — Cigar Price Scout</title>
+<style>
+  :root {
+    --bg: #f3f4f6;
+    --card: #ffffff;
+    --text: #111827;
+    --muted: #6b7280;
+    --border: #e5e7eb;
+    --green: #16a34a;
+    --green-bg: #ecfdf5;
+    --red: #dc2626;
+    --red-bg: #fef2f2;
+    --amber: #d97706;
+    --amber-bg: #fffbeb;
+    --blue: #2563eb;
+    --blue-bg: #eff6ff;
+    --gray-bg: #f9fafb;
+    --accent: #1f2937;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 14px; }
+  .wrap { max-width: 1000px; margin: 0 auto; padding: 24px 16px 60px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  .subtitle { color: var(--muted); margin-bottom: 24px; font-size: 13px; }
+  .auth-bar { background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 14px 16px; margin-bottom: 24px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .auth-bar label { font-weight: 500; }
+  .auth-bar input { flex: 1; min-width: 260px; font-size: 13px; padding: 8px 10px;
+    border: 1px solid var(--border); border-radius: 4px; font-family: ui-monospace, monospace; }
+  .auth-bar.ok { background: var(--green-bg); border-color: var(--green); }
+  .auth-bar.err { background: var(--red-bg); border-color: var(--red); }
+  .auth-bar .status { font-size: 12px; color: var(--muted); }
+  .auth-bar.ok .status { color: var(--green); font-weight: 500; }
+  .auth-bar.err .status { color: var(--red); font-weight: 500; }
+  button { font-size: 13px; padding: 7px 12px; border: 1px solid var(--border);
+    border-radius: 4px; background: white; cursor: pointer; font-weight: 500; color: var(--text); }
+  button:hover { background: var(--gray-bg); }
+  button.primary { background: var(--accent); color: white; border-color: var(--accent); }
+  button.primary:hover { background: #000; }
+  button.warn { background: var(--amber-bg); border-color: var(--amber); color: var(--amber); }
+  button.danger { background: var(--red-bg); border-color: var(--red); color: var(--red); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .test {
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    margin-bottom: 16px; overflow: hidden;
+  }
+  .test-head { padding: 14px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+  .test-num { width: 28px; height: 28px; border-radius: 14px; background: var(--accent); color: white;
+    display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 13px; flex-shrink: 0; }
+  .test-title { font-size: 15px; font-weight: 600; flex: 1; }
+  .test-status { font-size: 12px; padding: 3px 9px; border-radius: 10px; font-weight: 500; }
+  .test-status.idle { background: var(--gray-bg); color: var(--muted); }
+  .test-status.ok { background: var(--green-bg); color: var(--green); }
+  .test-status.fail { background: var(--red-bg); color: var(--red); }
+  .test-status.pending { background: var(--amber-bg); color: var(--amber); }
+  .test-body { padding: 14px 16px; font-size: 13px; line-height: 1.5; }
+  .test-body p { margin: 0 0 10px; }
+  .test-body ol { margin: 0 0 12px; padding-left: 22px; }
+  .test-body li { margin-bottom: 6px; }
+  .test-body .expected { color: var(--muted); font-size: 12px; font-style: italic; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+  pre { background: var(--gray-bg); border: 1px solid var(--border); border-radius: 4px;
+    padding: 10px; font-size: 11px; max-height: 240px; overflow: auto;
+    font-family: ui-monospace, Menlo, Consolas, monospace; margin: 8px 0 0; }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px;
+    font-weight: 500; background: var(--blue-bg); color: var(--blue); margin-right: 4px; }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 8px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  @media (max-width: 600px) { .grid2 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Smoke Test Dashboard</h1>
+  <div class="subtitle">
+    Click-driven verification of the three input pipelines. See
+    <a href="https://github.com/cigarpricescout/cigar-price-scout/blob/main/AGENTS.md#11-manual-smoke-test-playbook" target="_blank">AGENTS.md §11</a>
+    for the full playbook.
+  </div>
+
+  <div id="auth-bar" class="auth-bar">
+    <label for="adminKey">Admin Key:</label>
+    <input id="adminKey" type="password" placeholder="paste ADMIN_SECRET_KEY here" autocomplete="off">
+    <button class="primary" onclick="saveKey()">Save &amp; Test</button>
+    <div class="status" id="authStatus">not set</div>
+  </div>
+
+  <!-- Test 1 -->
+  <section class="test" id="test1">
+    <div class="test-head">
+      <div class="test-num">1</div>
+      <div class="test-title">Extractor → CSV → <code>/compare</code></div>
+      <div class="test-status idle" id="status1">idle</div>
+    </div>
+    <div class="test-body">
+      <p>Canonical path. Confirms an existing CSV-driven comparison still loads.</p>
+      <div class="actions">
+        <button class="primary" onclick="openCompareTest1()">Open sample /compare</button>
+        <button onclick="checkCompareTest1()">Verify ≥2 retailer rows</button>
+      </div>
+      <p class="expected">Expected: comparison page shows 2+ retailer rows with prices &gt; $0, <code>price_source: "csv"</code> on rows.</p>
+      <pre id="result1">Click "Verify" after the comparison page loads.</pre>
+    </div>
+  </section>
+
+  <!-- Test 2 -->
+  <section class="test" id="test2">
+    <div class="test-head">
+      <div class="test-num">2</div>
+      <div class="test-title">Chrome extension observation (matched URL)</div>
+      <div class="test-status idle" id="status2">idle</div>
+    </div>
+    <div class="test-body">
+      <ol>
+        <li>Make sure the consumer extension is loaded at <code>chrome://extensions</code> and you've consented (opt-in).</li>
+        <li>Click the button to open the test product page. Wait ~3 sec — extension icon should show a green <strong>$</strong> badge.</li>
+        <li>Click <em>Refresh</em> to verify the observation hit the DB.</li>
+      </ol>
+      <div class="actions">
+        <button class="primary" onclick="openTest2URL()">Open Bayside test page</button>
+        <button onclick="refreshObservations()">Refresh observed_prices</button>
+      </div>
+      <p class="expected">
+        Expected: newest row has <code>retailer_key='baysidecigars'</code>,
+        <code>cigar_id</code> set, <code>quantity_type='box'</code>, <code>observer_source='consumer'</code>.
+      </p>
+      <pre id="result2">Click Refresh after the page loads.</pre>
+    </div>
+  </section>
+
+  <!-- Test 3 -->
+  <section class="test" id="test3">
+    <div class="test-head">
+      <div class="test-num">3</div>
+      <div class="test-title">Chrome extension proposal (unmapped URL)</div>
+      <div class="test-status idle" id="status3">idle</div>
+    </div>
+    <div class="test-body">
+      <ol>
+        <li>Open a JR Cigars (or any other blocked-retailer) product page the system hasn't seen.</li>
+        <li>Click the consumer extension popup. Confirm amber "? Help us identify this cigar" form.</li>
+        <li>Edit/confirm the 5 fields (Brand, Line, Vitola, Box Qty, Price) and hit Submit.</li>
+        <li>Click <em>Refresh</em> to verify the proposal landed.</li>
+      </ol>
+      <div class="actions">
+        <button class="primary" onclick="openJRCigars()">Open JR Cigars (find a product)</button>
+        <button onclick="refreshProposals()">Refresh proposals</button>
+      </div>
+      <p class="expected">
+        Expected: a new <code>status='pending'</code> row with your brand/line/vitola/box_qty and <code>confirmed_price_cents</code> set.
+      </p>
+      <pre id="result3">Click Refresh after submitting the form.</pre>
+    </div>
+  </section>
+
+  <!-- Test 4 -->
+  <section class="test" id="test4">
+    <div class="test-head">
+      <div class="test-num">4</div>
+      <div class="test-title">New-retailer request flow</div>
+      <div class="test-status idle" id="status4">idle</div>
+    </div>
+    <div class="test-body">
+      <ol>
+        <li>Open a retailer NOT in the registry (e.g. a small boutique site or any random shop).</li>
+        <li>Click the consumer extension popup → "Request this retailer".</li>
+        <li>Click <em>Refresh</em> to verify the request was captured.</li>
+      </ol>
+      <div class="actions">
+        <button class="primary" onclick="openRandomShop()">Open example unknown retailer</button>
+        <button onclick="refreshRetailerRequests()">Refresh requests</button>
+      </div>
+      <p class="expected">
+        Expected: new row in <code>retailer-requests</code> with <code>all_fulfilled: false</code>; same hostname also visible in <code>pending-new-retailers</code>.
+      </p>
+      <pre id="result4">Click Refresh after submitting the request.</pre>
+    </div>
+  </section>
+
+  <!-- Test 5 -->
+  <section class="test" id="test5">
+    <div class="test-head">
+      <div class="test-num">5</div>
+      <div class="test-title">Website community-price form</div>
+      <div class="test-status idle" id="status5">idle</div>
+    </div>
+    <div class="test-body">
+      <ol>
+        <li>Open the deal submission page and submit a price for any real cigar URL.</li>
+        <li>Click <em>Refresh</em> to verify the row landed.</li>
+      </ol>
+      <div class="actions">
+        <button class="primary" onclick="openSubmitDeal()">Open /submit-deal</button>
+        <button onclick="refreshCommunityPrices()">Refresh community_prices</button>
+      </div>
+      <p class="expected">
+        Expected: newest <code>community_prices</code> row matches what you submitted, <code>active=1</code>.
+      </p>
+      <pre id="result5">Click Refresh after the form succeeds.</pre>
+    </div>
+  </section>
+
+  <!-- Test 6 -->
+  <section class="test" id="test6">
+    <div class="test-head">
+      <div class="test-num">6</div>
+      <div class="test-title">Dedup: website form doesn't duplicate extension data</div>
+      <div class="test-status idle" id="status6">idle</div>
+    </div>
+    <div class="test-body">
+      <ol>
+        <li>Pick a URL/retailer/cigar where Test 2 has already produced an <code>observed_prices</code> row.</li>
+        <li>Submit the same URL via <code>/submit-deal</code> (Test 5 button).</li>
+        <li>Click <em>Refresh</em> — server-side dedup counter should increment.</li>
+        <li>Optionally click <em>Open /compare</em> to confirm only one row appears for that retailer.</li>
+      </ol>
+      <div class="actions">
+        <button onclick="refreshDedupStats()">Refresh dedup stats</button>
+        <button onclick="openCompareTest1()">Open /compare</button>
+      </div>
+      <p class="expected">
+        Expected: <code>last_dropped &gt; 0</code> after a duplicate submission. The dropped row will NOT appear on the comparison page.
+      </p>
+      <pre id="result6">Click Refresh after submitting a duplicate via /submit-deal.</pre>
+    </div>
+  </section>
+
+  <!-- Test 7 -->
+  <section class="test" id="test7">
+    <div class="test-head">
+      <div class="test-num">7</div>
+      <div class="test-title">GDPR delete-my-data (consumer extension)</div>
+      <div class="test-status idle" id="status7">idle</div>
+    </div>
+    <div class="test-body">
+      <ol>
+        <li>Paste your consumer extension's <code>observer_id</code> below. You can find it in the extension's Options page.</li>
+        <li>Click <em>Count rows</em> — should show non-zero counts (assuming you ran Tests 2-4).</li>
+        <li>Open the consumer extension's Options → "Delete my data". Confirm.</li>
+        <li>Click <em>Count rows</em> again — every count should be 0.</li>
+      </ol>
+      <div class="grid2">
+        <input id="observerId" placeholder="observer_id (48-char hex)" autocomplete="off" style="padding: 7px 10px; border: 1px solid var(--border); border-radius: 4px; font-family: ui-monospace, monospace; font-size: 12px;">
+        <button class="primary" onclick="countObserver()">Count rows</button>
+      </div>
+      <p class="expected">
+        Expected (before delete): non-zero counts. Expected (after delete): all three counts equal 0.
+      </p>
+      <pre id="result7">Paste an observer_id and click Count rows.</pre>
+    </div>
+  </section>
+
+  <div class="hint">
+    Admin key is held in <code>sessionStorage</code> only — it's gone when you close the tab. Never paste it into untrusted pages.
+  </div>
+</div>
+
+<script>
+  let ADMIN_KEY = sessionStorage.getItem("cps_admin_key") || "";
+
+  function $(id) { return document.getElementById(id); }
+  function setStatus(testId, kind, text) {
+    const el = $("status" + testId);
+    el.className = "test-status " + kind;
+    el.textContent = text;
+  }
+
+  async function apiGet(path, params) {
+    if (!ADMIN_KEY) { throw new Error("Admin key not set"); }
+    const q = new URLSearchParams({ key: ADMIN_KEY, ...(params || {}) });
+    const resp = await fetch(path + "?" + q.toString());
+    const text = await resp.text();
+    let json;
+    try { json = JSON.parse(text); } catch (_) { json = { raw: text }; }
+    if (!resp.ok) {
+      const err = new Error(json.error || resp.statusText);
+      err.status = resp.status;
+      err.body = json;
+      throw err;
+    }
+    return json;
+  }
+
+  async function pingAuth() {
+    try {
+      await apiGet("/api/admin/retailer-registry");
+      $("auth-bar").className = "auth-bar ok";
+      $("authStatus").textContent = "✓ key works";
+      return true;
+    } catch (e) {
+      $("auth-bar").className = "auth-bar err";
+      $("authStatus").textContent = "✗ " + (e.status === 401 ? "wrong key" : e.message);
+      return false;
+    }
+  }
+
+  function saveKey() {
+    ADMIN_KEY = $("adminKey").value.trim();
+    sessionStorage.setItem("cps_admin_key", ADMIN_KEY);
+    pingAuth();
+  }
+
+  // ---- Test 1: /compare ----
+  const TEST1_URL = "/compare?brand=Arturo%20Fuente&line=Hemingway&vitola=Signature&size=6x46";
+  function openCompareTest1() { window.open(TEST1_URL, "_blank"); }
+  async function checkCompareTest1() {
+    setStatus(1, "pending", "checking…");
+    try {
+      const resp = await fetch(TEST1_URL);
+      const data = await resp.json();
+      const n = (data.results || []).length;
+      const sources = [...new Set((data.results || []).map(r => r.price_source))];
+      $("result1").textContent = JSON.stringify({
+        brand: data.brand, line: data.line, vitola: data.vitola,
+        retailer_count: n,
+        price_sources: sources,
+        first_row: data.results && data.results[0],
+      }, null, 2);
+      if (n >= 2) {
+        setStatus(1, "ok", `✓ ${n} retailers`);
+      } else {
+        setStatus(1, "fail", `only ${n} retailers — expected ≥2`);
+      }
+    } catch (e) {
+      $("result1").textContent = "ERROR: " + e.message;
+      setStatus(1, "fail", "error");
+    }
+  }
+
+  // ---- Test 2: observed_prices ----
+  function openTest2URL() {
+    window.open("https://baysidecigars.com/products/arturo-fuente-hemingway-signature", "_blank");
+  }
+  async function refreshObservations() {
+    setStatus(2, "pending", "loading…");
+    try {
+      const data = await apiGet("/api/admin/observed-prices-recent", { limit: 5 });
+      $("result2").textContent = JSON.stringify(data.results, null, 2);
+      const newest = data.results && data.results[0];
+      if (newest && newest.retailer_key === "baysidecigars" && newest.cigar_id) {
+        setStatus(2, "ok", "✓ newest row matches");
+      } else if (newest && newest.retailer_key === "baysidecigars") {
+        setStatus(2, "pending", "row landed, cigar_id still pending");
+      } else {
+        setStatus(2, "pending", "newest isn't bayside yet");
+      }
+    } catch (e) {
+      $("result2").textContent = "ERROR: " + e.message;
+      setStatus(2, "fail", "error");
+    }
+  }
+
+  // ---- Test 3: community proposals ----
+  function openJRCigars() { window.open("https://www.jrcigars.com", "_blank"); }
+  async function refreshProposals() {
+    setStatus(3, "pending", "loading…");
+    try {
+      const data = await apiGet("/api/admin/community-proposals", { status: "pending", limit: 5 });
+      $("result3").textContent = JSON.stringify(data.results, null, 2);
+      if (data.results && data.results.length > 0) {
+        setStatus(3, "ok", `✓ ${data.results.length} pending`);
+      } else {
+        setStatus(3, "pending", "no pending proposals yet");
+      }
+    } catch (e) {
+      $("result3").textContent = "ERROR: " + e.message;
+      setStatus(3, "fail", "error");
+    }
+  }
+
+  // ---- Test 4: retailer requests ----
+  function openRandomShop() {
+    window.open("https://www.cigarsdaily.com", "_blank");
+  }
+  async function refreshRetailerRequests() {
+    setStatus(4, "pending", "loading…");
+    try {
+      const data = await apiGet("/api/admin/retailer-requests");
+      $("result4").textContent = JSON.stringify(data.requests, null, 2);
+      if (data.requests && data.requests.length > 0) {
+        setStatus(4, "ok", `✓ ${data.requests.length} hostnames`);
+      } else {
+        setStatus(4, "pending", "no requests captured yet");
+      }
+    } catch (e) {
+      $("result4").textContent = "ERROR: " + e.message;
+      setStatus(4, "fail", "error");
+    }
+  }
+
+  // ---- Test 5: community-prices ----
+  function openSubmitDeal() { window.open("/submit-deal", "_blank"); }
+  async function refreshCommunityPrices() {
+    setStatus(5, "pending", "loading…");
+    try {
+      const data = await apiGet("/api/admin/community-prices-recent", { limit: 5 });
+      $("result5").textContent = JSON.stringify(data.results, null, 2);
+      if (data.results && data.results.length > 0) {
+        setStatus(5, "ok", `✓ ${data.results.length} rows`);
+      } else {
+        setStatus(5, "pending", "table empty");
+      }
+    } catch (e) {
+      $("result5").textContent = "ERROR: " + e.message;
+      setStatus(5, "fail", "error");
+    }
+  }
+
+  // ---- Test 6: dedup ----
+  async function refreshDedupStats() {
+    setStatus(6, "pending", "loading…");
+    try {
+      // Bust the load_all_products cache so the dedup count reflects
+      // whatever's in the DB right this moment.
+      await fetch("/compare?brand=__cache_bust__&line=__cache_bust__&_=" + Date.now());
+      const stats = await apiGet("/api/admin/dedup-stats");
+      $("result6").textContent = JSON.stringify(stats, null, 2);
+      if ((stats.last_dropped || 0) > 0) {
+        setStatus(6, "ok", `✓ ${stats.last_dropped} dropped`);
+      } else {
+        setStatus(6, "pending", "no dedup activity yet");
+      }
+    } catch (e) {
+      $("result6").textContent = "ERROR: " + e.message;
+      setStatus(6, "fail", "error");
+    }
+  }
+
+  // ---- Test 7: observer counts ----
+  async function countObserver() {
+    setStatus(7, "pending", "counting…");
+    const obs = $("observerId").value.trim();
+    if (!obs) {
+      $("result7").textContent = "Paste your observer_id first.";
+      setStatus(7, "fail", "no observer_id");
+      return;
+    }
+    try {
+      const data = await apiGet("/api/admin/observer-counts", { observer_id: obs });
+      $("result7").textContent = JSON.stringify(data, null, 2);
+      const total = Object.values(data.counts).reduce((a, b) => a + (typeof b === "number" ? b : 0), 0);
+      if (total === 0) {
+        setStatus(7, "ok", "✓ all zeros");
+      } else {
+        setStatus(7, "pending", `total rows: ${total}`);
+      }
+    } catch (e) {
+      $("result7").textContent = "ERROR: " + e.message;
+      setStatus(7, "fail", "error");
+    }
+  }
+
+  // Restore saved key + ping
+  if (ADMIN_KEY) {
+    $("adminKey").value = ADMIN_KEY;
+    pingAuth();
+  }
+</script>
+</body>
+</html>

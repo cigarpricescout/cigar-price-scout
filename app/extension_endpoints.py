@@ -1273,6 +1273,94 @@ def _log_review_decision(
 # alongside (and filterable from) the existing weekly-discovery staged
 # matches in the admin UI.
 
+@router.get("/dedup-stats")
+async def dedup_stats(request: Request):
+    """Surface load_all_products dedup counters for the smoke-test dashboard.
+
+    Reports how many website-form community submissions were dropped on
+    the last cache refresh because a CSV or observed row already covered
+    the same (URL or retailer+CID). Lets the operator verify Sprint 3.5
+    dedup is firing without grep'ing Railway logs.
+    """
+    auth = _check_admin(request)
+    if auth:
+        return auth
+    try:
+        from app.main import _dedup_stats as stats  # type: ignore
+        return dict(stats)
+    except Exception as e:
+        logger.exception("dedup_stats failed: %s", e)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@router.get("/community-prices-recent")
+async def community_prices_recent(
+    request: Request,
+    limit: int = Query(20, ge=1, le=200),
+):
+    """Newest /api/community-price (website form) submissions.
+
+    Lets the smoke-test dashboard verify Test 5 (legacy form still writes)
+    without a Postgres client.
+    """
+    auth = _check_admin(request)
+    if auth:
+        return auth
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT id, cid, url, price_cents, retailer_name,
+                   brand, line, wrapper, vitola, size, box_qty,
+                   free_shipping, active, downvotes, submitted_at
+              FROM community_prices
+             ORDER BY id DESC
+             LIMIT %s
+        """, (limit,))
+        cols = [c[0] for c in cur.description]
+        rows = []
+        for r in cur.fetchall():
+            d = dict(zip(cols, r))
+            if d.get("submitted_at"):
+                d["submitted_at"] = str(d["submitted_at"])
+            rows.append(d)
+        conn.close()
+        return {"results": rows, "count": len(rows)}
+    except Exception as e:
+        logger.exception("community_prices_recent failed: %s", e)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@router.get("/observer-counts")
+async def observer_counts(request: Request, observer_id: str = Query(...)):
+    """Row counts across every observer-keyed table for a given observer_id.
+
+    Used by Test 7 in the smoke-test dashboard ("forget me") so the
+    operator can verify deletion zeroed everything out.
+    """
+    auth = _check_admin(request)
+    if auth:
+        return auth
+    obs = (observer_id or "").strip()
+    if not obs:
+        return JSONResponse({"error": "observer_id required"}, status_code=400)
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
+        counts = {}
+        for table in ("observed_prices", "community_url_proposals", "community_retailer_requests"):
+            try:
+                cur.execute(f"SELECT COUNT(*) FROM {table} WHERE observer_id = %s", (obs,))
+                counts[table] = int(cur.fetchone()[0])
+            except Exception as inner:
+                counts[table] = f"error: {inner}"
+        conn.close()
+        return {"observer_id": obs, "counts": counts}
+    except Exception as e:
+        logger.exception("observer_counts failed: %s", e)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 @router.get("/community-proposals")
 async def community_proposals(
     request: Request,

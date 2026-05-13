@@ -717,6 +717,16 @@ def load_csv(csv_path, retailer_key, retailer_name):
 _product_cache = {"data": None, "timestamp": 0}
 CACHE_TTL_SECONDS = 300  # 5 minutes
 
+# Last-run dedup stats. Surfaces in the smoke-test dashboard so the
+# operator can see whether a fresh website-form submission was caught
+# by the dedup logic in load_all_products(). Updated on every cache
+# refresh (i.e. every CACHE_TTL_SECONDS at most).
+_dedup_stats: Dict[str, object] = {
+    "last_dropped": 0,
+    "last_total_community": 0,
+    "last_run_at": None,
+}
+
 COMMUNITY_DOWNVOTE_THRESHOLD = 3
 
 def _ensure_community_tables_pg():
@@ -1083,6 +1093,10 @@ def load_all_products():
             dropped,
         )
     all_products.extend(deduped_community)
+
+    _dedup_stats["last_dropped"] = dropped
+    _dedup_stats["last_total_community"] = len(community_products)
+    _dedup_stats["last_run_at"] = datetime.now().isoformat()
     
     _product_cache["data"] = all_products
     _product_cache["timestamp"] = now
@@ -3149,6 +3163,28 @@ async def admin_review_page(request: Request, key: str = Query("")):
             status_code=401,
         )
     return FileResponse(f"{STATIC_PATH}/admin-review.html", media_type="text/html")
+
+
+@app.get("/admin/smoke-tests", response_class=HTMLResponse)
+async def admin_smoke_tests_page(request: Request, key: str = Query("")):
+    """Click-driven dashboard for the AGENTS.md §11 manual smoke-test playbook.
+
+    Auth is handled in-page by the user pasting their admin key into a
+    sessionStorage-backed input — every JSON call sent from the dashboard
+    appends ?key=... using the saved value. We still check ?key= here as a
+    soft gate so the dashboard isn't directly indexable, but the real
+    security boundary is the underlying /api/admin/* endpoints.
+    """
+    expected = os.getenv("ADMIN_SECRET_KEY", "")
+    if not expected or key != expected:
+        return HTMLResponse(
+            '<div style="font-family:sans-serif;text-align:center;padding:60px">'
+            '<h2>Smoke Test Dashboard</h2>'
+            '<p>Append <code>?key=YOUR_ADMIN_SECRET_KEY</code> to the URL to load.</p>'
+            '</div>',
+            status_code=401,
+        )
+    return FileResponse(f"{STATIC_PATH}/admin/smoke-tests.html", media_type="text/html")
 
 
 @app.get("/api/admin/approved-matches")
