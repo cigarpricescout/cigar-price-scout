@@ -247,6 +247,12 @@ class StageApprovalBody(BaseModel):
     proposed_cid: Optional[str] = None
     proposed_score: Optional[float] = None
     proposed_confidence: Optional[str] = None
+    # When the operator approves a URL the consumer extension previously
+    # proposed metadata for, the popup passes the proposal's id so we can
+    # close the loop: mark community_url_proposals.status='approved' and
+    # stamp resolved_cid. This is how "consumer submits → operator
+    # confirms → consumer sees comparison" actually works end-to-end.
+    community_proposal_id: Optional[int] = None
 
 
 class ResolveProposalBody(BaseModel):
@@ -331,6 +337,13 @@ async def url_status(
     except Exception:
         extractor_status = None
 
+    # Pending consumer proposal for this URL? When present, the operator
+    # popup pre-fills the candidate form with the consumer's submission so
+    # the operator's review = one-click approve instead of re-typing the
+    # same brand/line/vitola/box_qty/price. Exposed across all states so
+    # even a 'matched' URL surfaces a pending re-classification proposal.
+    community_proposal = _lookup_community_proposal(url)
+
     # If we have no retailer key, decide between "no_scraper" (we have *some*
     # CSV that uses this domain but no extractor) and "unknown" (totally new
     # domain). For the extension's purpose these collapse to "no_scraper":
@@ -347,6 +360,7 @@ async def url_status(
             "candidates": [],
             "available_in_master": [],
             "scraped_title": title,
+            "community_proposal": community_proposal,
         }
 
     # 1) Already in the live retailer CSV? `url` is already canonical here
@@ -366,6 +380,7 @@ async def url_status(
             "candidates": _candidates_for(url, title),
             "available_in_master": [],
             "scraped_title": title,
+            "community_proposal": community_proposal,
         }
 
     # 2) Seen in staging? (approved / published / rejected / skipped)
@@ -382,6 +397,7 @@ async def url_status(
             "candidates": _candidates_for(url, title),
             "available_in_master": [],
             "scraped_title": title,
+            "community_proposal": community_proposal,
         }
 
     # 3) Fresh URL → propose CIDs from the master list
@@ -398,12 +414,69 @@ async def url_status(
         "candidates": cands,
         "available_in_master": [c["cigar_id"] for c in available],
         "scraped_title": title,
+        "community_proposal": community_proposal,
     }
 
 
 def _candidates_for(url: str, title: Optional[str]) -> List[Dict]:
     """Run the matcher against the cached master list."""
     return find_top_candidates(url, title, _cache_state["master"], limit=5)
+
+
+def _lookup_community_proposal(url: str) -> Optional[Dict]:
+    """Return the most-recent PENDING community_url_proposal for a URL.
+
+    Surfaces consumer-submitted metadata to the operator extension so
+    when the operator visits a URL a user has already proposed for, the
+    popup can pre-fill the form with the consumer's brand/line/vitola/
+    wrapper-bucket/price entry instead of making the operator re-do the
+    work. Returns None if no pending proposal exists.
+
+    Returns a dict with the proposed fields and a `total_pending` count
+    of how many consumers have proposed this URL (de-emphasized in the UI
+    when 1, surfaced as social proof when >1).
+    """
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT id, proposed_brand, proposed_line, proposed_vitola,
+                   proposed_size, proposed_wrapper, proposed_box_qty,
+                   confirmed_price_cents, scraped_title, observer_source,
+                   created_at, retailer_key,
+                   (SELECT COUNT(*) FROM community_url_proposals
+                    WHERE url=%s AND status='pending') AS total_pending
+            FROM community_url_proposals
+            WHERE url=%s AND status='pending'
+            ORDER BY created_at DESC
+            LIMIT 1
+        """, (url, url))
+        row = cur.fetchone()
+        conn.close()
+        if not row:
+            return None
+        confirmed_price_cents = row[7]
+        return {
+            "proposal_id": row[0],
+            "proposed_brand": row[1],
+            "proposed_line": row[2],
+            "proposed_vitola": row[3],
+            "proposed_size": row[4],
+            "proposed_wrapper": row[5],  # bucket name like "Maduro"
+            "proposed_box_qty": row[6],
+            "confirmed_price": (
+                round(confirmed_price_cents / 100.0, 2)
+                if confirmed_price_cents is not None else None
+            ),
+            "scraped_title": row[8],
+            "observer_source": row[9],
+            "created_at": str(row[10]) if row[10] else None,
+            "retailer_key": row[11],
+            "total_pending": row[12] or 1,
+        }
+    except Exception as e:
+        logger.warning("lookup_community_proposal error: %s", e)
+        return None
 
 
 def _lookup_seen(url: str, retailer_key: str) -> Tuple[Optional[str], Optional[str]]:
@@ -415,6 +488,12 @@ def _lookup_seen(url: str, retailer_key: str) -> Tuple[Optional[str], Optional[s
         weekly discovery agent (existing url_staged_matches)
       - "skipped" — clicked Skip in the popup
     None when the URL has never been seen.
+
+    Note: community_url_proposals are handled separately by
+    _lookup_community_proposal() and exposed as `community_proposal`
+    on the response rather than collapsing into the seen-status enum.
+    The operator wants to see consumer-proposed metadata, not just be
+    told "this URL is under review".
     """
     try:
         conn = _get_conn()
@@ -587,6 +666,26 @@ async def stage_approval(request: Request, body: StageApprovalBody):
             parts_dict.get("wrapper"), box_qty_int,
             body.title, body.price, body.in_stock,
         ))
+
+        # If this approval resolves a consumer proposal, mark it approved
+        # and stamp the final CID. The consumer-side popup polls or
+        # re-fetches url-status on next visit, sees the URL is now matched,
+        # and shows the comparison card — closing the contribution loop.
+        # We also resolve ALL other pending proposals for the same URL
+        # (consumers may have submitted multiple times) so the queue
+        # collapses to a single decision per URL.
+        resolved_proposal_count = 0
+        if body.community_proposal_id:
+            cur.execute("""
+                UPDATE community_url_proposals
+                   SET status='approved',
+                       resolved_cid=%s,
+                       reviewed_at=NOW()
+                 WHERE url=%s
+                   AND status='pending'
+            """, (cid, body.url))
+            resolved_proposal_count = cur.rowcount or 0
+
         conn.commit()
         conn.close()
 
@@ -616,6 +715,9 @@ async def stage_approval(request: Request, body: StageApprovalBody):
             "cid": cid,
             "retailer_key": body.retailer_key,
             "url": body.url,
+            # Surfaced so the popup can show "Approved consumer's submission"
+            # toast and the smoke-test dashboard can verify the loop closed.
+            "resolved_consumer_proposals": resolved_proposal_count,
         }
     except Exception as e:
         logger.exception("stage_approval failed: %s", e)

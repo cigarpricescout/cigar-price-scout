@@ -147,6 +147,15 @@ Master CSV → DB sync is handled by `tools/master/` scripts.
 | POST | `/api/admin/mark-extension-published` | Local publisher confirms a row landed in the CSV |
 | POST | `/api/admin/resolve-proposal` | Operator approves/edits/rejects a `community_url_proposals` row |
 
+Note: `/api/admin/url-status` also returns a `community_proposal` object
+on every response (null when none exists) so the operator extension
+popup can pre-fill the candidate form from a consumer's submission. When
+the operator approves a URL with a pending proposal, the
+`/api/admin/stage-approval` body accepts `community_proposal_id` — the
+backend then flips `community_url_proposals.status='approved'` and
+stamps `resolved_cid` in the same transaction, closing the consumer
+contribution loop end-to-end.
+
 ---
 
 ## 6. Retailer config (`RETAILERS` list in `app/main.py`)

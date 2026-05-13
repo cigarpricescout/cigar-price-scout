@@ -134,16 +134,18 @@ function renderNoScraper(tab, response) {
 function renderCandidate(tab, response) {
   const top = (response.candidates && response.candidates[0]) || null;
   const alts = (response.candidates || []).slice(1, 5);
-  // Prefer the natural-form fields the backend returns (Title Case, spaces
-  // preserved). Fall back to splitting the canonical CID only if those
-  // aren't available (e.g. when no candidate was proposed).
-  const parts = top
-    ? partsFromCandidate(top)
-    : suggestPartsFromUrl(tab.url, response.scraped_title);
+  const proposalParts = partsFromCommunityProposal(response.community_proposal);
+  // Pre-fill priority: consumer proposal > matcher top candidate > URL
+  // guess. Consumer proposals are higher signal than URL-pattern guesses
+  // because a real human saw the page and typed the values; we trust
+  // their input more than the matcher's heuristics on the URL alone.
+  const parts = proposalParts
+    || (top ? partsFromCandidate(top) : suggestPartsFromUrl(tab.url, response.scraped_title));
 
   root.innerHTML = `
     ${renderHeader(tab, response)}
     <div class="section">
+      ${communityProposalBanner(response)}
       <div class="section-label">
         Proposed CID
         ${top ? `<span class="confidence ${top.confidence}">${top.confidence} ${(top.score*100|0)}%</span>` : ""}
@@ -676,6 +678,11 @@ async function approve(tab, response) {
     proposed_cid: top ? top.cigar_id : null,
     proposed_score: top ? top.score : null,
     proposed_confidence: top ? top.confidence : null,
+    // When a consumer proposal triggered this approval, pass its id so the
+    // backend can flip community_url_proposals.status='approved' in the
+    // same transaction — closing the contribution loop end-to-end.
+    community_proposal_id:
+      (response.community_proposal && response.community_proposal.proposal_id) || null,
   };
   const btn = document.getElementById("approve");
   btn.disabled = true;
@@ -683,7 +690,16 @@ async function approve(tab, response) {
   try {
     const res = await apiFetch("/api/admin/stage-approval", { method: "POST", body });
     chrome.runtime.sendMessage({ type: "invalidateCache", url: tab.url }).catch(() => {});
-    toast(res.mode === "new_cid" ? "Approved (new CID staged)" : "Approved");
+    // Surface the proposal-resolution count when present so the operator
+    // confirms the consumer's submission actually got closed out.
+    let msg = res.mode === "new_cid" ? "Approved (new CID staged)" : "Approved";
+    const resolved = res.resolved_consumer_proposals || 0;
+    if (resolved > 0) {
+      msg += resolved === 1
+        ? " · 1 consumer proposal resolved"
+        : ` · ${resolved} consumer proposals resolved`;
+    }
+    toast(msg);
     setTimeout(() => window.close(), 600);
   } catch (e) {
     toast(`Approve failed: ${e.message || e}`, "error");
@@ -783,6 +799,78 @@ function suggestPartsFromUrl(url, scrapedTitle) {
     brand: "", parent_brand: "", line: "", vitola: "", vitola2: "",
     size: "", wrapper_code: "", box_qty: "",
   };
+}
+
+// Build form-ready parts from a pending consumer proposal. The consumer
+// submitted brand/line/vitola/box_qty plus a friendly wrapper BUCKET name
+// (e.g. "Maduro"), NOT a canonical wrapper code. The operator still picks
+// the code from the 14-option dropdown — Gap 4 will resolve bucket→code
+// automatically. wrapper_code is left blank here so the operator sees the
+// pending choice clearly and doesn't accidentally promote a wrong code.
+function partsFromCommunityProposal(cp) {
+  if (!cp) return null;
+  return {
+    brand:        cp.proposed_brand  || "",
+    parent_brand: cp.proposed_brand  || "",
+    line:         cp.proposed_line   || "",
+    vitola:       cp.proposed_vitola || "",
+    vitola2:      cp.proposed_vitola || "",
+    size:         cp.proposed_size   || "",
+    wrapper_code: "",
+    box_qty:      cp.proposed_box_qty != null ? String(cp.proposed_box_qty) : "",
+  };
+}
+
+// Best-effort "12 minutes ago" / "3 hours ago" / "2 days ago" for the
+// proposal banner. ISO 8601 timestamps from Postgres come through as
+// strings; missing or unparseable input collapses to empty (the banner
+// just omits the age line). Intentionally tiny — Intl.RelativeTimeFormat
+// is overkill for this surface.
+function humanizeAge(iso) {
+  if (!iso) return "";
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return "";
+  const sec = Math.max(0, Math.round((Date.now() - t) / 1000));
+  if (sec < 90)             return `${sec}s ago`;
+  if (sec < 90 * 60)        return `${Math.round(sec / 60)}m ago`;
+  if (sec < 36 * 3600)      return `${Math.round(sec / 3600)}h ago`;
+  return `${Math.round(sec / 86400)}d ago`;
+}
+
+// Renders an info banner at the top of the candidate form when a consumer
+// has already proposed metadata for this URL. Tells the operator what was
+// submitted so they understand why the form is pre-filled. The banner is
+// purely informational — the form itself is the action surface.
+function communityProposalBanner(response) {
+  const cp = response.community_proposal;
+  if (!cp) return "";
+  const age = humanizeAge(cp.created_at);
+  const others = cp.total_pending > 1
+    ? ` <span class="cp-more">+${cp.total_pending - 1} more</span>`
+    : "";
+  const productLine = [cp.proposed_brand, cp.proposed_line, cp.proposed_vitola]
+    .filter(Boolean).join(" ").trim() || "(no product info)";
+  const meta = [
+    cp.proposed_size,
+    cp.proposed_box_qty ? `Box ${cp.proposed_box_qty}` : "",
+    cp.proposed_wrapper,
+    typeof cp.confirmed_price === "number" ? `$${cp.confirmed_price.toFixed(2)}` : "",
+  ].filter(Boolean).join(" • ");
+  return `
+    <div class="community-proposal">
+      <div class="cp-header">
+        <span class="cp-badge">Consumer proposal${others}</span>
+        ${age ? `<span class="cp-age">${escapeHtml(age)}</span>` : ""}
+      </div>
+      <div class="cp-product">${escapeHtml(productLine)}</div>
+      ${meta ? `<div class="cp-meta">${escapeHtml(meta)}</div>` : ""}
+      <div class="cp-hint">
+        Form pre-filled below. Edit any field, then Approve — the proposal
+        will be marked resolved and the consumer will see the comparison
+        card on their next visit.
+      </div>
+    </div>
+  `;
 }
 
 // ── Misc ─────────────────────────────────────────────────────────────
