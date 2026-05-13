@@ -975,6 +975,180 @@ async def observed_prices_recent(
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+# ── POST /api/admin/cleanup-orphan-observations ────────────────────────
+#
+# One-time pre-launch cleanup. Targets the kinds of rows we KNOW are
+# garbage and would never get written by the post-fix code path:
+#   1. Non-product paths (homepage /, /collections, /cart, /search, etc.)
+#   2. URLs that still carry tracking/variant query params (variant=,
+#      utm_*, gclid, fbclid, …) — these are pre-canonicalization-fix
+#      duplicates of their canonical-URL counterparts.
+#   3. Rows where price_cents IS NULL AND scraped_title IS NULL — fully
+#      empty observations that couldn't have come from a real product.
+
+# Same path tokens as extension/background.js looksLikeProductPage().
+# Kept here as a list rather than regex so the SQL can use LIKE matches
+# directly.
+_NON_PRODUCT_PATH_LIKE = (
+    "/collections/", "/collections",
+    "/categories/", "/categories",
+    "/category/",   "/category",
+    "/search/",     "/search",
+    "/cart/",       "/cart",
+    "/checkout/",   "/checkout",
+    "/account/",    "/account",
+    "/login/",      "/login",
+    "/pages/",
+    "/blog/", "/blogs/",
+    "/policy/", "/policies/",
+    "/sitemap",
+    "/api/",
+)
+_TRACKING_PARAM_LIKE = (
+    "%?variant=%", "%&variant=%",
+    "%?utm_%",    "%&utm_%",
+    "%?gclid=%",  "%&gclid=%",
+    "%?fbclid=%", "%&fbclid=%",
+    "%?msclkid=%", "%&msclkid=%",
+)
+
+
+@router.post("/cleanup-orphan-observations")
+async def cleanup_orphan_observations(
+    request: Request,
+    dry_run: bool = Query(True, description="Preview only; pass false to actually delete"),
+):
+    """Delete observed_prices rows that should never have been written.
+
+    Pre-launch hygiene. Admin-gated. Defaults to dry_run=true so you can
+    review what would be deleted before committing.
+
+    Returns:
+      {
+        "dry_run": bool,
+        "deleted": {
+          "non_product_paths": int,
+          "tracking_params":   int,
+          "fully_empty":       int,
+          "total":             int
+        },
+        "samples": {
+          "non_product_paths": [up to 10 URLs],
+          "tracking_params":   [up to 10 URLs],
+          "fully_empty":       [up to 10 IDs]
+        }
+      }
+    """
+    auth = _check_admin(request)
+    if auth:
+        return auth
+
+    import re
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
+
+        # ── Bucket 1: non-product paths ──────────────────────────────
+        # We match the path portion of the URL. Since observed_prices.url
+        # is a full URL, we use a position-aware LIKE: '%://%/pattern'.
+        non_product_conds = []
+        non_product_params: List = []
+        for tok in _NON_PRODUCT_PATH_LIKE:
+            non_product_conds.append("url ~* %s")
+            # Anchor at '<host>/pattern' so we don't match query strings.
+            # The regex form 'https?://[^/]+(/...)' is simpler in PG with
+            # POSIX regex via ~* (case-insensitive).
+            non_product_params.append(rf"^https?://[^/]+{re.escape(tok)}")
+        # Also catch bare-host (path == '' or '/').
+        bare_host_re = r"^https?://[^/]+/?$"
+        non_product_conds.append("url ~* %s")
+        non_product_params.append(bare_host_re)
+
+        non_product_where = "(" + " OR ".join(non_product_conds) + ")"
+
+        cur.execute(
+            f"SELECT id, url FROM observed_prices WHERE {non_product_where} "
+            "ORDER BY observed_at DESC LIMIT 10",
+            non_product_params,
+        )
+        non_product_samples = [{"id": r[0], "url": r[1]} for r in cur.fetchall()]
+
+        cur.execute(
+            f"SELECT COUNT(*) FROM observed_prices WHERE {non_product_where}",
+            non_product_params,
+        )
+        non_product_count = cur.fetchone()[0]
+
+        # ── Bucket 2: URLs still carrying tracking/variant params ─────
+        tracking_conds = " OR ".join(["url LIKE %s"] * len(_TRACKING_PARAM_LIKE))
+        cur.execute(
+            f"SELECT id, url FROM observed_prices WHERE {tracking_conds} "
+            "ORDER BY observed_at DESC LIMIT 10",
+            list(_TRACKING_PARAM_LIKE),
+        )
+        tracking_samples = [{"id": r[0], "url": r[1]} for r in cur.fetchall()]
+
+        cur.execute(
+            f"SELECT COUNT(*) FROM observed_prices WHERE {tracking_conds}",
+            list(_TRACKING_PARAM_LIKE),
+        )
+        tracking_count = cur.fetchone()[0]
+
+        # ── Bucket 3: fully empty rows ────────────────────────────────
+        # No price AND no title → the scrape captured literally nothing
+        # useful. Safe to delete regardless.
+        empty_where = "(price_cents IS NULL AND (scraped_title IS NULL OR scraped_title = ''))"
+        cur.execute(
+            f"SELECT id, url FROM observed_prices WHERE {empty_where} "
+            "ORDER BY observed_at DESC LIMIT 10",
+        )
+        empty_samples = [{"id": r[0], "url": r[1]} for r in cur.fetchall()]
+
+        cur.execute(f"SELECT COUNT(*) FROM observed_prices WHERE {empty_where}")
+        empty_count = cur.fetchone()[0]
+
+        deleted_total = 0
+        if not dry_run:
+            cur.execute(
+                f"DELETE FROM observed_prices WHERE {non_product_where}",
+                non_product_params,
+            )
+            d1 = cur.rowcount
+            cur.execute(
+                f"DELETE FROM observed_prices WHERE {tracking_conds}",
+                list(_TRACKING_PARAM_LIKE),
+            )
+            d2 = cur.rowcount
+            cur.execute(f"DELETE FROM observed_prices WHERE {empty_where}")
+            d3 = cur.rowcount
+            conn.commit()
+            # Re-report the actual deleted counts (may differ slightly
+            # from the COUNT(*) above if rows overlap multiple buckets).
+            deleted_total = d1 + d2 + d3
+            non_product_count, tracking_count, empty_count = d1, d2, d3
+
+        conn.close()
+
+        return {
+            "dry_run": dry_run,
+            "deleted": {
+                "non_product_paths": non_product_count,
+                "tracking_params":   tracking_count,
+                "fully_empty":       empty_count,
+                "total":             non_product_count + tracking_count + empty_count
+                                      if dry_run else deleted_total,
+            },
+            "samples": {
+                "non_product_paths": non_product_samples,
+                "tracking_params":   tracking_samples,
+                "fully_empty":       empty_samples,
+            },
+        }
+    except Exception as e:
+        logger.exception("cleanup_orphan_observations failed: %s", e)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 @router.get("/retailer-registry")
 async def retailer_registry(request: Request, refresh: bool = Query(False)):
     """List known retailer hostnames + keys. Extension uses this to know which
