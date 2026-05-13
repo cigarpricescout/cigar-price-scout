@@ -516,6 +516,51 @@ class AutomatedCigarPriceSystem:
             except Exception as e:
                 self.logger.warning(f"Failed to capture post-state for {retailer_name}: {e}")
 
+    def process_extension_approvals(self) -> int:
+        """Drain extension_staged_approvals (Chrome extension) into local CSVs.
+
+        Runs BEFORE process_approved_matches() so any brand-new CIDs created
+        via the extension land in master_cigars.csv/.db before the retailer
+        CSV row that references them is touched by anything else.
+
+        Writes BARE retailer rows (cigar_id + url only). The retailer's
+        extractor fills in price/title/in_stock on the next price-update step.
+
+        This is intentionally non-fatal: a failure here logs a warning and
+        the rest of the automation cycle continues. The extension table is
+        an additive, opt-in surface — it must never block the existing daily
+        cycle.
+        """
+        try:
+            from tools.extension.publish_extension_approvals import publish_all
+            stats = publish_all(dry_run=False)
+            total = (
+                stats.get("retailer_added", 0)
+                + stats.get("retailer_url_updated", 0)
+            )
+            if total:
+                self.logger.info(
+                    "Extension publisher: +%d retailer row(s), %d new CID(s) to master",
+                    total, stats.get("master_csv_added", 0),
+                )
+            return total
+        except Exception as e:
+            self.logger.warning(f"process_extension_approvals failed (non-critical): {e}")
+            return 0
+
+    def sync_extension_retailer_queue(self) -> int:
+        """Drain pending_new_retailers into tools/ai/new_retailer_queue.txt.
+
+        Like process_extension_approvals, this is non-fatal.
+        """
+        try:
+            from tools.extension.sync_new_retailer_queue import sync as _sync
+            stats = _sync(dry_run=False)
+            return stats.get("urls_appended", 0)
+        except Exception as e:
+            self.logger.warning(f"sync_extension_retailer_queue failed (non-critical): {e}")
+            return 0
+
     def process_approved_matches(self) -> int:
         """Fetch approved matches from the live API and append to retailer CSVs.
 
@@ -878,6 +923,27 @@ class AutomatedCigarPriceSystem:
             
             # 2. Capture pre-update state for historical tracking
             pre_state = self.capture_pre_update_state(retailers)
+
+            # 2.4. Drain Chrome-extension approvals FIRST so any new master
+            # CIDs land in master_cigars.csv/.db before retailer CSV rows
+            # reference them. This step writes BARE retailer rows
+            # (cigar_id + url only); the next scraper run fills in pricing.
+            try:
+                ext_count = self.process_extension_approvals()
+                if ext_count > 0:
+                    self.logger.info(
+                        f"Published {ext_count} Chrome-extension approval(s) to retailer CSVs"
+                    )
+                # Also drain queued new-retailer URLs into the queue file.
+                queued = self.sync_extension_retailer_queue()
+                if queued > 0:
+                    self.logger.info(
+                        f"Appended {queued} URL(s) to tools/ai/new_retailer_queue.txt"
+                    )
+            except Exception as e:
+                self.logger.warning(
+                    f"Extension publisher step failed (non-critical): {e}"
+                )
 
             # 2.5. Merge approved URL matches into retailer CSVs *before* scrapers run
             # so the same cycle picks up price/stock from the new URLs. (Previously this
