@@ -156,6 +156,16 @@ backend then flips `community_url_proposals.status='approved'` and
 stamps `resolved_cid` in the same transaction, closing the consumer
 contribution loop end-to-end.
 
+`POST /api/community/propose-metadata` runs a server-side CID match
+against `master_cigars` after insert. When the submission resolves to a
+single CID at HIGH confidence (with exact `box_qty` match and a
+wrapper-bucket-compatible `wrapper_code`), the response includes a
+`comparison` object the consumer popup renders immediately as a
+provisional price-comparison card. The proposal still queues for
+operator review; the consumer just sees value right away. Lower-
+confidence matches return `comparison: null` and the consumer sees the
+standard "submitted for review" toast.
+
 ---
 
 ## 6. Retailer config (`RETAILERS` list in `app/main.py`)

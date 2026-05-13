@@ -508,12 +508,49 @@ async def propose_metadata(request: Request, body: ProposeMetadataBody):
         proposal_id = cur.fetchone()[0]
         conn.commit()
         conn.close()
-        return {
+
+        # Gap 2: hybrid instant-feedback. Try to auto-match the consumer's
+        # submission against the master catalog. ONLY when we get a HIGH-
+        # confidence match (box_qty exact + wrapper-bucket compatible) do
+        # we attach a CID and return a comparison card. Anything less
+        # falls back to the standard "pending review" UX so we never
+        # surface a confidently-wrong comparison.
+        comparison = None
+        match_info = _try_match_proposal_to_cid(body)
+        if match_info:
+            matched_cid = match_info["cigar_id"]
+            try:
+                comparison = _build_comparison_for_cid(matched_cid, zip="", limit=3)
+            except Exception as e:
+                logger.warning(
+                    "comparison build failed for auto-matched cid=%s: %s",
+                    matched_cid, e,
+                )
+                comparison = None
+            # Only return the comparison when we have ≥ 2 retailers
+            # (consistent with the website's MIN_RETAILERS_FOR_COMPARISON
+            # rule — a comparison of one isn't a comparison).
+            if comparison and not comparison.get("results"):
+                comparison = None
+
+        response: Dict[str, Any] = {
             "ok": True,
             "proposal_id": proposal_id,
             "retailer_key": retailer_key,
             "status": "pending",
+            # Always include the comparison key so the consumer popup
+            # can branch on truthiness without "key exists" checks.
+            "comparison": comparison,
+            "match": (
+                {
+                    "cigar_id": match_info["cigar_id"],
+                    "confidence": match_info["confidence"],
+                    "source": match_info["source"],
+                }
+                if match_info else None
+            ),
         }
+        return response
     except Exception as e:
         logger.exception("propose_metadata failed: %s", e)
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -734,6 +771,116 @@ async def public_url_status(
         "url": url,
         "retailer_key": retailer_key,
     }
+
+
+def _try_match_proposal_to_cid(
+    body: "ProposeMetadataBody",
+) -> Optional[Dict[str, Any]]:
+    """Best-effort server-side CID match for a consumer proposal.
+
+    Returns a dict with cid/score/confidence/wrapper_code/box_qty when the
+    proposal matches a master CID with HIGH confidence AND the consumer's
+    wrapper bucket (if provided) is compatible AND box_qty matches
+    exactly. Returns None otherwise so the caller falls back to the
+    standard "in review" UX.
+
+    This powers the Gap 2 instant-comparison feedback: when we can
+    confidently auto-resolve, the consumer sees the price comparison
+    card immediately instead of "thanks, in review" — even though the
+    operator still does the final approval.
+
+    Conservative on purpose: HIGH-only, wrapper-bucket-checked, exact
+    box_qty match. Wrong auto-matches would surface a misleading
+    comparison; we'd rather show "in review" than wrong data.
+    """
+    if not (body.brand and body.line):
+        return None
+    if body.box_qty is None or int(body.box_qty) <= 0:
+        return None
+
+    # Reuse the operator extension's hot in-memory master cache when
+    # possible (it's refreshed every 60s anyway) so we don't re-parse the
+    # 2300-row CSV on every proposal. Fall back to a one-shot load if the
+    # cache hasn't been populated yet (cold-start case).
+    master = None
+    try:
+        from app.extension_endpoints import _cache_state, _refresh_cache  # type: ignore
+        _refresh_cache(force=False)
+        master = _cache_state.get("master") or None
+    except Exception:
+        master = None
+    if not master:
+        try:
+            from app.cid_matcher import load_master_cigars  # type: ignore
+            from pathlib import Path  # type: ignore
+            here = Path(__file__).resolve().parents[1]
+            master = load_master_cigars(here / "data" / "master_cigars.csv")
+        except Exception as e:
+            logger.warning("master catalog unavailable for proposal match: %s", e)
+            return None
+
+    try:
+        from app.cid_matcher import find_top_candidates  # type: ignore
+    except Exception as e:
+        logger.warning("find_top_candidates unavailable: %s", e)
+        return None
+
+    # Synthesize a title from the proposal so the matcher has both the
+    # URL (for hostname / slug hints) and a strong text signal.
+    synth_title = " ".join(
+        p for p in (body.brand, body.line, body.vitola, body.size) if p
+    )
+
+    try:
+        cands = find_top_candidates(body.url or "", synth_title, master, limit=10)
+    except Exception as e:
+        logger.warning("find_top_candidates errored: %s", e)
+        return None
+    if not cands:
+        return None
+
+    # Optional wrapper-bucket filter. When the consumer picked a bucket
+    # we restrict acceptable canonical wrapper_codes so we never auto-
+    # match a CID with a wrapper the consumer disagreed with.
+    allowed_codes: Optional[set] = None
+    if body.wrapper:
+        try:
+            from app.wrapper_buckets import codes_for_bucket  # type: ignore
+            ac = codes_for_bucket(body.wrapper)
+            if ac:
+                allowed_codes = ac
+        except Exception:
+            allowed_codes = None
+
+    # Iterate the top candidates (not just [0]) — the matcher can tie
+    # multiple CIDs at HIGH confidence when only box_qty or wrapper_code
+    # differ, and we want to find the FIRST candidate that fully matches
+    # the consumer's box_qty and bucket. This handles cases like Padron
+    # 1964 Diplomatico where the catalog has both BOX10 and BOX25 CIDs
+    # at the same score; the helper picks whichever one the consumer
+    # actually proposed.
+    target_box_qty = int(body.box_qty)
+    for cand in cands:
+        if (cand.get("confidence") or "").upper() != "HIGH":
+            continue
+        try:
+            if int(cand.get("box_qty") or 0) != target_box_qty:
+                continue
+        except (TypeError, ValueError):
+            continue
+        if allowed_codes is not None:
+            cand_code = (cand.get("wrapper_code") or "").upper()
+            if cand_code and cand_code not in allowed_codes:
+                continue
+        return {
+            "cigar_id": cand["cigar_id"],
+            "score": cand.get("score"),
+            "confidence": cand.get("confidence"),
+            "wrapper_code": cand.get("wrapper_code"),
+            "box_qty": cand.get("box_qty"),
+            "source": "auto_match_high_confidence",
+        }
+    return None
 
 
 def _build_comparison_for_cid(

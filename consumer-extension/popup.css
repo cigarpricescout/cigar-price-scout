@@ -57,6 +57,21 @@ body {
 .banner.error     { background: var(--red-bg);   color: var(--red); }
 .banner.info      { background: var(--gray-bg);  color: var(--muted); }
 
+/* Provisional-comparison note — only rendered after a HIGH-confidence
+   propose-metadata auto-match. Blue/info tone signals "you have value
+   now but this isn't the final answer yet". Sits between the banner
+   and the comparison rows. */
+.provisional-note {
+  padding: 8px 14px;
+  font-size: 11px;
+  line-height: 1.45;
+  background: var(--blue-bg);
+  color: var(--blue);
+  border-bottom: 1px solid var(--border);
+}
+.provisional-note strong { color: inherit; font-weight: 600; }
+.provisional-note em     { font-style: italic; }
+
 .section { padding: 12px 14px; border-bottom: 1px solid var(--border); }
 .section:last-child { border-bottom: none; }
 

@@ -346,7 +346,7 @@ async function submitProposal(tab, response, scraped) {
 
   try {
     const observerId = await getObserverId();
-    await publicFetch("/api/community/propose-metadata", {
+    const proposeRes = await publicFetch("/api/community/propose-metadata", {
       method: "POST",
       body: {
         observer_id: observerId,
@@ -365,14 +365,92 @@ async function submitProposal(tab, response, scraped) {
         scraped_title: scraped?.title || scraped?.jsonldName || null,
       },
     });
-    toast("Thanks — submitted for review.");
     chrome.runtime.sendMessage({ type: "invalidateCache", url: tab.url });
+
+    // Gap 2: hybrid instant feedback. If the server auto-matched the
+    // submission to a CID with HIGH confidence AND a multi-retailer
+    // comparison is available, re-render the popup with the comparison
+    // immediately. The proposal is still 'pending' on the operator's
+    // queue, but the consumer sees value right away. A subtle banner
+    // makes the "provisional / awaiting operator confirmation" status
+    // unambiguous so users don't treat an incorrect auto-match as final.
+    if (proposeRes && proposeRes.comparison
+        && proposeRes.comparison.results
+        && proposeRes.comparison.results.length > 0) {
+      renderProvisionalComparison(tab, response, scraped, proposeRes);
+      return;
+    }
+
+    toast("Thanks — submitted for review.");
     setTimeout(() => window.close(), 800);
   } catch (e) {
     btn.disabled = false;
     btn.textContent = "Submit";
     toast(`Submit failed: ${e.message || e}`);
   }
+}
+
+// ── Gap 2: provisional comparison after a high-confidence submission ──
+
+function renderProvisionalComparison(tab, response, scraped, proposeRes) {
+  // The /api/community/propose-metadata response carries the same
+  // comparison shape as /api/public/url-status's matched state, so the
+  // comparison rendering below intentionally mirrors renderMatched —
+  // identical sorting, identical row template, identical savings math.
+  // The only differences are (a) the banner at the top, and (b) the
+  // info note that the comparison is provisional.
+  const comparison = proposeRes.comparison;
+  const cheapest = comparison.results[0];
+  const cheapestDeliv = cheapest.delivered_cents;
+  const currentPageRetailer = response.retailer_key;
+  const currentRow = comparison.results.find(r => r.retailer_key === currentPageRetailer);
+  const savingsCents = (currentRow && currentRow.delivered_cents > cheapestDeliv)
+    ? currentRow.delivered_cents - cheapestDeliv
+    : 0;
+  const conf = (proposeRes.match && proposeRes.match.confidence) || "HIGH";
+
+  root.innerHTML = `
+    ${renderHeader(tab, response)}
+    <div class="banner matched">✓ Cheapest: ${formatMoney(cheapestDeliv)} at ${escapeHtml(cheapest.retailer_name)}</div>
+    <div class="provisional-note">
+      <strong>Thanks for contributing.</strong> We matched your submission
+      (${escapeHtml(conf)} confidence) so you can see the comparison now,
+      but it's <em>provisional</em> until our reviewer confirms the cigar
+      identity. Your contribution is queued.
+    </div>
+    <div class="section">
+      <div class="cigar-name">${escapeHtml(comparison.cigar_name || "")}</div>
+      <div class="cigar-meta">
+        ${escapeHtml(comparison.wrapper || "")} · ${escapeHtml(comparison.vitola || "")} · ${escapeHtml(comparison.size || "")} · Box of ${comparison.box_qty || "?"}
+      </div>
+      <div class="results">
+        ${comparison.results.map((r, i) => renderResultRow(r, i, cheapestDeliv)).join("")}
+      </div>
+      ${savingsCents > 0 ? `
+        <div class="savings">
+          You'd save ${formatMoney(savingsCents)} by buying from ${escapeHtml(cheapest.retailer_name)}.
+        </div>
+      ` : ""}
+    </div>
+    <div class="actions">
+      <button id="view-all">See all ${comparison.total_retailers || comparison.results.length} retailers</button>
+      <button id="close">Close</button>
+    </div>
+    <div class="footer">
+      <a href="#" id="open-options">Settings</a>
+      <a href="https://cigarpricescout.com" target="_blank">cigarpricescout.com</a>
+    </div>
+  `;
+  document.getElementById("view-all").addEventListener("click", () => {
+    if (comparison.brand && comparison.line) {
+      chrome.tabs.create({
+        url: `https://cigarpricescout.com/compare?brand=${encodeURIComponent(comparison.brand)}&line=${encodeURIComponent(comparison.line)}`,
+      });
+    }
+    window.close();
+  });
+  document.getElementById("close").addEventListener("click", () => window.close());
+  wireFooter();
 }
 
 // ── State: seen (someone already proposed or operator already touched) ─
