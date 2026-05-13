@@ -274,18 +274,61 @@ def _resolve_retailer_key(url: str) -> Optional[str]:
         return None
 
 
-def _resolve_cigar_id_from_url(url: str, retailer_key: Optional[str]) -> Optional[str]:
-    """If the URL is already in the live retailer CSV, return its CID."""
+_CID_QTY_RE = re.compile(r"^(?:BOX|PACK)(\d+)$")
+
+
+def _cid_box_qty(cid: str) -> Optional[int]:
+    """Extract the box_qty encoded in a CID's last segment.
+
+    CIDs end in BOX{N} / PACK{N} / SINGLE. Returns the integer, or None
+    if the segment is malformed.
+    """
+    try:
+        last = cid.rsplit("|", 1)[-1].upper()
+    except Exception:
+        return None
+    m = _CID_QTY_RE.match(last)
+    if m:
+        return int(m.group(1))
+    if last == "SINGLE":
+        return 1
+    return None
+
+
+def _resolve_cigar_id_from_url(
+    url: str,
+    retailer_key: Optional[str],
+    observed_box_qty: Optional[int] = None,
+) -> Optional[str]:
+    """If the URL is already in the live retailer CSV, return its CID — but
+    REFUSE to attach the CID when the observation's box_qty contradicts the
+    CID's box_qty.
+
+    Without this guard, a Shopify product page that hosts both a Box-of-25
+    SKU and a Pack-of-5 SKU under one canonical URL would have BOTH
+    variants' observations stamped with the Box CID. The Pack-of-5
+    observation would then say "$70 for cigar_id=...BOX25" which is
+    nonsensical price history.
+
+    When observed_box_qty is None (heuristics didn't detect it), we still
+    attach the CID — that's the conservative default since most product
+    URLs map to one SKU and most observations are valid for that SKU.
+    """
     if not retailer_key:
         return None
     try:
         from app.extension_endpoints import _cache_state  # type: ignore
         live = _cache_state.get("url_index", {}).get(url)
-        if live and live[0] == retailer_key:
-            return live[1]
+        if not (live and live[0] == retailer_key):
+            return None
+        cid = live[1]
+        if observed_box_qty is not None:
+            cid_qty = _cid_box_qty(cid)
+            if cid_qty is not None and cid_qty != observed_box_qty:
+                return None
+        return cid
     except Exception:
-        pass
-    return None
+        return None
 
 
 def _coerce_quantity_type(raw: Optional[str], box_qty: Optional[int]) -> str:
@@ -333,7 +376,7 @@ async def observe(request: Request, body: ObserveBody):
     body.url = canonicalize_url(body.url)
 
     retailer_key = _resolve_retailer_key(body.url)
-    cigar_id = _resolve_cigar_id_from_url(body.url, retailer_key)
+    cigar_id = _resolve_cigar_id_from_url(body.url, retailer_key, body.box_qty)
     qty_type = _coerce_quantity_type(body.quantity_type, body.box_qty)
     price_cents = _to_price_cents(body.price)
     source = (body.observer_source or "consumer").lower()

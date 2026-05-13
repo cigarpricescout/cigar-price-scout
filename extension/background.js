@@ -45,6 +45,43 @@ async function setObserveDedupe(map) {
   } catch (_) {}
 }
 
+// Paths we never want to fire a passive observation on, even when the
+// host is a known retailer. These are storefront-wide pages (cart,
+// checkout, account, search results, collection listings) that often
+// expose stray product prices in widgets/recommendations and would
+// otherwise pollute observed_prices with random non-product readings.
+const NON_PRODUCT_PATH_PATTERNS = [
+  /^\/?$/,                     // homepage
+  /^\/collections(\/|$)/,      // Shopify category listings
+  /^\/categories(\/|$)/,
+  /^\/category(\/|$)/,
+  /^\/search(\/|$)/,
+  /^\/cart(\/|$)/,
+  /^\/checkout(\/|$)/,
+  /^\/account(\/|$)/,
+  /^\/login(\/|$)/,
+  /^\/pages\//,                // Shopify static pages (About, Contact…)
+  /^\/blogs?\//,
+  /^\/policies?\//,
+  /^\/sitemap/,
+  /^\/api\//,
+];
+
+function looksLikeProductPage(rawUrl, state) {
+  // If the backend says state='matched', the URL is already in a retailer
+  // CSV — definitely a product page, regardless of path shape.
+  if (state === "matched") return true;
+  try {
+    const path = (new URL(rawUrl).pathname || "/").toLowerCase();
+    for (const re of NON_PRODUCT_PATH_PATTERNS) {
+      if (re.test(path)) return false;
+    }
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
 async function shouldObserve(url) {
   const map = await getObserveDedupe();
   const last = map[url] || 0;
@@ -140,15 +177,18 @@ async function refreshForTab(tab) {
   CACHE.set(tab.url, { fetchedAt: Date.now(), response });
   await setBadgeForTab(tab.id, response.state);
 
-  // Passive observation: any retailer page we land on, write a row to
-  // observed_prices so the operator extension is the first contributor
-  // to the community data pipeline. Skipped for no_scraper/unknown URLs
-  // and for repeat visits inside the dedupe window (persisted in
-  // chrome.storage.session so it survives service-worker idle).
+  // Passive observation: any retailer PRODUCT page we land on, write a
+  // row to observed_prices so the operator extension is the first
+  // contributor to the community data pipeline. Skipped for:
+  //   - no_scraper / unknown / error states
+  //   - non-product URLs (homepages, /collections/, /cart, /account, etc.)
+  //   - repeat visits inside the 1-hour dedupe window (persisted in
+  //     chrome.storage.session so it survives service-worker idle)
   if (
     scraped && (scraped.price != null || scraped.title) &&
     response.state && response.state !== "no_scraper" && response.state !== "error" &&
     response.retailer_key &&
+    looksLikeProductPage(tab.url, response.state) &&
     await shouldObserve(tab.url)
   ) {
     // Fire-and-forget; never block the popup on this.
