@@ -14,6 +14,25 @@ import { apiFetch, getAdminKey, scrapeActiveTab } from "./config.js";
 const CACHE = new Map(); // url -> { fetchedAt, response }
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
+// Master vocabulary cache (one-hour TTL). Refetched lazily on popup open.
+let VOCAB = null;
+let VOCAB_FETCHED_AT = 0;
+const VOCAB_TTL_MS = 60 * 60 * 1000;
+
+async function ensureVocab(force = false) {
+  if (!force && VOCAB && (Date.now() - VOCAB_FETCHED_AT) < VOCAB_TTL_MS) {
+    return VOCAB;
+  }
+  try {
+    VOCAB = await apiFetch("/api/admin/master-vocab");
+    VOCAB_FETCHED_AT = Date.now();
+  } catch (e) {
+    if (e.code === "NO_ADMIN_KEY") return null;
+    // Keep any stale value if we have one.
+  }
+  return VOCAB;
+}
+
 function isInspectableUrl(url) {
   if (!url) return false;
   return /^https?:\/\//i.test(url) && !/^https?:\/\/(localhost|127\.|0\.0\.0\.0)/i.test(url);
@@ -100,10 +119,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         : (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
       if (!tab) return sendResponse({ error: "no active tab" });
       if (msg.forceRefresh) CACHE.delete(tab.url);
-      const resp = await refreshForTab(tab);
-      sendResponse({ tab: { id: tab.id, url: tab.url, title: tab.title }, response: resp });
+      const [resp, vocab] = await Promise.all([
+        refreshForTab(tab),
+        ensureVocab(),
+      ]);
+      sendResponse({
+        tab: { id: tab.id, url: tab.url, title: tab.title },
+        response: resp,
+        vocab,
+      });
     })();
     return true; // async response
+  }
+  if (msg && msg.type === "refreshVocab") {
+    ensureVocab(true).then(v => sendResponse({ vocab: v })).catch(() => sendResponse({ vocab: null }));
+    return true;
   }
   if (msg && msg.type === "invalidateCache") {
     if (msg.url) CACHE.delete(msg.url);

@@ -772,6 +772,37 @@ async def cid_search(
     ]}
 
 
+# ── GET /api/admin/master-vocab (autocomplete data for popup) ─────────
+
+@router.get("/master-vocab")
+async def master_vocab(request: Request, refresh: bool = Query(False)):
+    """Compact vocabulary of every master_cigars row for client-side autocomplete.
+
+    The popup uses this to render context-aware <datalist> dropdowns: picking
+    Brand narrows Line options, picking Line narrows Vitola options, etc.
+
+    Payload size ~150-200KB for ~2.3k rows; the background worker caches it
+    for 1 hour so the popup gets it instantly on open.
+    """
+    auth = _check_admin(request)
+    if auth:
+        return auth
+    _refresh_cache(force=refresh)
+    rows = [
+        {
+            "brand": r.get("brand") or "",
+            "line": r.get("line") or "",
+            "vitola": r.get("vitola") or "",
+            "wrapper": r.get("wrapper") or "",
+            "wrapper_code": r.get("wrapper_code") or "",
+            "size": r.get("size") or "",
+            "box_qty": r.get("box_qty"),
+        }
+        for r in _cache_state["master"]
+    ]
+    return {"rows": rows, "count": len(rows)}
+
+
 # ── GET /api/admin/retailer-registry (used by extension at install) ───
 
 @router.get("/retailer-registry")

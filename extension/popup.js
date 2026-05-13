@@ -11,6 +11,10 @@ const WRAPPER_CODES = [
   "DOM", "OSC", "CON", "CORO", "CRIO", "ROS", "SUN", "CAND", "OLOR",
 ];
 
+// Master-vocabulary rows from the backend. Used to populate context-aware
+// <datalist> dropdowns on the brand/line/vitola/size/box_qty fields.
+let VOCAB_ROWS = [];
+
 // ── Bootstrapping ─────────────────────────────────────────────────────
 
 (async function init() {
@@ -30,13 +34,14 @@ const WRAPPER_CODES = [
     return renderError(payload && payload.error || "No active tab.");
   }
 
-  const { tab, response } = payload;
+  const { tab, response, vocab } = payload;
   if (!response) {
     return renderError("Could not reach the backend. Check your admin key / network.");
   }
   if (response.state === "error") {
     return renderError(response.error || "Unknown backend error.");
   }
+  VOCAB_ROWS = (vocab && vocab.rows) || [];
 
   switch (response.state) {
     case "matched":    return renderMatched(tab, response);
@@ -229,10 +234,17 @@ function renderError(msg) {
 // ── Helpers (rendering) ───────────────────────────────────────────────
 
 function field(name, label, value, type, full = false) {
+  // Combobox: native <input list=...> + <datalist>. User can pick a known
+  // master value (which avoids "1964 Anniversary" vs "1964 Anniversary Serie"
+  // dupes) or type anything new. Datalist <option>s are populated by
+  // rebuildDatalists() after render, scoped by the other field values.
   return `
     <div class="field ${full ? "full" : ""}">
       <label for="f-${name}">${label}</label>
-      <input id="f-${name}" name="${name}" type="${type}" value="${escapeAttr(value ?? "")}" />
+      <input id="f-${name}" name="${name}" type="${type}"
+             value="${escapeAttr(value ?? "")}"
+             list="dl-${name}" autocomplete="off" />
+      <datalist id="dl-${name}"></datalist>
     </div>
   `;
 }
@@ -303,15 +315,17 @@ function wireMatchedActions(tab, response) {
 }
 
 function wireCandidateActions(tab, response) {
-  // Live-update the CID preview AND the similar-CIDs panel as the user edits.
+  // Live-update the CID preview, the datalist dropdowns (context-aware
+  // suggestions from master), AND the similar-CIDs panel as the user edits.
   const fields = document.querySelectorAll("#cid-fields input, #cid-fields select");
   const preview = document.getElementById("cid-preview");
   const refreshSimilar = debounce(() => {
-    const parts = readFields();
-    updateSimilarCids(parts);
+    updateSimilarCids(readFields());
   }, 300);
   fields.forEach(f => f.addEventListener("input", () => {
-    preview.textContent = buildCidString(readFields());
+    const parts = readFields();
+    preview.textContent = buildCidString(parts);
+    rebuildDatalists(parts);
     refreshSimilar();
   }));
 
@@ -323,9 +337,10 @@ function wireCandidateActions(tab, response) {
         const idx = parseInt(el.getAttribute("data-idx"), 10);
         const cand = (response.candidates || [])[idx];
         if (!cand) return;
-        const parts = partsFromCandidate(cand);
-        applyFields(parts);
-        preview.textContent = buildCidString(readFields());
+        applyFields(partsFromCandidate(cand));
+        const parts = readFields();
+        preview.textContent = buildCidString(parts);
+        rebuildDatalists(parts);
         refreshSimilar();
       });
     });
@@ -335,8 +350,58 @@ function wireCandidateActions(tab, response) {
   document.getElementById("skip").addEventListener("click", () => skipUrl(tab.url));
   document.getElementById("open-options").addEventListener("click", openOptions);
 
-  // Kick off an initial similar-CIDs search if Brand+Line are already populated.
+  // Populate dropdowns + run an initial similar-CIDs search.
+  rebuildDatalists(readFields());
   refreshSimilar();
+}
+
+// ── Context-aware datalists (master-driven dropdowns) ─────────────────
+
+// Given the current form state, rebuild every <datalist> so its options are
+// scoped by the values the user has already typed. E.g. once Brand="Padron",
+// the Line dropdown only shows Padron lines.
+function rebuildDatalists(parts) {
+  if (!VOCAB_ROWS.length) return;
+  const eq = (a, b) => norm(a) === norm(b);
+  const has = v => v != null && String(v).trim() !== "";
+
+  // Cascade: each subsequent dropdown is filtered by all earlier fields.
+  const byBrand = parts.brand ? VOCAB_ROWS.filter(r => eq(r.brand, parts.brand)) : VOCAB_ROWS;
+  const byLine  = has(parts.line)   ? byBrand.filter(r => eq(r.line, parts.line)) : byBrand;
+  const byVit   = has(parts.vitola) ? byLine.filter(r => eq(r.vitola, parts.vitola)) : byLine;
+  const bySize  = has(parts.size)   ? byVit.filter(r => eq(r.size, parts.size))   : byVit;
+
+  setDatalistFromRows("dl-brand",        VOCAB_ROWS, "brand");
+  setDatalistFromRows("dl-parent_brand", VOCAB_ROWS, "brand");
+  setDatalistFromRows("dl-line",         byBrand,    "line");
+  setDatalistFromRows("dl-vitola",       byLine,     "vitola");
+  setDatalistFromRows("dl-vitola2",      byLine,     "vitola");
+  setDatalistFromRows("dl-size",         byVit,      "size");
+  setDatalistFromRows("dl-box_qty",      bySize,     "box_qty");
+}
+
+function norm(v) { return String(v || "").trim().toLowerCase(); }
+
+function setDatalistFromRows(id, rows, key) {
+  const dl = document.getElementById(id);
+  if (!dl) return;
+  const seen = new Map(); // lowercased -> display value (keep first/canonical casing)
+  for (const r of rows) {
+    const raw = r[key];
+    if (raw == null || raw === "") continue;
+    const display = String(raw);
+    const k = display.toLowerCase();
+    if (!seen.has(k)) seen.set(k, display);
+  }
+  const values = Array.from(seen.values()).sort((a, b) => {
+    // Numeric sort for box_qty, alphabetical otherwise.
+    const na = Number(a), nb = Number(b);
+    if (!isNaN(na) && !isNaN(nb)) return na - nb;
+    return a.localeCompare(b);
+  });
+  dl.innerHTML = values
+    .map(v => `<option value="${escapeAttr(v)}"></option>`)
+    .join("");
 }
 
 // ── Similar-CIDs panel (debounced live search) ────────────────────────
