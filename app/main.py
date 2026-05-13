@@ -20,14 +20,6 @@ import hashlib
 import psycopg2
 from urllib.parse import quote_plus, urlparse, urlunparse, parse_qsl, urlencode
 
-try:
-    from apscheduler.schedulers.background import BackgroundScheduler
-    from apscheduler.triggers.cron import CronTrigger
-    scheduler_available = True
-except ImportError:
-    BackgroundScheduler = None
-    CronTrigger = None
-    scheduler_available = False
 import subprocess
 import logging
 
@@ -266,48 +258,6 @@ class BoxPricingRequest(BaseModel):
     current_url: str = ""
     timestamp: str = ""
 
-def run_feed_processor():
-    """Run the CJ feed processing script"""
-    try:
-        logger.info("Starting CJ feed processor...")
-        feed_script = Path(__file__).resolve().parent.parent / 'scripts' / 'one_off' / 'process_cj_feeds.py'
-        result = subprocess.run(
-            ['python', str(feed_script)],
-            capture_output=True,
-            text=True,
-            cwd=Path(__file__).parent.parent
-        )
-        logger.info(f"Feed processor output: {result.stdout}")
-        if result.stderr:
-            logger.error(f"Feed processor errors: {result.stderr}")
-        if result.returncode == 0:
-            logger.info("Feed processor completed successfully")
-        else:
-            logger.error(f"Feed processor failed with code {result.returncode}")
-    except Exception as e:
-        logger.error(f"Failed to run feed processor: {e}")
-
-def run_awin_processor():
-    """Run the Awin BnB Tobacco feed processing script"""
-    try:
-        logger.info("Starting Awin BnB Tobacco feed processor...")
-        feed_script = Path(__file__).resolve().parent.parent / 'scripts' / 'one_off' / 'process_awin_feed.py'
-        result = subprocess.run(
-            ['python', str(feed_script)],
-            capture_output=True,
-            text=True,
-            cwd=Path(__file__).parent.parent
-        )
-        logger.info(f"Awin processor output: {result.stdout}")
-        if result.stderr:
-            logger.error(f"Awin processor errors: {result.stderr}")
-        if result.returncode == 0:
-            logger.info("Awin BnB Tobacco processor completed successfully")
-        else:
-            logger.error(f"Awin processor failed with code {result.returncode}")
-    except Exception as e:
-        logger.error(f"Failed to run Awin processor: {e}")
-
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 
@@ -540,7 +490,6 @@ def startup_event():
         logger.info("✓ Extension staging tables initialized")
     except Exception as e:
         logger.warning(f"⚠ Extension tables init skipped: {e}")
-    # Later, if you re-enable the scheduler, you can also call start_scheduler() here.
 
 
 # Mount the Chrome-extension router. All routes are admin-gated and additive;
@@ -551,11 +500,6 @@ try:
 except Exception as _ext_err:
     logger.warning(f"⚠ Extension router not mounted: {_ext_err}")
 
-#@app.on_event("startup")
-#async def startup_event():
-#    """Initialize scheduler when app starts"""
-#    start_scheduler()
-#    logger.info("✓ Application started with scheduled feed processing")
 
 RETAILERS = [
     {"key": "abcfws", "name": "ABC Fine Wine & Spirits", "csv": f"{CSV_PATH_PREFIX}/abcfws.csv", "authorized": False},
@@ -2501,13 +2445,6 @@ def log_click(retailer: str, cid: str, request: Request):
     except Exception as e:
         print("CLICK ERROR:", e)
         return {"status": "error", "detail": str(e)}
-
-@app.post("/admin/trigger-feed-update")
-async def trigger_feed_update():
-    """Manual trigger for testing (remove in production or add auth)"""
-    run_feed_processor()
-    return {"status": "Feed processor triggered"}
-
 
 @app.get("/api/admin/analytics-health")
 async def analytics_health(request: Request):

@@ -13,7 +13,10 @@ import csv
 import requests
 import pandas as pd
 
-ADMIN_KEY = os.getenv("ADMIN_SECRET_KEY", "v1nO7JvjQFfQtl4BQ4mOLWx9VileAY2T")
+ADMIN_KEY = os.getenv("ADMIN_SECRET_KEY", "")
+if not ADMIN_KEY:
+    print("[ERROR] ADMIN_SECRET_KEY environment variable is not set.", file=sys.stderr)
+    sys.exit(1)
 API_BASE = "https://cigarpricescout.com"
 DATA_DIR = PROJECT_ROOT / "static" / "data"
 
