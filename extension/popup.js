@@ -129,8 +129,11 @@ function renderNoScraper(tab, response) {
 function renderCandidate(tab, response) {
   const top = (response.candidates && response.candidates[0]) || null;
   const alts = (response.candidates || []).slice(1, 5);
+  // Prefer the natural-form fields the backend returns (Title Case, spaces
+  // preserved). Fall back to splitting the canonical CID only if those
+  // aren't available (e.g. when no candidate was proposed).
   const parts = top
-    ? splitCid(top.cigar_id)
+    ? partsFromCandidate(top)
     : suggestPartsFromUrl(tab.url, response.scraped_title);
 
   root.innerHTML = `
@@ -158,8 +161,8 @@ function renderCandidate(tab, response) {
       ${alts.length ? `
         <div class="section-label" style="margin-top:10px">Other candidates</div>
         <div class="candidates" id="alt-candidates">
-          ${alts.map(c => `
-            <div class="cand" data-cid="${escapeAttr(c.cigar_id)}">
+          ${alts.map((c, i) => `
+            <div class="cand" data-idx="${i + 1}">
               <div class="cand-cid">${escapeHtml(c.cigar_id)}</div>
               <span class="confidence ${c.confidence}">${c.confidence} ${(c.score*100|0)}%</span>
             </div>
@@ -298,10 +301,12 @@ function wireCandidateActions(tab, response) {
   if (alts) {
     alts.querySelectorAll(".cand").forEach(el => {
       el.addEventListener("click", () => {
-        const cid = el.getAttribute("data-cid");
-        const parts = splitCid(cid);
+        const idx = parseInt(el.getAttribute("data-idx"), 10);
+        const cand = (response.candidates || [])[idx];
+        if (!cand) return;
+        const parts = partsFromCandidate(cand);
         applyFields(parts);
-        preview.textContent = cid;
+        preview.textContent = buildCidString(readFields());
       });
     });
   }
@@ -312,16 +317,21 @@ function wireCandidateActions(tab, response) {
 }
 
 function readFields() {
+  // IMPORTANT: We preserve the natural form (Title Case, spaces intact) so
+  // the master_cigars.csv human-readable columns display correctly on the
+  // website (e.g. "Corona Gorda" — not "CORONAGORDA"). The CID is built
+  // from these via cidPart()/cidSize() which strip spaces and uppercase.
   const get = id => (document.getElementById(`f-${id}`) || {}).value || "";
+  const trim = v => (v || "").trim();
   return {
-    brand: (get("brand") || "").trim().toUpperCase(),
-    parent_brand: (get("parent_brand") || get("brand") || "").trim().toUpperCase(),
-    line: (get("line") || "").trim().toUpperCase(),
-    vitola: (get("vitola") || "").trim().toUpperCase(),
-    vitola2: (get("vitola2") || get("vitola") || "").trim().toUpperCase(),
-    size: (get("size") || "").trim().toLowerCase(),
-    wrapper_code: (get("wrapper_code") || "").trim().toUpperCase(),
-    box_qty: parseInt(get("box_qty"), 10) || 0,
+    brand:        trim(get("brand")),
+    parent_brand: trim(get("parent_brand")) || trim(get("brand")),
+    line:         trim(get("line")),
+    vitola:       trim(get("vitola")),
+    vitola2:      trim(get("vitola2")) || trim(get("vitola")),
+    size:         trim(get("size")).toLowerCase(),
+    wrapper_code: trim(get("wrapper_code")).toUpperCase(), // always all-caps codes
+    box_qty:      parseInt(get("box_qty"), 10) || 0,
   };
 }
 
@@ -389,16 +399,26 @@ function validateParts(p) {
   return errs;
 }
 
+// Normalize a natural-form value ("Corona Gorda") into its CID component
+// ("CORONAGORDA"): strip internal whitespace + uppercase. Must match the
+// backend's build_cid() so the preview matches what gets stored.
+function cidPart(s) {
+  return String(s || "").trim().replace(/\s+/g, "").toUpperCase();
+}
+function cidSize(s) {
+  return String(s || "").trim().replace(/\s+/g, "").toLowerCase();
+}
+
 function buildCidString(p) {
-  const box = p.box_qty ? `BOX${p.box_qty}` : "";
+  const box = p.box_qty ? `BOX${parseInt(p.box_qty, 10)}` : "";
   return [
-    p.brand || "",
-    p.parent_brand || p.brand || "",
-    p.line || "",
-    p.vitola || "",
-    p.vitola2 || p.vitola || "",
-    p.size || "",
-    p.wrapper_code || "",
+    cidPart(p.brand),
+    cidPart(p.parent_brand) || cidPart(p.brand),
+    cidPart(p.line),
+    cidPart(p.vitola),
+    cidPart(p.vitola2) || cidPart(p.vitola),
+    cidSize(p.size),
+    cidPart(p.wrapper_code),
     box,
   ].join("|");
 }
@@ -416,6 +436,24 @@ function splitCid(cid) {
     size: parts[5],
     wrapper_code: parts[6],
     box_qty: boxNum ? parseInt(boxNum, 10) : "",
+  };
+}
+
+// Build form-ready parts dict from a candidate. Prefers the master CSV's
+// natural-form values (Title Case, spaces) so the user sees and edits the
+// same shape the website displays. Falls back to the canonical CID parts
+// for fields the master doesn't expose directly.
+function partsFromCandidate(cand) {
+  const canonical = splitCid(cand.cigar_id);
+  return {
+    brand:        cand.brand        || canonical.brand,
+    parent_brand: cand.parent_brand || canonical.parent_brand || cand.brand || canonical.brand,
+    line:         cand.line         || canonical.line,
+    vitola:       cand.vitola       || canonical.vitola,
+    vitola2:      cand.vitola2      || cand.vitola || canonical.vitola2,
+    size:         cand.size         || canonical.size,
+    wrapper_code: cand.wrapper_code || canonical.wrapper_code,
+    box_qty:      cand.box_qty      || canonical.box_qty,
   };
 }
 

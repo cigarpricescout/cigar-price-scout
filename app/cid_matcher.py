@@ -76,26 +76,46 @@ def parse_cid(cid: str) -> Optional[Dict[str, str]]:
 def build_cid(parts: Dict[str, object]) -> str:
     """Build the canonical 8-part CID string from a parts dict.
 
-    Accepts either an already-formatted "box_qty_str" (e.g. "BOX25") or a
-    "box_qty" integer/string; both are normalized to BOX<N>.
+    Components are normalized to match the master_cigars convention:
+      * brand/parent_brand/line/vitola/vitola2/wrapper_code:
+        internal whitespace stripped and UPPERCASED
+        (e.g. "Aging Room" -> "AGINGROOM", "Corona Gorda" -> "CORONAGORDA")
+      * size: whitespace stripped and lowercased (e.g. "6 x 50" -> "6x50")
+      * box_qty: normalized to BOX<N>
+
+    Callers may pass either a pre-formatted "box_qty_str" (e.g. "BOX25") or a
+    bare integer/string "box_qty".
+
+    IMPORTANT: only the CID string is normalized this way. The natural-form
+    values (e.g. "Corona Gorda") should be preserved separately in the
+    `extension_staged_approvals` row and written verbatim to master_cigars'
+    human-readable columns (Brand, Line, Vitola, ...) so the website
+    displays them properly.
     """
     raw_box = parts.get("box_qty_str") or parts.get("box_qty") or ""
     box = str(raw_box).strip()
     if box and not box.upper().startswith("BOX"):
         box_digits = re.sub(r"\D", "", box)
         box = f"BOX{box_digits}" if box_digits else ""
+    else:
+        box = box.upper()
 
-    def _s(v: object) -> str:
-        return ("" if v is None else str(v)).strip()
+    def cid_part(v: object) -> str:
+        s = ("" if v is None else str(v)).strip()
+        return re.sub(r"\s+", "", s).upper()
+
+    def cid_size(v: object) -> str:
+        s = ("" if v is None else str(v)).strip()
+        return re.sub(r"\s+", "", s).lower()
 
     return "|".join([
-        _s(parts.get("brand")),
-        _s(parts.get("parent_brand")) or _s(parts.get("brand")),
-        _s(parts.get("line")),
-        _s(parts.get("vitola")),
-        _s(parts.get("vitola2")) or _s(parts.get("vitola")),
-        _s(parts.get("size")),
-        _s(parts.get("wrapper_code")),
+        cid_part(parts.get("brand")),
+        cid_part(parts.get("parent_brand")) or cid_part(parts.get("brand")),
+        cid_part(parts.get("line")),
+        cid_part(parts.get("vitola")),
+        cid_part(parts.get("vitola2")) or cid_part(parts.get("vitola")),
+        cid_size(parts.get("size")),
+        cid_part(parts.get("wrapper_code")),
         box,
     ])
 
