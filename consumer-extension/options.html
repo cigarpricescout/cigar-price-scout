@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Cigar Price Scout — Options</title>
+  <link rel="stylesheet" href="popup.css" />
+  <style>
+    body { width: 520px; padding: 24px; }
+    h2 { margin: 0 0 4px; font-size: 18px; }
+    h3 { margin: 24px 0 8px; font-size: 14px; }
+    .lede { color: var(--muted); margin-bottom: 16px; line-height: 1.5; }
+    .group {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 14px;
+      margin-bottom: 14px;
+    }
+    .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .row label { font-size: 13px; line-height: 1.45; }
+    .row label small { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; }
+    .switch input { width: 18px; height: 18px; }
+    .danger { color: var(--red); }
+    .danger-button {
+      background: white; border: 1px solid var(--red); color: var(--red);
+      padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px;
+    }
+    .danger-button:hover { background: var(--red-bg); }
+    .secondary-button {
+      background: white; border: 1px solid var(--border); color: var(--text);
+      padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px;
+    }
+    .secondary-button:hover { background: var(--gray-bg); }
+    .zip-input { width: 80px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; }
+    .stat { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <h2>Cigar Price Scout</h2>
+  <div class="lede">
+    Manage your contribution preferences, location, and identity.
+  </div>
+
+  <h3>Contribution</h3>
+  <div class="group">
+    <div class="row">
+      <label for="opt-toggle">
+        Contribute anonymous price observations
+        <small>
+          When on, every cigar product page you visit on retailers we
+          track sends an anonymous price observation. Required to see
+          comparison prices in the popup.
+        </small>
+      </label>
+      <span class="switch">
+        <input type="checkbox" id="opt-toggle" />
+      </span>
+    </div>
+  </div>
+
+  <h3>Location</h3>
+  <div class="group">
+    <div class="row">
+      <label for="zip-input">
+        ZIP code (for shipping &amp; tax estimates)
+        <small>
+          Used only to compute delivered prices in the comparison
+          popup. Never sent to retailers, never linked to your
+          identity.
+        </small>
+      </label>
+      <input type="text" id="zip-input" class="zip-input" placeholder="00000" maxlength="5" />
+    </div>
+  </div>
+
+  <h3>Identity</h3>
+  <div class="group">
+    <div class="row">
+      <label>
+        Anonymous observer ID
+        <small id="observer-id-display">Loading…</small>
+      </label>
+      <button class="secondary-button" id="rotate-id">Rotate ID</button>
+    </div>
+    <div class="stat" id="rotate-status"></div>
+  </div>
+
+  <h3 class="danger">Forget me</h3>
+  <div class="group">
+    <div class="row">
+      <label>
+        Delete every observation &amp; proposal I've ever submitted
+        <small>
+          Server-side: removes every row tied to your observer ID from
+          our database. Cannot be undone. Resets your opt-in to off.
+        </small>
+      </label>
+      <button class="danger-button" id="forget-me">Delete my data</button>
+    </div>
+    <div class="stat" id="forget-status"></div>
+  </div>
+
+  <script type="module" src="options.js"></script>
+</body>
+</html>

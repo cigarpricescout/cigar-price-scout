@@ -160,6 +160,11 @@ def init_community_tables() -> None:
                 proposed_size TEXT,
                 proposed_wrapper TEXT,
                 proposed_box_qty INTEGER,
+                -- User-confirmed price in cents. Pre-filled from scraper,
+                -- editable in the propose form. Distinct from observed_prices:
+                -- this is the EXPLICIT confirmation that powers /compare once
+                -- the operator resolves the proposal into a CID.
+                confirmed_price_cents INTEGER,
                 scraped_title TEXT,
                 observer_id TEXT,
                 observer_source TEXT NOT NULL DEFAULT 'consumer',
@@ -171,6 +176,11 @@ def init_community_tables() -> None:
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 reviewed_at TIMESTAMPTZ
             )
+        """)
+        # Idempotent migration for installs that have the table pre-column.
+        cur.execute("""
+            ALTER TABLE community_url_proposals
+                ADD COLUMN IF NOT EXISTS confirmed_price_cents INTEGER
         """)
         cur.execute("""
             CREATE INDEX IF NOT EXISTS community_url_proposals_status_created_at_idx
@@ -253,8 +263,18 @@ class ProposeMetadataBody(BaseModel):
     size: Optional[str] = Field(None, max_length=32)
     wrapper: Optional[str] = Field(None, max_length=120)
     box_qty: Optional[int] = None
+    # The user-confirmed price (dollars, converted to cents server-side).
+    # Pre-filled from the page scrape in the consumer extension but the
+    # user can edit before submitting, so we treat this as ground truth.
+    confirmed_price: Optional[float] = None
     scraped_title: Optional[str] = Field(None, max_length=500)
     observer_source: Optional[str] = "consumer"
+
+
+class DeleteObservationsBody(BaseModel):
+    """Consumer's 'forget me' request: delete every observation + proposal
+    they've ever submitted, identified by their per-install observer_id."""
+    observer_id: str = Field(..., min_length=1, max_length=128)
 
 
 # ── Helpers ────────────────────────────────────────────────────────────
@@ -435,6 +455,7 @@ async def propose_metadata(request: Request, body: ProposeMetadataBody):
     if source not in {"operator", "consumer"}:
         source = "consumer"
 
+    confirmed_cents = _to_price_cents(body.confirmed_price)
     try:
         conn = _get_conn()
         cur = conn.cursor()
@@ -442,13 +463,15 @@ async def propose_metadata(request: Request, body: ProposeMetadataBody):
             INSERT INTO community_url_proposals
               (url, retailer_key, proposed_brand, proposed_line, proposed_vitola,
                proposed_size, proposed_wrapper, proposed_box_qty,
+               confirmed_price_cents,
                scraped_title, observer_id, observer_source, status)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'pending')
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'pending')
             RETURNING id
         """, (
             body.url, retailer_key, _trim(body.brand), _trim(body.line),
             _trim(body.vitola), _trim(body.size), _trim(body.wrapper),
-            body.box_qty, _trim(body.scraped_title), observer, source,
+            body.box_qty, confirmed_cents,
+            _trim(body.scraped_title), observer, source,
         ))
         proposal_id = cur.fetchone()[0]
         conn.commit()
@@ -483,3 +506,313 @@ def _safe_jsonb(d: Optional[Dict[str, Any]]) -> Optional[str]:
         return s
     except Exception:
         return None
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Public, no-auth API for the consumer Chrome extension.
+#
+# Three endpoints, all read-mostly:
+#
+#   GET  /api/public/retailer-registry
+#       The list of hostnames the extension should activate on, plus the
+#       canonical retailer_key for each. Public-safe subset of the admin
+#       registry endpoint.
+#
+#   GET  /api/public/url-status?url=...&zip=...
+#       Single round-trip the popup needs per page load. Returns:
+#         - state: matched | candidate | seen | no_scraper | non_product
+#         - retailer_key, hostname, canonical url
+#         - matched_cid (when matched)
+#         - comparison: top 3 cheapest retailers carrying that CID (when
+#           matched and we have ≥ MIN_RETAILERS_FOR_COMPARISON listings)
+#         - seen_status (when seen)
+#
+#   POST /api/community/delete-my-observations
+#       GDPR-friendly "forget me": delete every observation + every
+#       proposal authored by a given observer_id. Lives under /community
+#       since it's a write but no admin auth needed (the observer_id
+#       acts as the bearer token — only the user's own extension
+#       remembers it).
+# ═══════════════════════════════════════════════════════════════════════
+
+public_router = APIRouter(prefix="/api/public", tags=["public"])
+
+
+def _is_product_like_path(url: str) -> bool:
+    """Backend mirror of consumer-extension/background.js looksLikeProductPage.
+
+    Filters homepages, /collections, /cart, /search, /pages/, /blog/, etc.
+    Belt-and-suspenders: the extension already filters, but a third-party
+    client hitting our endpoint directly shouldn't be able to ask us to
+    treat the homepage as a candidate cigar URL.
+    """
+    try:
+        path = (urlparse(url).path or "/").lower()
+    except Exception:
+        return False
+    if path in ("", "/"):
+        return False
+    BAD = (
+        "/collections", "/categories", "/category",
+        "/search", "/cart", "/checkout",
+        "/account", "/login",
+        "/pages/", "/blog/", "/blogs/", "/policy", "/policies/",
+        "/sitemap", "/api/",
+    )
+    return not any(path.startswith(b) for b in BAD)
+
+
+@public_router.get("/retailer-registry")
+async def public_retailer_registry():
+    """Hostnames the consumer extension should activate on.
+
+    Public-safe subset of /api/admin/retailer-registry — no prices, no
+    URLs, no admin info. Just (hostname, retailer_key) pairs so the
+    extension can decide where to inject its content script.
+    """
+    try:
+        from app.extension_endpoints import _cache_state, _refresh_cache  # type: ignore
+        _refresh_cache()
+        retailers = _cache_state.get("retailers", {})
+        return {
+            "retailers": [
+                {"hostname": host, "retailer_key": key}
+                for host, key in sorted(retailers.items())
+            ],
+            "total": len(retailers),
+        }
+    except Exception as e:
+        logger.exception("public_retailer_registry failed: %s", e)
+        return JSONResponse({"error": "internal"}, status_code=500)
+
+
+# Per-IP read throttle. The url-status endpoint is the popup's main hit,
+# so we keep it generous (60/min, 10k/day per IP) but capped so a runaway
+# client can't hammer it.
+_PUBLIC_STATUS_MAX_PER_MIN = 60
+_PUBLIC_STATUS_MAX_PER_DAY = 10_000
+_status_minute: Dict[str, Deque[float]] = defaultdict(deque)
+_status_day:    Dict[str, Deque[float]] = defaultdict(deque)
+
+
+def _public_ip_key(request: Request) -> str:
+    try:
+        return (request.client.host if request.client else "unknown")
+    except Exception:
+        return "unknown"
+
+
+@public_router.get("/url-status")
+async def public_url_status(
+    request: Request,
+    url: str,
+    zip: str = "",
+):
+    """Single-call popup state.
+
+    Mirrors /api/admin/url-status but without admin auth, and adds an
+    inline comparison block when state='matched' so the popup can render
+    top-3 cheapest in one round-trip.
+    """
+    ip = _public_ip_key(request)
+    if not _rate_limit(_status_minute, ip, 60, _PUBLIC_STATUS_MAX_PER_MIN):
+        return JSONResponse({"error": "rate_limited", "scope": "per_minute"}, status_code=429)
+    if not _rate_limit(_status_day, ip, 86_400, _PUBLIC_STATUS_MAX_PER_DAY):
+        return JSONResponse({"error": "rate_limited", "scope": "per_day"}, status_code=429)
+
+    if not url or len(url) > 2048:
+        return JSONResponse({"error": "invalid_url"}, status_code=400)
+
+    url = canonicalize_url(url)
+    retailer_key = _resolve_retailer_key(url)
+    if not retailer_key:
+        return {
+            "state": "no_scraper",
+            "url": url,
+            "hostname": (urlparse(url).hostname or "").lower(),
+        }
+
+    if not _is_product_like_path(url):
+        return {
+            "state": "non_product",
+            "url": url,
+            "retailer_key": retailer_key,
+        }
+
+    # Live retailer CSV hit?
+    matched_cid: Optional[str] = None
+    try:
+        from app.extension_endpoints import _cache_state  # type: ignore
+        live = _cache_state.get("url_index", {}).get(url)
+        if live and live[0] == retailer_key:
+            matched_cid = live[1]
+    except Exception:
+        matched_cid = None
+
+    # Has the operator already touched this URL via the extension?
+    seen_status: Optional[str] = None
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT status FROM extension_staged_approvals "
+            "WHERE url=%s AND retailer_key=%s "
+            "ORDER BY created_at DESC LIMIT 1",
+            (url, retailer_key),
+        )
+        row = cur.fetchone()
+        if row:
+            seen_status = row[0]
+        if seen_status is None:
+            # Also check community proposals so a previous consumer's
+            # contribution surfaces as "we know about this".
+            cur.execute(
+                "SELECT status FROM community_url_proposals "
+                "WHERE url=%s ORDER BY created_at DESC LIMIT 1",
+                (url,),
+            )
+            row = cur.fetchone()
+            if row:
+                seen_status = f"community_{row[0]}"
+        conn.close()
+    except Exception as e:
+        logger.warning("public_url_status seen lookup failed: %s", e)
+
+    if matched_cid:
+        comparison = _build_comparison_for_cid(matched_cid, zip=zip, limit=3)
+        return {
+            "state": "matched",
+            "url": url,
+            "retailer_key": retailer_key,
+            "matched_cid": matched_cid,
+            "seen_status": seen_status,
+            "comparison": comparison,
+        }
+
+    if seen_status:
+        return {
+            "state": "seen",
+            "url": url,
+            "retailer_key": retailer_key,
+            "seen_status": seen_status,
+        }
+
+    return {
+        "state": "candidate",
+        "url": url,
+        "retailer_key": retailer_key,
+    }
+
+
+def _build_comparison_for_cid(
+    cid: str,
+    zip: str = "",
+    limit: int = 3,
+) -> Optional[Dict[str, Any]]:
+    """Top-N cheapest in-stock retailers carrying this CID.
+
+    Reuses app.main.load_all_products() so we stay consistent with the
+    public /compare web page — same data, same filters, same delivered-
+    price math. Returns None if fewer than 2 retailers carry the CID
+    (consistent with the website's minimum-comparison rule).
+    """
+    try:
+        from app.main import (  # type: ignore
+            load_all_products,
+            zip_to_state,
+            estimate_shipping_cents,
+            estimate_tax_cents,
+            RETAILERS,
+            MIN_RETAILERS_FOR_COMPARISON,
+        )
+    except Exception as e:
+        logger.warning("comparison helpers unavailable: %s", e)
+        return None
+
+    try:
+        state = zip_to_state(zip) if zip else "OR"
+        all_products = load_all_products()
+        matches = [p for p in all_products if getattr(p, "cigar_id", None) == cid]
+        distinct_retailers = {p.retailer_key for p in matches}
+        if len(distinct_retailers) < MIN_RETAILERS_FOR_COMPARISON:
+            return {
+                "cigar_id": cid,
+                "results": [],
+                "reason": (
+                    f"Only {len(distinct_retailers)} retailer(s) carry this cigar. "
+                    f"At least {MIN_RETAILERS_FOR_COMPARISON} are needed."
+                ),
+            }
+
+        retailer_lookup = {r["key"]: r for r in RETAILERS}
+        results = []
+        for p in matches:
+            base = p.price_cents or 0
+            ship = estimate_shipping_cents(base, p.retailer_key, state) or 0
+            tax = estimate_tax_cents(base + ship, p.retailer_key, state) or 0
+            delivered = base + ship + tax
+            r_info = retailer_lookup.get(p.retailer_key, {})
+            results.append({
+                "retailer_key": p.retailer_key,
+                "retailer_name": r_info.get("name") or p.retailer_key,
+                "authorized": bool(r_info.get("authorized", False)),
+                "base_cents": base,
+                "shipping_cents": ship,
+                "tax_cents": tax,
+                "delivered_cents": delivered,
+                "in_stock": bool(p.in_stock),
+                "url": p.url,
+            })
+        # Sort: in-stock first, then cheapest delivered.
+        results.sort(key=lambda r: (not r["in_stock"], r["delivered_cents"]))
+        first = matches[0]
+        return {
+            "cigar_id": cid,
+            "cigar_name": f"{first.brand} {first.line}".strip(),
+            "brand": first.brand,
+            "line": first.line,
+            "wrapper": first.wrapper,
+            "vitola": first.vitola,
+            "size": first.size,
+            "box_qty": first.box_qty,
+            "zip": zip or None,
+            "state": state,
+            "results": results[:limit],
+            "total_retailers": len(distinct_retailers),
+        }
+    except Exception as e:
+        logger.exception("_build_comparison_for_cid failed: %s", e)
+        return None
+
+
+# ── POST /api/community/delete-my-observations ─────────────────────────
+
+@router.post("/delete-my-observations")
+async def delete_my_observations(body: DeleteObservationsBody):
+    """Forget-me request. Deletes every observation + proposal authored
+    by the given observer_id. No auth: the observer_id is itself a
+    bearer token — only the user's extension knows their per-install id.
+    """
+    observer = body.observer_id.strip()
+    if not observer:
+        return JSONResponse({"error": "observer_id required"}, status_code=400)
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute("DELETE FROM observed_prices WHERE observer_id=%s", (observer,))
+        obs_deleted = cur.rowcount
+        cur.execute("DELETE FROM community_url_proposals WHERE observer_id=%s", (observer,))
+        prop_deleted = cur.rowcount
+        conn.commit()
+        conn.close()
+        return {
+            "ok": True,
+            "deleted": {
+                "observed_prices": obs_deleted,
+                "community_url_proposals": prop_deleted,
+                "total": obs_deleted + prop_deleted,
+            },
+        }
+    except Exception as e:
+        logger.exception("delete_my_observations failed: %s", e)
+        return JSONResponse({"error": "internal"}, status_code=500)

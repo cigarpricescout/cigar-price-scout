@@ -511,9 +511,11 @@ except Exception as _ext_err:
 # and never write to retailer CSVs or master_cigars — only to Postgres.
 try:
     from app.community_endpoints import router as _community_router
+    from app.community_endpoints import public_router as _public_router
     app.include_router(_community_router)
+    app.include_router(_public_router)
 except Exception as _comm_err:
-    logger.warning(f"⚠ Community router not mounted: {_comm_err}")
+    logger.warning(f"⚠ Community/public router not mounted: {_comm_err}")
 
 
 RETAILERS = [

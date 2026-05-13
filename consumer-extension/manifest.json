@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Cigar Price Scout",
+  "version": "0.1.0",
+  "description": "Find the cheapest box prices for the cigar you're looking at. Anonymous, opt-in.",
+  "permissions": [
+    "tabs",
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Cigar Price Scout"
+  },
+  "options_page": "options.html",
+  "icons": {}
+}

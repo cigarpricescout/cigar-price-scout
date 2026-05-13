@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Cigar Price Scout — Welcome</title>
+  <link rel="stylesheet" href="popup.css" />
+  <style>
+    body { width: 520px; padding: 24px; }
+    .hero { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+    .lede { color: var(--muted); margin-bottom: 20px; line-height: 1.5; }
+    .bullet { margin: 8px 0 8px 18px; line-height: 1.5; }
+    .bullet b { color: var(--text); }
+    .row { display: flex; gap: 10px; margin-top: 18px; align-items: flex-start; }
+    .row input[type=checkbox] { margin-top: 2px; }
+    .row label { line-height: 1.45; font-size: 13px; color: var(--text); }
+    .actions { display: flex; gap: 8px; margin-top: 22px; }
+    .actions button { flex: 1; }
+    .small { font-size: 12px; color: var(--muted); margin-top: 16px; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <div class="hero">Welcome to Cigar Price Scout</div>
+  <div class="lede">
+    We help cigar shoppers find the cheapest box price for the cigar
+    they're looking at. To do that well, we crowdsource prices from the
+    people doing the shopping — that could include you.
+  </div>
+
+  <div><b>What we record</b> when you opt in:</div>
+  <ul>
+    <li class="bullet">The <b>cigar retailer page URL</b> you're viewing (only on cigar retailer sites we already track).</li>
+    <li class="bullet">The <b>price, currency, and stock status</b> shown on that page.</li>
+    <li class="bullet">A <b>random anonymous ID</b> stored on your device (no email, no account, no name).</li>
+  </ul>
+
+  <div style="margin-top: 14px;"><b>What we never record:</b></div>
+  <ul>
+    <li class="bullet">Personal info, account data, or anything you type into retailers.</li>
+    <li class="bullet">Pages outside cigar retailer sites we track (homepage, cart, checkout, etc. are skipped).</li>
+    <li class="bullet">Your IP beyond a short-term rate-limit check.</li>
+  </ul>
+
+  <div class="row">
+    <input type="checkbox" id="optin" checked />
+    <label for="optin">
+      <b>Yes, contribute anonymous prices.</b> You'll see comparison
+      prices on every retailer page. You can change this anytime in
+      Options, or delete every contribution you've ever made with one
+      click.
+    </label>
+  </div>
+
+  <div class="actions">
+    <button class="approve" id="continue">Continue</button>
+  </div>
+
+  <div class="small">
+    By continuing you confirm you're 21 or older. We never sell data and
+    we don't run ads. Affiliate links to retailers may earn us a
+    commission at no extra cost to you.
+  </div>
+
+  <script type="module" src="consent.js"></script>
+</body>
+</html>
