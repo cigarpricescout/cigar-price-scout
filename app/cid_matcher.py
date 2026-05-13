@@ -21,7 +21,61 @@ import csv
 import re
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+
+# Query parameters we strip from URLs before any URL-index lookup or
+# observation-row insert. These are virtually never part of the canonical
+# product identity — they're tracking, affiliate, or per-variant selectors.
+# Stripping them lets baysidecigars.com/products/foo?variant=12345 match the
+# CSV row keyed on baysidecigars.com/products/foo.
+_TRACKING_QUERY_PARAMS = {
+    "variant",                              # Shopify variant selector
+    "gclid", "fbclid", "msclkid",           # ad click IDs
+    "mc_cid", "mc_eid",                     # Mailchimp
+    "ref", "aff", "affid", "affiliate",     # generic affiliate
+    "sca_ref",                              # Stockist
+    "_pos", "_psq", "_ss", "_v", "_sid",    # Shopify search/collection nav
+    "yclid",                                # Yandex
+    "igshid", "_branch_match_id",           # social referrers
+    "trk_contact", "trk_msg", "trk_module", "trk_sid",  # ActiveCampaign
+}
+_TRACKING_QUERY_PREFIXES = ("utm_", "matomo_", "mtm_", "pk_", "piwik_")
+
+
+def canonicalize_url(url: str) -> str:
+    """Return a stable form of `url` safe for equality lookups.
+
+    Lowercases scheme + host, strips fragment, drops tracking / variant
+    query params, and removes a single trailing slash from the path.
+    Preserves any non-tracking query params (some retailers genuinely use
+    them, e.g. ?product_id=N).
+
+    Idempotent: canonicalize_url(canonicalize_url(u)) == canonicalize_url(u).
+    """
+    if not url:
+        return ""
+    try:
+        p = urlparse(url.strip())
+    except Exception:
+        return url.strip()
+    scheme = (p.scheme or "https").lower()
+    netloc = (p.netloc or "").lower()
+    path = p.path or "/"
+    if len(path) > 1 and path.endswith("/"):
+        path = path[:-1]
+    kept = []
+    for k, v in parse_qsl(p.query, keep_blank_values=False):
+        lk = k.lower()
+        if lk in _TRACKING_QUERY_PARAMS:
+            continue
+        if any(lk.startswith(pre) for pre in _TRACKING_QUERY_PREFIXES):
+            continue
+        kept.append((k, v))
+    query = urlencode(kept, doseq=True) if kept else ""
+    return urlunparse((scheme, netloc, path, p.params, query, ""))
+
+
+
 
 WRAPPER_CODES: Dict[str, List[str]] = {
     "MAD": ["maduro", "mad"],
@@ -473,7 +527,11 @@ def load_retailer_url_index(
                     u = (row.get("url") or "").strip()
                     cid = (row.get("cigar_id") or "").strip()
                     if u and cid:
-                        index[u] = (name, cid)
+                        # Key the index by canonical URL so lookups from
+                        # the extension (which may carry ?variant=… or
+                        # utm_* cruft) hit even when the CSV stores the
+                        # bare URL.
+                        index[canonicalize_url(u)] = (name, cid)
         except Exception:
             continue
     return index

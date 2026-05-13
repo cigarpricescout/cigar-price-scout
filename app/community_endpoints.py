@@ -50,6 +50,8 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from app.cid_matcher import canonicalize_url
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/community", tags=["community"])
@@ -325,6 +327,11 @@ async def observe(request: Request, body: ObserveBody):
     if not _rate_limit(_obs_day, observer, 86_400, _OBSERVE_MAX_PER_DAY):
         return JSONResponse({"error": "rate_limited", "scope": "per_day"}, status_code=429)
 
+    # Canonicalize at the boundary so we never write a ?variant=… URL to
+    # observed_prices and so cigar_id resolution against the (already
+    # canonical) url_index hits.
+    body.url = canonicalize_url(body.url)
+
     retailer_key = _resolve_retailer_key(body.url)
     cigar_id = _resolve_cigar_id_from_url(body.url, retailer_key)
     qty_type = _coerce_quantity_type(body.quantity_type, body.box_qty)
@@ -379,6 +386,7 @@ async def propose_metadata(request: Request, body: ProposeMetadataBody):
     if not _rate_limit(_prop_hour, observer, 3600, _PROPOSE_MAX_PER_HOUR):
         return JSONResponse({"error": "rate_limited", "scope": "per_hour"}, status_code=429)
 
+    body.url = canonicalize_url(body.url)
     retailer_key = _resolve_retailer_key(body.url)
     source = (body.observer_source or "consumer").lower()
     if source not in {"operator", "consumer"}:

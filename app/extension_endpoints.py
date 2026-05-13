@@ -46,6 +46,7 @@ from pydantic import BaseModel, Field
 from app.cid_matcher import (
     build_cid,
     build_retailer_registry,
+    canonicalize_url,
     find_top_candidates,
     hostname_to_retailer_key,
     load_master_cigars,
@@ -297,6 +298,12 @@ async def url_status(
 
     _refresh_cache(force=refresh)
 
+    # Normalize first so every downstream lookup (url_index, _lookup_seen,
+    # candidates_for) sees the canonical form. Without this, a Shopify
+    # ?variant=… URL fails to hit the CSV-backed url_index even though
+    # the canonical URL is mapped.
+    url = canonicalize_url(url)
+
     try:
         hostname = (urlparse(url).hostname or "").lower()
     except Exception:
@@ -321,7 +328,10 @@ async def url_status(
             "scraped_title": title,
         }
 
-    # 1) Already in the live retailer CSV?
+    # 1) Already in the live retailer CSV? `url` is already canonical here
+    # (normalized at the endpoint boundary) and the url_index is keyed by
+    # canonical URLs too, so this dict-get hits the right row even for
+    # Shopify ?variant=… or utm_* URLs.
     live_hit = _cache_state["url_index"].get(url)
     if live_hit and live_hit[0] == retailer_key:
         return {
@@ -451,6 +461,10 @@ async def stage_approval(request: Request, body: StageApprovalBody):
         return auth
 
     _refresh_cache()
+
+    # Normalize the URL once so the row we write to extension_staged_approvals
+    # (and the bare row downstream in the retailer CSV) uses the canonical form.
+    body.url = canonicalize_url(body.url)
 
     # Resolve the CID (either passed-in or built from form parts).
     cid: Optional[str] = (body.cid or "").strip() or None
@@ -598,6 +612,7 @@ async def skip_url(request: Request, body: SkipUrlBody):
     auth = _check_admin(request)
     if auth:
         return auth
+    body.url = canonicalize_url(body.url)
     try:
         conn = _get_conn()
         cur = conn.cursor()
