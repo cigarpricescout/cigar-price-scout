@@ -246,6 +246,23 @@ def _upsert_master_db(rows: List[Dict]) -> int:
 
 # ── Retailer CSV writes (bare row: cigar_id + url only) ───────────────
 
+def _preview_retailer_outcome(retailer_key: str, cid: str, url: str) -> str:
+    """Same logic as _append_bare_retailer_row but read-only. For --dry-run."""
+    csv_path = STATIC_DATA / f"{retailer_key}.csv"
+    if not csv_path.exists():
+        return "skip (missing CSV)"
+    df = pd.read_csv(csv_path, dtype=str, keep_default_na=False)
+    if "cigar_id" not in df.columns or "url" not in df.columns:
+        return "skip (missing cigar_id/url columns)"
+    df["cigar_id"] = df["cigar_id"].astype(str).str.strip()
+    df["url"] = df["url"].astype(str).str.strip()
+    if ((df["cigar_id"] == cid) & (df["url"] == url)).any():
+        return "no-op (row already present)"
+    if (df["cigar_id"] == cid).any():
+        return "update existing row's URL"
+    return "append BARE row (cigar_id,,url)"
+
+
 def _append_bare_retailer_row(retailer_key: str, cid: str, url: str) -> str:
     """Append a single bare row to static/data/{retailer_key}.csv.
 
@@ -354,6 +371,38 @@ def publish_all(dry_run: bool = False) -> Dict[str, int]:
     if dry_run:
         log.info("[dry-run] would publish %d approvals (%d new CIDs)",
                  len(valid), len(new_cids))
+        existing_master = _read_master_existing_cids()
+        for r in valid:
+            cid = (r.get("cid") or "").strip()
+            url = (r.get("url") or "").strip()
+            retailer_key = (r.get("retailer_key") or "").strip()
+            is_new = bool(r.get("is_new_cid"))
+            # If the row says it's new but the CID already exists in master,
+            # surface that — it'll be re-used (no dupe created), but worth
+            # knowing so you can verify the chosen CID was intended.
+            already_in_master = cid in existing_master
+            tag = (
+                "NEW_CID    " if is_new and not already_in_master
+                else "EXISTING   " if not is_new
+                else "NEW→EXISTS "  # user marked new, but CID matches master
+            )
+            log.info(
+                "  %s id=%s  %s  %s",
+                tag, r.get("id"), retailer_key.ljust(20), cid,
+            )
+            log.info("      url   : %s", url)
+            if is_new:
+                log.info(
+                    "      meta  : brand=%s | parent=%s | line=%s | vitola=%s | size=%s | wrapper=%s/%s | box=%s",
+                    r.get("brand") or "", r.get("parent_brand") or "",
+                    r.get("line") or "", r.get("vitola") or "",
+                    r.get("size") or "",
+                    r.get("wrapper") or "", r.get("wrapper_code") or "",
+                    r.get("box_qty") or "",
+                )
+            outcome = _preview_retailer_outcome(retailer_key, cid, url)
+            log.info("      retailer csv: would %s in static/data/%s.csv",
+                     outcome, retailer_key)
         return stats
 
     # Step 1: master writes
