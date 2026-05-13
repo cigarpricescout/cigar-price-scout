@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Cigar Price Scout — CID Match",
+  "version": "0.1.0",
+  "description": "Propose a CID for the current retailer product page and approve/edit it in one click. Stages into cigarpricescout.com so the daily automation publishes it.",
+  "permissions": [
+    "tabs",
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Cigar Price Scout — CID Match"
+  },
+  "options_page": "options.html",
+  "icons": {}
+}
