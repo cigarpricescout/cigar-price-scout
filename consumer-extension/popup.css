@@ -188,6 +188,14 @@ body {
 .actions button.approve:hover { background: black; }
 .actions button.approve:disabled { opacity: 0.5; cursor: not-allowed; }
 
+/* Primary CTA — used for the "Search prices on cigarpricescout.com"
+   button in the seen + post-submit dead-end states. Visually parallel
+   to .approve (the dominant action color) so users can't miss it. */
+.actions button.primary {
+  background: var(--accent); color: white; border-color: var(--accent);
+}
+.actions button.primary:hover { background: black; }
+
 .footer {
   padding: 8px 14px;
   font-size: 11px; color: var(--muted);

@@ -719,7 +719,13 @@ async def public_url_status(
         matched_cid = None
 
     # Has the operator already touched this URL via the extension?
+    # When the URL has a pending community_url_proposal, also surface
+    # the proposed brand/line/vitola/box_qty/wrapper so the popup can
+    # build a "Search prices on cigarpricescout.com" CTA — avoids the
+    # dead-end "check back soon" UX where users contribute but get
+    # nothing back.
     seen_status: Optional[str] = None
+    proposed_metadata: Optional[Dict[str, Any]] = None
     try:
         conn = _get_conn()
         cur = conn.cursor()
@@ -733,16 +739,26 @@ async def public_url_status(
         if row:
             seen_status = row[0]
         if seen_status is None:
-            # Also check community proposals so a previous consumer's
-            # contribution surfaces as "we know about this".
             cur.execute(
-                "SELECT status FROM community_url_proposals "
+                "SELECT status, proposed_brand, proposed_line, proposed_vitola, "
+                "       proposed_box_qty, proposed_wrapper "
+                "FROM community_url_proposals "
                 "WHERE url=%s ORDER BY created_at DESC LIMIT 1",
                 (url,),
             )
             row = cur.fetchone()
             if row:
                 seen_status = f"community_{row[0]}"
+                # Only set metadata when we have at least brand+line — a
+                # search URL with only a vitola is useless.
+                if row[1] and row[2]:
+                    proposed_metadata = {
+                        "brand":   row[1],
+                        "line":    row[2],
+                        "vitola":  row[3] or None,
+                        "box_qty": row[4] or None,
+                        "wrapper": row[5] or None,  # bucket name
+                    }
         conn.close()
     except Exception as e:
         logger.warning("public_url_status seen lookup failed: %s", e)
@@ -764,6 +780,7 @@ async def public_url_status(
             "url": url,
             "retailer_key": retailer_key,
             "seen_status": seen_status,
+            "proposed_metadata": proposed_metadata,
         }
 
     return {

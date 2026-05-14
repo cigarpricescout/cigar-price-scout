@@ -111,15 +111,23 @@ function renderMatched(tab, response, scraped) {
   // pack/single variant, the comparison data is for the BOX CID and
   // doesn't match what they're seeing. Show a soft redirect.
   if (scrapedQtyType !== "box" && scrapedQtyType !== "unknown") {
+    // Action-first phrasing: lead with what the user should do (click
+    // the box variant on the retailer's page), then explain context.
+    // The previous wording ("We track box prices only" + "switch to the
+    // box-of-25 variant") read as a system limitation; users skipped it.
+    const boxQtyHint = comparison?.box_qty
+      ? `'Box of ${comparison.box_qty}'`
+      : "the Box";
     root.innerHTML = `
       ${renderHeader(tab, response)}
-      <div class="banner info">📦 We track box prices only</div>
+      <div class="banner info">👉 Select ${escapeHtml(boxQtyHint)} on this page to see prices</div>
       <div class="section">
         <div class="cigar-name">${escapeHtml(comparison?.cigar_name || "This cigar")}</div>
         <div class="cigar-meta">
-          You're viewing the ${escapeHtml(quantityLabel(scrapedQtyType, scrapedBoxQty))}
-          variant. Switch to the box-of-${comparison?.box_qty || "?"}
-          variant on this page to compare prices across retailers.
+          You're currently viewing the
+          ${escapeHtml(quantityLabel(scrapedQtyType, scrapedBoxQty))} variant.
+          We compare box prices across retailers — click the box option on
+          the page, then reopen this popup.
         </div>
       </div>
       <div class="actions">
@@ -247,13 +255,17 @@ function renderCandidate(tab, response, scraped) {
   const isBox = scrapedQty === "box" || scrapedQty === "unknown";
 
   if (!isBox) {
+    // Action-first phrasing for the candidate (unmatched) state. The
+    // user is on a page we don't have a CID for; we need them to first
+    // narrow to the box variant before they can contribute metadata.
     root.innerHTML = `
       ${renderHeader(tab, response)}
-      <div class="banner info">📦 We track box prices only</div>
+      <div class="banner info">👉 Select the Box option on this page to continue</div>
       <div class="empty-state" style="padding: 20px 14px;">
-        You're viewing the ${escapeHtml(quantityLabel(scrapedQty, scraped?.boxQty))}
-        variant. Switch to the box variant on this page to contribute
-        price info for this cigar.
+        You're currently viewing the
+        ${escapeHtml(quantityLabel(scrapedQty, scraped?.boxQty))} variant.
+        We compare box prices only — click the box option on the page,
+        then reopen this popup to add your listing.
       </div>
       <div class="footer">
         <a href="#" id="open-options">Settings</a>
@@ -381,13 +393,70 @@ async function submitProposal(tab, response, scraped) {
       return;
     }
 
-    toast("Thanks — submitted for review.");
-    setTimeout(() => window.close(), 800);
+    // No HIGH-confidence auto-match → render a thank-you screen with a
+    // "Search prices on cigarpricescout.com" CTA using the user's own
+    // form inputs. Previously this branch just toasted and closed,
+    // which felt like a dead-end after the user spent 30 seconds
+    // filling out the form.
+    renderSubmittedWithSearch(tab, response, scraped, {
+      brand,
+      line,
+      vitola,
+      box_qty,
+      wrapper: wrapperBucket || null,
+    });
+    return;
   } catch (e) {
     btn.disabled = false;
     btn.textContent = "Submit";
     toast(`Submit failed: ${e.message || e}`);
   }
+}
+
+// Post-submit thank-you with website search deep-link. Reuses the same
+// buildScoutSearchUrl helper as the seen-state branch so the
+// /compare?brand=&line=&vitola=&box_qty= shape stays consistent.
+function renderSubmittedWithSearch(tab, response, scraped, submittedMeta) {
+  const searchUrl = buildScoutSearchUrl(submittedMeta);
+  const haveSearch = !!searchUrl;
+  root.innerHTML = `
+    ${renderHeader(tab, response)}
+    <div class="banner matched">✓ Thanks for contributing!</div>
+    <div class="section">
+      <div class="cigar-meta" style="line-height:1.45">
+        We're reviewing your submission and will map this URL to a
+        comparison shortly. ${haveSearch
+          ? `In the meantime, search prices for what you just submitted on
+             cigarpricescout.com — it may already be in our catalog.`
+          : `Browse other cigars on cigarpricescout.com in the meantime.`}
+      </div>
+    </div>
+    <div class="actions">
+      ${haveSearch
+        ? `<button id="search-scout" class="primary">Search prices on cigarpricescout.com</button>`
+        : `<button id="open-scout">Browse cigarpricescout.com</button>`}
+      <button id="close">Close</button>
+    </div>
+    <div class="footer">
+      <a href="#" id="open-options">Settings</a>
+    </div>
+  `;
+  const searchBtn = document.getElementById("search-scout");
+  if (searchBtn) {
+    searchBtn.addEventListener("click", () => {
+      chrome.tabs.create({ url: searchUrl });
+      window.close();
+    });
+  }
+  const openBtn = document.getElementById("open-scout");
+  if (openBtn) {
+    openBtn.addEventListener("click", () => {
+      chrome.tabs.create({ url: "https://cigarpricescout.com" });
+      window.close();
+    });
+  }
+  document.getElementById("close").addEventListener("click", () => window.close());
+  wireFooter();
 }
 
 // ── Gap 2: provisional comparison after a high-confidence submission ──
@@ -457,14 +526,30 @@ function renderProvisionalComparison(tab, response, scraped, proposeRes) {
 
 function renderSeen(tab, response, scraped) {
   const status = (response.seen_status || "").replace(/_/g, " ");
+  // When a previous consumer proposed metadata for this URL, the
+  // backend now ships the proposed brand/line/vitola/box_qty/wrapper
+  // alongside the seen_status. Build a "Search prices on
+  // cigarpricescout.com" deep-link so the user gets immediate value
+  // instead of a dead-end "check back soon". When no metadata is
+  // available, fall back to a generic homepage link.
+  const meta = response.proposed_metadata || null;
+  const searchUrl = buildScoutSearchUrl(meta);
+  const havePrimaryCTA = !!searchUrl;
   root.innerHTML = `
     ${renderHeader(tab, response)}
     <div class="banner seen">Under review · ${escapeHtml(status)}</div>
-    <div class="empty-state" style="padding: 20px 14px;">
+    <div class="empty-state" style="padding: 16px 14px 10px;">
       Someone already suggested info for this cigar. We're waiting on
-      operator review before showing comparison prices. Check back soon!
+      operator review before this URL maps directly to a comparison.
+      ${havePrimaryCTA
+        ? `In the meantime, search prices below — the proposed cigar may
+          already be on cigarpricescout.com.`
+        : `Check back soon!`}
     </div>
     <div class="actions">
+      ${havePrimaryCTA
+        ? `<button id="search-scout" class="primary">Search prices on cigarpricescout.com</button>`
+        : `<button id="open-scout">Browse cigarpricescout.com</button>`}
       <button id="close">Close</button>
     </div>
     <div class="footer">
@@ -472,7 +557,38 @@ function renderSeen(tab, response, scraped) {
     </div>
   `;
   document.getElementById("close").addEventListener("click", () => window.close());
+  const searchBtn = document.getElementById("search-scout");
+  if (searchBtn) {
+    searchBtn.addEventListener("click", () => {
+      chrome.tabs.create({ url: searchUrl });
+      window.close();
+    });
+  }
+  const openBtn = document.getElementById("open-scout");
+  if (openBtn) {
+    openBtn.addEventListener("click", () => {
+      chrome.tabs.create({ url: "https://cigarpricescout.com" });
+      window.close();
+    });
+  }
   wireFooter();
+}
+
+// Build a deep-link to cigarpricescout.com/compare with the proposed
+// metadata as query params. Returns "" when we don't have enough
+// (brand+line is the minimum; everything else is optional narrowing).
+// Wrapper is intentionally NOT forwarded today — the bucket name
+// ("Maduro", "Natural / Connecticut") doesn't match the /compare
+// endpoint's expected wrapper string format and could over-filter the
+// result set. Box_qty + vitola are safe pass-throughs.
+function buildScoutSearchUrl(meta) {
+  if (!meta || !meta.brand || !meta.line) return "";
+  const params = new URLSearchParams();
+  params.set("brand", meta.brand);
+  params.set("line", meta.line);
+  if (meta.vitola)  params.set("vitola", meta.vitola);
+  if (meta.box_qty) params.set("box_qty", String(meta.box_qty));
+  return `https://cigarpricescout.com/compare?${params.toString()}`;
 }
 
 // ── State: no_scraper (unknown retailer) ──────────────────────────────
