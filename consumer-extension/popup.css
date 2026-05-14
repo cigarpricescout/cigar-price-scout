@@ -151,6 +151,9 @@ body {
 .field .hint-inline {
   font-weight: 400; font-size: 10px; color: var(--muted); margin-left: 4px;
 }
+.field .hint-below {
+  font-size: 10px; color: var(--muted); margin-top: 4px; line-height: 1.35;
+}
 .field-row {
   display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
 }
@@ -195,6 +198,24 @@ body {
   background: var(--accent); color: white; border-color: var(--accent);
 }
 .actions button.primary:hover { background: black; }
+
+/* Tertiary action — text-only, doesn't compete with primary/secondary
+   buttons. Used for "Report incorrect" on the matched view where the
+   primary action is "See all retailers" and we don't want a third
+   visually-equal button. */
+.actions button.link-btn {
+  flex: 0 0 auto;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-weight: 400;
+  text-decoration: underline;
+  padding: 8px 6px;
+}
+.actions button.link-btn:hover {
+  background: transparent;
+  color: var(--text);
+}
 
 .footer {
   padding: 8px 14px;

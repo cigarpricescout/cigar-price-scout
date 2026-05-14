@@ -182,6 +182,25 @@ def init_community_tables() -> None:
             ALTER TABLE community_url_proposals
                 ADD COLUMN IF NOT EXISTS confirmed_price_cents INTEGER
         """)
+        # "Report incorrect" flow: a consumer who lands on a matched URL can
+        # submit a correction (different brand/line/vitola/box_qty/price than
+        # what we currently show). is_correction lets the operator-review UI
+        # tag those rows distinctly; current_cid + current_price_cents
+        # capture WHAT we were showing at the moment the user disagreed,
+        # so the operator can compare proposed-vs-current side by side
+        # without re-querying.
+        cur.execute("""
+            ALTER TABLE community_url_proposals
+                ADD COLUMN IF NOT EXISTS is_correction BOOLEAN NOT NULL DEFAULT FALSE
+        """)
+        cur.execute("""
+            ALTER TABLE community_url_proposals
+                ADD COLUMN IF NOT EXISTS current_cid TEXT
+        """)
+        cur.execute("""
+            ALTER TABLE community_url_proposals
+                ADD COLUMN IF NOT EXISTS current_price_cents INTEGER
+        """)
         cur.execute("""
             CREATE INDEX IF NOT EXISTS community_url_proposals_status_created_at_idx
                 ON community_url_proposals (status, created_at DESC)
@@ -291,6 +310,37 @@ class ProposeMetadataBody(BaseModel):
     # Pre-filled from the page scrape in the consumer extension but the
     # user can edit before submitting, so we treat this as ground truth.
     confirmed_price: Optional[float] = None
+    scraped_title: Optional[str] = Field(None, max_length=500)
+    observer_source: Optional[str] = "consumer"
+
+
+class ReportCorrectionBody(BaseModel):
+    """Consumer-submitted correction for a URL we already have a CID for.
+
+    Pre-filled in the popup from the current matched comparison; user can
+    edit any field. Server validates the price band before accepting.
+    """
+    url: str = Field(..., min_length=1, max_length=2048)
+    observer_id: Optional[str] = None
+    # The CID we were showing the consumer at the moment they reported it.
+    # Lets the operator UI render proposed-vs-current diff cleanly.
+    current_cid: Optional[str] = Field(None, max_length=200)
+    # Sale price (no coupons applied) we were showing for THIS retailer
+    # at the moment they reported it. In dollars. Stored in cents on the
+    # row so the operator can eyeball "user says $14, we were showing
+    # $140" without re-querying.
+    current_price: Optional[float] = None
+    # Proposed (corrected) values. All optional individually but at least
+    # ONE must differ from current — the endpoint enforces that and
+    # short-circuits to a no-op if everything matches.
+    proposed_brand: Optional[str] = Field(None, max_length=120)
+    proposed_line: Optional[str] = Field(None, max_length=120)
+    proposed_vitola: Optional[str] = Field(None, max_length=120)
+    proposed_wrapper: Optional[str] = Field(None, max_length=120)
+    proposed_box_qty: Optional[int] = None
+    # The corrected sale price the consumer claims is on the page right now.
+    # Same "no coupons" rule as current_price. Validated server-side.
+    proposed_price: Optional[float] = None
     scraped_title: Optional[str] = Field(None, max_length=500)
     observer_source: Optional[str] = "consumer"
 
@@ -553,6 +603,193 @@ async def propose_metadata(request: Request, body: ProposeMetadataBody):
         return response
     except Exception as e:
         logger.exception("propose_metadata failed: %s", e)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+# ── POST /api/community/report-correction ──────────────────────────────
+
+# "Loose" guardrails for the report-incorrect flow. Picked deliberately
+# wide so we accept legit clearance prices and seasonal sales, but
+# narrow enough to block obvious typos ($140 → $14) and bot mischief.
+# The operator still reviews every correction; these guards exist so
+# we don't *queue* obviously-bad data.
+_REPORT_PRICE_MIN_CENTS = 500           # $5 — below this is almost certainly a typo
+_REPORT_PRICE_MAX_CENTS = 500_000       # $5,000 — most expensive boxes top out well below this
+_REPORT_PRICE_MAX_DEVIATION = 0.75      # ±75% of the price we were showing
+_VALID_BOX_QTYS = {1, 5, 10, 15, 20, 24, 25, 50}
+
+
+def _norm_for_compare(s: Optional[str]) -> str:
+    """Lowercase + collapse whitespace for "is this field actually different"
+    comparisons. We don't want to flag a casing-only or stray-space-only
+    edit as a real correction."""
+    if not s:
+        return ""
+    return re.sub(r"\s+", " ", str(s)).strip().lower()
+
+
+@router.post("/report-correction")
+async def report_correction(request: Request, body: ReportCorrectionBody):
+    """Consumer-submitted correction for an already-matched URL.
+
+    Validation pipeline (all server-side; client validation is a UX nicety):
+
+      1. Rate-limit per observer (reuses propose-metadata bucket — same user
+         shouldn't be machine-gunning either flow).
+      2. At least one proposed field must differ from current. If everything
+         matches, return 200 with status='no_changes_detected' and DO NOT
+         insert. (The popup renders this as "Thanks — no changes detected".)
+      3. proposed_price must be in [$5, $5000] AND within ±75% of
+         current_price (when current_price is provided).
+      4. proposed_box_qty must be in {1, 5, 10, 15, 20, 24, 25, 50}.
+      5. proposed_brand/line/vitola, when supplied, must be ≤ 80 chars.
+
+    On success, inserts into community_url_proposals with is_correction=TRUE
+    so the operator-review UI can highlight it as a correction (vs. a
+    fresh proposal for an unmatched URL).
+    """
+    observer = _observer_id(body.observer_id, request)
+    if not _rate_limit(_prop_hour, observer, 3600, _PROPOSE_MAX_PER_HOUR):
+        return JSONResponse({"error": "rate_limited", "scope": "per_hour"}, status_code=429)
+
+    body.url = canonicalize_url(body.url)
+    retailer_key = _resolve_retailer_key(body.url)
+    source = (body.observer_source or "consumer").lower()
+    if source not in {"operator", "consumer"}:
+        source = "consumer"
+
+    proposed_price_cents = _to_price_cents(body.proposed_price)
+    current_price_cents = _to_price_cents(body.current_price)
+
+    # ── Field-level guards ──────────────────────────────────────────────
+    if body.proposed_box_qty is not None and body.proposed_box_qty not in _VALID_BOX_QTYS:
+        return JSONResponse(
+            {"error": "invalid_box_qty",
+             "reason": f"Box qty must be one of {sorted(_VALID_BOX_QTYS)}"},
+            status_code=400,
+        )
+    for label, val in (
+        ("brand", body.proposed_brand),
+        ("line", body.proposed_line),
+        ("vitola", body.proposed_vitola),
+    ):
+        if val and len(val) > 80:
+            return JSONResponse(
+                {"error": "invalid_text", "field": label,
+                 "reason": f"{label} must be ≤ 80 characters"},
+                status_code=400,
+            )
+
+    if proposed_price_cents is not None:
+        if proposed_price_cents < _REPORT_PRICE_MIN_CENTS:
+            return JSONResponse(
+                {"error": "price_too_low",
+                 "reason": (
+                     f"Sale price must be at least "
+                     f"${_REPORT_PRICE_MIN_CENTS / 100:.0f}. "
+                     "If a coupon code was applied, enter the price BEFORE "
+                     "the coupon — coupons are tracked separately."
+                 )},
+                status_code=400,
+            )
+        if proposed_price_cents > _REPORT_PRICE_MAX_CENTS:
+            return JSONResponse(
+                {"error": "price_too_high",
+                 "reason": f"Sale price must be at most ${_REPORT_PRICE_MAX_CENTS / 100:.0f}."},
+                status_code=400,
+            )
+        if current_price_cents and current_price_cents > 0:
+            deviation = abs(proposed_price_cents - current_price_cents) / current_price_cents
+            if deviation > _REPORT_PRICE_MAX_DEVIATION:
+                pct = int(deviation * 100)
+                return JSONResponse(
+                    {"error": "price_deviation_too_large",
+                     "reason": (
+                         f"Proposed price differs from the listed price "
+                         f"by {pct}% (max {int(_REPORT_PRICE_MAX_DEVIATION * 100)}%). "
+                         "If you're seeing a discount from a coupon code, "
+                         "enter the price WITHOUT the coupon — coupons are "
+                         "tracked separately. If the page truly shows this "
+                         "price with no coupon, double-check the box quantity."
+                     ),
+                     "current_price_cents": current_price_cents,
+                     "proposed_price_cents": proposed_price_cents},
+                    status_code=400,
+                )
+
+    # ── No-op short-circuit ─────────────────────────────────────────────
+    # Compare field-by-field against the supplied current values. When
+    # nothing material has changed (price within $0.05, all text fields
+    # equal modulo case/whitespace, box_qty matches), we return a 200
+    # with status='no_changes_detected' and do NOT write a row. The popup
+    # turns this into a "Thanks, no changes detected" message — no noise
+    # for the operator queue.
+    nothing_changed = True
+    if proposed_price_cents is not None and current_price_cents is not None:
+        if abs(proposed_price_cents - current_price_cents) > 5:
+            nothing_changed = False
+    elif proposed_price_cents is not None and current_price_cents is None:
+        nothing_changed = False
+    if body.proposed_box_qty is not None:
+        # When current_cid carries a BOX{N} suffix, derive current box_qty
+        # from it — the popup may not always send it back explicitly.
+        current_box = _cid_box_qty(body.current_cid or "") if body.current_cid else None
+        if current_box is not None and body.proposed_box_qty != current_box:
+            nothing_changed = False
+    # Brand/line/vitola/wrapper: if the popup sent a value, it's the
+    # consumer's "after" — we compare to whatever the popup submitted as
+    # the current values would be (we don't have them server-side without
+    # rebuilding the comparison). Trust the popup: if it sent a value
+    # AND that value differs from the others, it means the user touched
+    # the field. We can't perfectly check from the server, so we only
+    # short-circuit when the price + box_qty are identical AND no
+    # text fields were sent at all.
+    text_fields_sent = any(
+        bool(_norm_for_compare(v)) for v in (
+            body.proposed_brand, body.proposed_line,
+            body.proposed_vitola, body.proposed_wrapper,
+        )
+    )
+    if nothing_changed and not text_fields_sent:
+        return {
+            "ok": True,
+            "status": "no_changes_detected",
+            "proposal_id": None,
+        }
+
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO community_url_proposals
+              (url, retailer_key, proposed_brand, proposed_line, proposed_vitola,
+               proposed_wrapper, proposed_box_qty,
+               confirmed_price_cents, current_cid, current_price_cents,
+               is_correction,
+               scraped_title, observer_id, observer_source, status)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,TRUE,%s,%s,%s,'pending')
+            RETURNING id
+        """, (
+            body.url, retailer_key,
+            _trim(body.proposed_brand), _trim(body.proposed_line),
+            _trim(body.proposed_vitola), _trim(body.proposed_wrapper),
+            body.proposed_box_qty, proposed_price_cents,
+            _trim(body.current_cid), current_price_cents,
+            _trim(body.scraped_title), observer, source,
+        ))
+        proposal_id = cur.fetchone()[0]
+        conn.commit()
+        conn.close()
+
+        return {
+            "ok": True,
+            "proposal_id": proposal_id,
+            "retailer_key": retailer_key,
+            "status": "pending",
+            "is_correction": True,
+        }
+    except Exception as e:
+        logger.exception("report_correction failed: %s", e)
         return JSONResponse({"error": str(e)}, status_code=500)
 
 

@@ -89,7 +89,7 @@ CSV/observed wins on collision. Drops are logged at INFO level.
 | Table | Owner | Purpose |
 |---|---|---|
 | `observed_prices` | community | Raw per-URL price readings from the consumer extension. Indexed on url, cigar_id, retailer_key (all + observed_at DESC). |
-| `community_url_proposals` | community | Consumer-submitted metadata for URLs not yet mapped to a CID. Operator approves/edits/rejects via admin tooling. |
+| `community_url_proposals` | community | Consumer-submitted metadata for URLs not yet mapped to a CID, **plus** corrections for already-mapped URLs (`is_correction=TRUE`, with `current_cid` and `current_price_cents` carrying what we were showing the consumer at the moment they reported the issue). Operator approves/edits/rejects via admin tooling. |
 | `community_retailer_requests` | community | Per-observer requests to add a new retailer. Lazy-fulfilled when hostname enters the registry; powers `chrome.notifications` in the consumer extension. |
 | `community_prices` | legacy website | Website-form-submitted prices. Older system; kept running but dedup'd in `/compare`. |
 | `community_votes` | legacy website | Downvote ledger for `community_prices`. |
@@ -161,6 +161,7 @@ Consequences for the per-retailer CSV files in `static/data/`:
 | GET  | `/api/public/url-status?url=&zip=` | Single-call popup state (matched / candidate / seen / no_scraper) + inline top-3 comparison. `seen_status` is prefixed by source: `extension_pending` / `extension_published` (operator-staged via op-extension, awaiting publish) vs `community_pending` / `community_approved` / `community_rejected` (consumer-submitted). The popup treats anything `extension_*` or `community_approved` as "Approved — prices coming soon" so consumers see honest feedback once the operator has acted. |
 | POST | `/api/community/observe` | Anonymous passive price observation |
 | POST | `/api/community/propose-metadata` | Consumer-suggested brand/line/vitola/box_qty/price for an unmapped URL |
+| POST | `/api/community/report-correction` | Consumer-submitted correction for a URL we already mapped to a CID. Same `community_url_proposals` row but with `is_correction=TRUE`, `current_cid`, `current_price_cents`. Server enforces loose price guardrails (must be in [$5, $5,000] AND within ±75% of `current_price`); identical-to-current submissions short-circuit with `status="no_changes_detected"` and don't queue anything. |
 | POST | `/api/community/request-retailer` | "Please add this retailer" — observer-linked |
 | GET  | `/api/community/my-requests?observer_id=` | Polled by extension every 6h for chrome.notifications |
 | POST | `/api/community/delete-my-observations` | GDPR-friendly forget-me. `observer_id` acts as the bearer. |

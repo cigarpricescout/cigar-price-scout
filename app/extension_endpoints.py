@@ -492,7 +492,8 @@ def _lookup_community_proposal(url: str) -> Optional[Dict]:
                    confirmed_price_cents, scraped_title, observer_source,
                    created_at, retailer_key,
                    (SELECT COUNT(*) FROM community_url_proposals
-                    WHERE url=%s AND status='pending') AS total_pending
+                    WHERE url=%s AND status='pending') AS total_pending,
+                   is_correction, current_cid, current_price_cents
             FROM community_url_proposals
             WHERE url=%s AND status='pending'
             ORDER BY created_at DESC
@@ -503,6 +504,7 @@ def _lookup_community_proposal(url: str) -> Optional[Dict]:
         if not row:
             return None
         confirmed_price_cents = row[7]
+        current_price_cents = row[15]
         return {
             "proposal_id": row[0],
             "proposed_brand": row[1],
@@ -520,6 +522,16 @@ def _lookup_community_proposal(url: str) -> Optional[Dict]:
             "created_at": str(row[10]) if row[10] else None,
             "retailer_key": row[11],
             "total_pending": row[12] or 1,
+            # Correction context — when is_correction=true the operator
+            # popup shows a distinct "consumer disagrees" banner and
+            # surfaces what the consumer says is wrong vs. what we were
+            # showing them at the moment they reported it.
+            "is_correction": bool(row[13]),
+            "current_cid": row[14],
+            "current_price": (
+                round(current_price_cents / 100.0, 2)
+                if current_price_cents is not None else None
+            ),
         }
     except Exception as e:
         logger.warning("lookup_community_proposal error: %s", e)
@@ -1588,7 +1600,9 @@ async def community_proposals(
                    proposed_vitola, proposed_size, proposed_wrapper,
                    proposed_box_qty, scraped_title, observer_id,
                    observer_source, status, operator_notes, resolved_cid,
-                   created_at, reviewed_at
+                   created_at, reviewed_at,
+                   confirmed_price_cents,
+                   is_correction, current_cid, current_price_cents
               FROM community_url_proposals
              WHERE status = %s
              ORDER BY created_at DESC

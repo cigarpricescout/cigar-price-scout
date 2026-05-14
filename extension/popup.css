@@ -219,6 +219,72 @@ body { padding: 0; }
   line-height: 1.4;
 }
 
+/* Correction-flow variant. Distinct amber palette so the operator
+   immediately recognizes "consumer disagrees with what we showed
+   them" as a different decision class than "consumer suggested new
+   metadata for an unmapped URL". */
+.community-proposal.correction {
+  background: #fff8e1;
+  border-color: #ffca28;
+}
+.community-proposal.correction .cp-correction-badge {
+  background: #f9a825;
+  color: #fff;
+}
+.community-proposal.correction .cp-age,
+.community-proposal.correction .cp-hint,
+.community-proposal.correction .cp-more {
+  color: #6d4c00;
+}
+.community-proposal .cp-diff {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+.community-proposal .cp-diff-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.community-proposal .cp-diff-label {
+  flex: 0 0 110px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: #6d4c00;
+  padding-top: 1px;
+}
+.community-proposal .cp-diff-current {
+  color: #555;
+  flex: 1;
+}
+.community-proposal .cp-diff-proposed {
+  color: #1a1a1a;
+  font-weight: 600;
+  flex: 1;
+}
+.community-proposal .cp-diff code {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 10px;
+  background: rgba(0,0,0,0.06);
+  padding: 1px 4px;
+  border-radius: 3px;
+  word-break: break-all;
+}
+.community-proposal .cp-price {
+  font-weight: 700;
+}
+.community-proposal .cp-meta-inline {
+  font-weight: 400;
+  color: #6d4c00;
+  font-size: 11px;
+  margin-left: 4px;
+}
+
 /* Manual price + in-stock entry — only rendered for blocked/dormant
    retailers (no scraper). The orange palette mirrors the no_scraper
    banner so operators recognize it as "you are the data source here". */

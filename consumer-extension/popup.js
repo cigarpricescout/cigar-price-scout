@@ -224,6 +224,7 @@ function renderMatched(tab, response, scraped) {
     </div>
     <div class="actions">
       <button id="view-all">See all ${comparison.total_retailers || comparison.results.length} retailers</button>
+      <button id="report-incorrect" class="link-btn" title="Report incorrect data for this listing">Report incorrect</button>
       <button id="close">Close</button>
     </div>
     <div class="footer">
@@ -237,7 +238,237 @@ function renderMatched(tab, response, scraped) {
     });
     window.close();
   });
+  document.getElementById("report-incorrect").addEventListener("click", () => {
+    renderCorrection(tab, response, scraped);
+  });
   document.getElementById("close").addEventListener("click", () => window.close());
+  wireFooter();
+}
+
+// ── Report-incorrect: edit form pre-filled from current comparison ────
+
+function renderCorrection(tab, response, scraped) {
+  const comparison = response.comparison || {};
+  const currentRetailerKey = response.retailer_key;
+  const currentRow = (comparison.results || []).find(r => r.retailer_key === currentRetailerKey);
+  // Sale price = delivered minus shipping/tax. This matches what the
+  // user sees on the retailer's page, which is what we want them to
+  // verify/correct (NOT the delivered total, which would confuse the
+  // "no coupons applied" rule).
+  const currentSaleCents = currentRow
+    ? Math.max(0, (currentRow.delivered_cents || 0) - (currentRow.shipping_cents || 0) - (currentRow.tax_cents || 0))
+    : null;
+  const currentSaleDollars = currentSaleCents != null ? (currentSaleCents / 100).toFixed(2) : "";
+
+  // Pick the wrapper bucket that best matches the comparison's wrapper.
+  // Falls back to "Not sure" so the user can pick something explicit.
+  const wrapperGuess = comparison.wrapper
+    ? bucketFromWrapperString(comparison.wrapper)
+    : "";
+
+  root.innerHTML = `
+    ${renderHeader(tab, response)}
+    <div class="banner candidate">Report incorrect data</div>
+    <div class="section">
+      <div class="cigar-meta" style="line-height:1.45;color:#374151;margin-bottom:10px">
+        Edit any field that's wrong and submit. We'll review your correction
+        before it goes live. <strong>Don't apply coupon codes</strong> —
+        enter the price the page shows BEFORE any code is applied.
+      </div>
+      <div class="fields" id="correction-form">
+        <div class="field">
+          <label for="c-brand">Brand</label>
+          <input type="text" id="c-brand" value="${escapeAttr(comparison.brand || "")}" maxlength="80" />
+        </div>
+        <div class="field">
+          <label for="c-line">Line</label>
+          <input type="text" id="c-line" value="${escapeAttr(comparison.line || "")}" maxlength="80" />
+        </div>
+        <div class="field">
+          <label for="c-vitola">Vitola</label>
+          <input type="text" id="c-vitola" value="${escapeAttr(comparison.vitola || "")}" maxlength="80" />
+        </div>
+        <div class="field">
+          <label for="c-wrapper">Wrapper</label>
+          <select id="c-wrapper">
+            <option value="">Not sure</option>
+            <option value="Natural / Connecticut" ${wrapperGuess === "Natural / Connecticut" ? "selected" : ""}>Natural / Connecticut</option>
+            <option value="Habano" ${wrapperGuess === "Habano" ? "selected" : ""}>Habano</option>
+            <option value="Sun Grown" ${wrapperGuess === "Sun Grown" ? "selected" : ""}>Sun Grown</option>
+            <option value="Maduro" ${wrapperGuess === "Maduro" ? "selected" : ""}>Maduro</option>
+          </select>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="c-box_qty">Box quantity</label>
+            <input type="number" id="c-box_qty" value="${escapeAttr(comparison.box_qty || "")}" min="1" max="100" step="1" />
+          </div>
+          <div class="field">
+            <label for="c-price">Sale price (USD) <span class="hint-inline">no coupons</span></label>
+            <input type="number" id="c-price" value="${escapeAttr(currentSaleDollars)}" placeholder="${escapeAttr(currentSaleDollars)}" step="0.01" min="0" />
+            <div class="hint-below">Enter the price shown on the page before any coupon code. Coupons are tracked separately.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="approve" id="submit-correction">Submit correction</button>
+      <button id="cancel-correction">Cancel</button>
+    </div>
+    <div class="footer">
+      <a href="#" id="open-options">Settings</a>
+    </div>
+  `;
+  document.getElementById("submit-correction").addEventListener("click", () => {
+    submitCorrection(tab, response, scraped, {
+      currentSaleCents,
+      currentBrand: comparison.brand || "",
+      currentLine: comparison.line || "",
+      currentVitola: comparison.vitola || "",
+      currentBoxQty: comparison.box_qty || null,
+    });
+  });
+  document.getElementById("cancel-correction").addEventListener("click", () => {
+    renderMatched(tab, response, scraped);
+  });
+  wireFooter();
+}
+
+// Loose mirror of detectWrapperBucket() — but operates on a string that
+// already names the wrapper (e.g. "Maduro" or "Connecticut"), not free
+// text. Used to pre-select the dropdown when the comparison carries a
+// known wrapper.
+function bucketFromWrapperString(s) {
+  const w = String(s || "").toLowerCase();
+  if (!w) return "";
+  if (w.includes("sun grown") || w.includes("sungrown")) return "Sun Grown";
+  if (w.includes("maduro") || w.includes("oscuro") || w.includes("san andr") || w.includes("broadleaf")) return "Maduro";
+  if (w.includes("habano") || w.includes("corojo")) return "Habano";
+  if (w.includes("connecticut") || w.includes("cameroon") || w.includes("natural") || w.includes("claro")) return "Natural / Connecticut";
+  return "";
+}
+
+async function submitCorrection(tab, response, scraped, ctx) {
+  const btn = document.getElementById("submit-correction");
+  btn.disabled = true;
+  btn.textContent = "Submitting…";
+
+  const get = (id) => (document.getElementById(id).value || "").trim();
+  const brand = get("c-brand");
+  const line = get("c-line");
+  const vitola = get("c-vitola");
+  const wrapper = get("c-wrapper");
+  const boxQtyRaw = get("c-box_qty");
+  const priceRaw = get("c-price");
+
+  if (!brand || !line || !vitola) {
+    btn.disabled = false;
+    btn.textContent = "Submit correction";
+    toast("Brand, line, and vitola are required.");
+    return;
+  }
+
+  const proposedBoxQty = boxQtyRaw ? parseInt(boxQtyRaw, 10) : null;
+  const proposedPrice = priceRaw ? parseFloat(priceRaw) : null;
+
+  // Client-side guards mirror the server-side ones (loose band) so the
+  // user gets immediate feedback without a round-trip. Server still
+  // validates — these are UX, not security.
+  if (proposedPrice != null) {
+    if (proposedPrice < 5) {
+      btn.disabled = false;
+      btn.textContent = "Submit correction";
+      toast("Sale price must be at least $5. Don't subtract coupon codes — coupons are tracked separately.");
+      return;
+    }
+    if (proposedPrice > 5000) {
+      btn.disabled = false;
+      btn.textContent = "Submit correction";
+      toast("Sale price must be at most $5,000.");
+      return;
+    }
+    if (ctx.currentSaleCents && ctx.currentSaleCents > 0) {
+      const proposedCents = Math.round(proposedPrice * 100);
+      const dev = Math.abs(proposedCents - ctx.currentSaleCents) / ctx.currentSaleCents;
+      if (dev > 0.75) {
+        btn.disabled = false;
+        btn.textContent = "Submit correction";
+        toast(`That's ${Math.round(dev * 100)}% off the listed price. If a coupon is applied, enter the price BEFORE the coupon.`);
+        return;
+      }
+    }
+  }
+
+  try {
+    const observerId = await getObserverId();
+    const result = await publicFetch("/api/community/report-correction", {
+      method: "POST",
+      body: {
+        observer_id: observerId,
+        observer_source: "consumer",
+        url: tab.url,
+        current_cid: response.matched_cid || null,
+        current_price: ctx.currentSaleCents != null ? ctx.currentSaleCents / 100 : null,
+        proposed_brand: brand,
+        proposed_line: line,
+        proposed_vitola: vitola,
+        proposed_wrapper: wrapper || null,
+        proposed_box_qty: proposedBoxQty,
+        proposed_price: proposedPrice,
+        scraped_title: scraped?.title || scraped?.jsonldName || null,
+      },
+    });
+    chrome.runtime.sendMessage({ type: "invalidateCache", url: tab.url });
+
+    if (result && result.status === "no_changes_detected") {
+      // Per design: this is a silent thank-you, NOT a queued review.
+      renderCorrectionThanks(tab, response, "No changes detected — nothing was sent for review.");
+      return;
+    }
+    renderCorrectionThanks(tab, response, "Thanks — your correction is in our review queue.");
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = "Submit correction";
+    // publicFetch error message is shaped like
+    //   "400 Bad Request: {\"error\":\"price_too_low\",\"reason\":\"...\"}"
+    // — try to parse the JSON tail and surface the server's `reason`
+    // (which is human-readable). Fall back to the raw message if the
+    // body wasn't JSON for some reason.
+    const raw = (e && e.message) ? e.message : String(e);
+    let userMsg = raw;
+    const jsonStart = raw.indexOf("{");
+    if (jsonStart >= 0) {
+      try {
+        const body = JSON.parse(raw.slice(jsonStart));
+        if (body && body.reason) userMsg = body.reason;
+        else if (body && body.error) userMsg = body.error;
+      } catch (_) { /* keep raw */ }
+    }
+    toast(userMsg.length > 220 ? userMsg.slice(0, 220) + "…" : userMsg);
+  }
+}
+
+function renderCorrectionThanks(tab, response, message) {
+  root.innerHTML = `
+    ${renderHeader(tab, response)}
+    <div class="banner matched">✓ Got it</div>
+    <div class="section">
+      <div class="cigar-meta" style="line-height:1.45">${escapeHtml(message)}</div>
+    </div>
+    <div class="actions">
+      <button id="back-to-matched" class="primary">Back to comparison</button>
+      <button id="close-thanks">Close</button>
+    </div>
+    <div class="footer">
+      <a href="#" id="open-options">Settings</a>
+    </div>
+  `;
+  document.getElementById("back-to-matched").addEventListener("click", () => {
+    // Re-render from the original response — we don't refetch because
+    // the operator hasn't reviewed yet.
+    renderMatched(tab, response, null);
+  });
+  document.getElementById("close-thanks").addEventListener("click", () => window.close());
   wireFooter();
 }
 

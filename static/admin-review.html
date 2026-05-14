@@ -70,6 +70,23 @@
     .header{display:block;text-align:center}
     .filters{justify-content:center}
   }
+  /* Correction-flow visual treatment. We mark the whole card with a
+     warm border so it stands out in a long pending queue, and use a
+     distinct badge so the operator knows this is "consumer disagrees
+     with our existing data" rather than "consumer is proposing new". */
+  .card.correction-card{border:2px solid #f9a825;box-shadow:0 1px 6px rgba(249,168,37,.25)}
+  .correction-badge{
+    display:inline-block;background:#f9a825;color:#fff;
+    font-size:10px;font-weight:700;letter-spacing:.5px;
+    padding:2px 6px;border-radius:3px;margin-right:6px;vertical-align:middle;
+  }
+  .diff-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}
+  .diff-table th{text-align:left;font-weight:600;color:#666;padding:4px 6px;border-bottom:1px solid #eee}
+  .diff-table td{padding:4px 6px;border-bottom:1px solid #f5f5f5;vertical-align:top}
+  .diff-table .diff-label{color:#999;font-size:11px;text-transform:uppercase;letter-spacing:.3px;width:80px}
+  .diff-table .diff-current{color:#666}
+  .diff-table .diff-proposed{font-weight:600;color:#1a1a1a}
+  .diff-table code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10px;background:#f5f5f5;padding:1px 4px;border-radius:3px;word-break:break-all}
 </style>
 </head>
 <body>
@@ -240,12 +257,19 @@ function proposalToMatchCard(p) {
     wrapper: p.proposed_wrapper || '',
     size: p.proposed_size || '',
     box_qty: p.proposed_box_qty || null,
-    price: null,
+    price: p.confirmed_price_cents != null ? p.confirmed_price_cents / 100 : null,
     in_stock: null,
     created_at: p.created_at,
     _community: true,
     _proposal_id: p.id,
     _top_candidate: tc,
+    // Correction-flow fields. is_correction means this came from the
+    // consumer popup's "Report incorrect" button on a URL we already
+    // had a CID for — so the operator should compare proposed vs.
+    // current rather than treating it as a fresh URL.
+    _is_correction: !!p.is_correction,
+    _current_cid: p.current_cid || '',
+    _current_price: p.current_price_cents != null ? p.current_price_cents / 100 : null,
   };
 }
 
@@ -302,10 +326,12 @@ function renderCommunityCard(m) {
   const isHigh = m.confidence === 'HIGH';
   const selected = selectedTokens.has(m.token) ? ' selected' : '';
   const consumerLine = [m.brand, m.line, m.vitola].filter(Boolean).join(' ');
+  const priceStr = m.price != null ? `$${m.price.toFixed(2)}` : null;
   const consumerMeta = [
     m.box_qty ? `Box of ${m.box_qty}` : null,
     m.wrapper || null,
     m.size || null,
+    priceStr,
   ].filter(Boolean).join(' · ');
 
   // Approve button behaviour:
@@ -314,22 +340,40 @@ function renderCommunityCard(m) {
   //   we show "Open in extension" pointing at the URL — operator
   //   visits the page, the popup pre-fills with this proposal data
   //   (Gap 1), they approve there.
-  const approveBtn = (haveCID && isHigh)
-    ? `<button class="approve-btn" onclick="reviewOne('${m.token}','approve')">Approve →</button>`
-    : `<button class="approve-btn" style="background:#fff3e0;color:#e65100" onclick="openInExtension('${m.url.replace(/'/g, "\\'")}')">Open in extension</button>`;
+  // Corrections always need a human eye even at HIGH confidence — we
+  // intentionally route them to the extension popup so the operator
+  // can compare the proposed values against the current CID's master
+  // record before flipping anything.
+  const approveBtn = (m._is_correction)
+    ? `<button class="approve-btn" style="background:#fff3e0;color:#e65100" onclick="openInExtension('${m.url.replace(/'/g, "\\'")}')">Review in extension</button>`
+    : (haveCID && isHigh)
+      ? `<button class="approve-btn" onclick="reviewOne('${m.token}','approve')">Approve →</button>`
+      : `<button class="approve-btn" style="background:#fff3e0;color:#e65100" onclick="openInExtension('${m.url.replace(/'/g, "\\'")}')">Open in extension</button>`;
 
-  return `<div class="card" id="card-${m.token}">
+  // For correction rows, render the side-by-side diff between what we
+  // were showing and what the consumer proposes. This is the whole
+  // point of the correction flow — the operator's decision is
+  // "should we trust this consumer over our current data?".
+  const correctionDiff = m._is_correction ? renderCorrectionDiff(m) : '';
+
+  return `<div class="card${m._is_correction ? ' correction-card' : ''}" id="card-${m.token}">
     <div class="card-body">
       <div class="top-row">
         <div>
-          <div class="section-label">Consumer suggested</div>
+          <div class="section-label">
+            ${m._is_correction
+              ? '<span class="correction-badge" title="Consumer reported the existing CID/price is wrong">CORRECTION</span> Consumer disagrees'
+              : 'Consumer suggested'}
+          </div>
           <div class="cid-name">${escHTML(consumerLine || m.reason || '(no metadata)')}</div>
           <div class="cid-details">${escHTML(consumerMeta)}</div>
         </div>
         <span class="confidence ${m.confidence}">${m.confidence}</span>
       </div>
 
-      ${haveCID ? `
+      ${correctionDiff}
+
+      ${(!m._is_correction && haveCID) ? `
         <hr class="divider">
         <div class="section-label">Matcher's best CID guess</div>
         <div class="cid-full">${escHTML(tc.cigar_id)}</div>
@@ -338,10 +382,10 @@ function renderCommunityCard(m) {
           ${tc.brand ? `&nbsp;·&nbsp;<span class="label">brand</span> ${escHTML(tc.brand)}` : ''}
           ${tc.line ? `&nbsp;·&nbsp;<span class="label">line</span> ${escHTML(tc.line)}` : ''}
         </div>
-      ` : `
+      ` : (!m._is_correction ? `
         <hr class="divider">
         <div class="cid-details" style="color:#c62828">No confident CID match — needs operator review via extension popup.</div>
-      `}
+      ` : '')}
 
       <hr class="divider">
 
@@ -357,6 +401,69 @@ function renderCommunityCard(m) {
       <button class="select-btn${selected}" onclick="toggleSelect('${m.token}')" title="Select for bulk action">&#9744;</button>
     </div>
   </div>`;
+}
+
+// Renders the proposed-vs-current diff inside a correction card. We
+// don't have the master record's brand/line/vitola server-side at this
+// point (that would require another lookup against current_cid), so
+// the "current" column shows what we know: the CID itself + the price
+// we were displaying when the consumer reported the issue. The
+// "proposed" column shows what they typed.
+function renderCorrectionDiff(m) {
+  const currentPrice = m._current_price != null ? `$${m._current_price.toFixed(2)}` : '—';
+  const proposedPrice = m.price != null ? `$${m.price.toFixed(2)}` : '—';
+  const priceDiff = (m._current_price != null && m.price != null)
+    ? Math.abs(m.price - m._current_price)
+    : null;
+  const priceWarn = (priceDiff != null && m._current_price > 0 && (priceDiff / m._current_price) > 0.4)
+    ? ' style="color:#c62828;font-weight:600"'
+    : '';
+
+  return `
+    <hr class="divider">
+    <div class="section-label">What changed</div>
+    <table class="diff-table">
+      <thead>
+        <tr><th></th><th>Currently showing</th><th>Consumer says</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="diff-label">CID</td>
+          <td class="diff-current"><code>${escHTML(m._current_cid || '—')}</code></td>
+          <td class="diff-proposed">${escHTML([m.brand, m.line, m.vitola].filter(Boolean).join(' ') || '—')}</td>
+        </tr>
+        <tr>
+          <td class="diff-label">Box qty</td>
+          <td class="diff-current">${m._current_cid ? extractBoxQtyFromCid(m._current_cid) || '—' : '—'}</td>
+          <td class="diff-proposed">${m.box_qty || '—'}</td>
+        </tr>
+        <tr>
+          <td class="diff-label">Sale price</td>
+          <td class="diff-current">${currentPrice}</td>
+          <td class="diff-proposed"${priceWarn}>${proposedPrice}</td>
+        </tr>
+        <tr>
+          <td class="diff-label">Wrapper</td>
+          <td class="diff-current">—</td>
+          <td class="diff-proposed">${escHTML(m.wrapper || '—')}</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="cid-details" style="margin-top:6px;color:#666">
+      Sale prices are reported WITHOUT coupon codes applied. If the
+      consumer's price is far below current, double-check the box qty
+      and verify they didn't subtract a code.
+    </div>
+  `;
+}
+
+function extractBoxQtyFromCid(cid) {
+  if (!cid) return '';
+  const tail = cid.split('|').pop() || '';
+  const m = tail.toUpperCase().match(/^(?:BOX|PACK)(\d+)$/);
+  if (m) return m[1];
+  if (tail.toUpperCase() === 'SINGLE') return '1';
+  return '';
 }
 
 function escHTML(s) {

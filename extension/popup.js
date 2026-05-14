@@ -169,6 +169,38 @@ function matchedCommunityBanner(response) {
     cp.proposed_wrapper,
     typeof cp.confirmed_price === "number" ? `$${cp.confirmed_price.toFixed(2)}` : "",
   ].filter(Boolean).join(" • ");
+  // Correction-flow variant: the consumer is reporting that the
+  // existing CID/price is wrong. Surface what we were showing them
+  // (current_cid, current_price) so the operator can make an
+  // informed decision rather than just rubber-stamping.
+  if (cp.is_correction) {
+    const currentLine = cp.current_cid ? `<code>${escapeHtml(cp.current_cid)}</code>` : "(no CID on record)";
+    const currentPrice = typeof cp.current_price === "number" ? `$${cp.current_price.toFixed(2)}` : "—";
+    const proposedPrice = typeof cp.confirmed_price === "number" ? `$${cp.confirmed_price.toFixed(2)}` : "—";
+    return `
+      <div class="community-proposal correction">
+        <div class="cp-header">
+          <span class="cp-badge cp-correction-badge">Consumer disagrees${others}</span>
+          ${age ? `<span class="cp-age">${escapeHtml(age)}</span>` : ""}
+        </div>
+        <div class="cp-diff">
+          <div class="cp-diff-row">
+            <div class="cp-diff-label">Currently showing</div>
+            <div class="cp-diff-current">${currentLine}<br><span class="cp-price">${currentPrice}</span></div>
+          </div>
+          <div class="cp-diff-row">
+            <div class="cp-diff-label">Consumer says</div>
+            <div class="cp-diff-proposed">${escapeHtml(productLine)}<br><span class="cp-price">${proposedPrice}</span>${meta ? ` <span class="cp-meta-inline">${escapeHtml(meta)}</span>` : ""}</div>
+          </div>
+        </div>
+        <div class="cp-hint">
+          Sale prices are reported WITHOUT coupon codes. If the new
+          price is far below current, double-check the box quantity
+          before approving.
+        </div>
+      </div>
+    `;
+  }
   return `
     <div class="community-proposal">
       <div class="cp-header">
