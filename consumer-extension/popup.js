@@ -7,6 +7,35 @@ import {
 
 const root = document.getElementById("root");
 
+// Map brand+line → /cigars/{brand-slug}/{line-slug} URL on
+// cigarpricescout.com. Mirrors the server's normalize_line_slug() and
+// brand slugifier so the URL hits the SEO landing page (HTML)
+// rather than the /compare JSON endpoint, which would look like a
+// 404 to a regular user.
+//
+// Keep this in sync with normalize_line_slug() in app/main.py — the
+// server adds new special-cases as catalog edge cases come up.
+const LINE_SLUG_SPECIAL_CASES = {
+  "opusx":   "opus-x",
+  "opus x": "opus-x",
+};
+function slugify(s) {
+  return String(s || "")
+    .toLowerCase()
+    .trim()
+    .replace(/&/g, "and")
+    .replace(/\//g, "-")
+    .replace(/\s+/g, "-");
+}
+function buildCigarLandingUrl(brand, line) {
+  if (!brand || !line) return "https://cigarpricescout.com";
+  const lineLower = String(line).toLowerCase().trim();
+  const lineSlug = LINE_SLUG_SPECIAL_CASES[lineLower] || slugify(line);
+  const brandSlug = slugify(brand);
+  if (!brandSlug || !lineSlug) return "https://cigarpricescout.com";
+  return `https://cigarpricescout.com/cigars/${brandSlug}/${lineSlug}`;
+}
+
 // ── Bootstrap ──────────────────────────────────────────────────────────
 
 (async () => {
@@ -140,11 +169,9 @@ function renderMatched(tab, response, scraped) {
       </div>
     `;
     document.getElementById("view-compare").addEventListener("click", () => {
-      if (comparison?.brand && comparison?.line) {
-        chrome.tabs.create({
-          url: `https://cigarpricescout.com/compare?brand=${encodeURIComponent(comparison.brand)}&line=${encodeURIComponent(comparison.line)}`,
-        });
-      }
+      chrome.tabs.create({
+        url: buildCigarLandingUrl(comparison?.brand, comparison?.line),
+      });
       window.close();
     });
     document.getElementById("close").addEventListener("click", () => window.close());
@@ -205,11 +232,9 @@ function renderMatched(tab, response, scraped) {
     </div>
   `;
   document.getElementById("view-all").addEventListener("click", () => {
-    if (comparison.brand && comparison.line) {
-      chrome.tabs.create({
-        url: `https://cigarpricescout.com/compare?brand=${encodeURIComponent(comparison.brand)}&line=${encodeURIComponent(comparison.line)}`,
-      });
-    }
+    chrome.tabs.create({
+      url: buildCigarLandingUrl(comparison.brand, comparison.line),
+    });
     window.close();
   });
   document.getElementById("close").addEventListener("click", () => window.close());
@@ -496,11 +521,9 @@ function renderProvisionalComparison(tab, response, scraped, proposeRes) {
     </div>
   `;
   document.getElementById("view-all").addEventListener("click", () => {
-    if (comparison.brand && comparison.line) {
-      chrome.tabs.create({
-        url: `https://cigarpricescout.com/compare?brand=${encodeURIComponent(comparison.brand)}&line=${encodeURIComponent(comparison.line)}`,
-      });
-    }
+    chrome.tabs.create({
+      url: buildCigarLandingUrl(comparison.brand, comparison.line),
+    });
     window.close();
   });
   document.getElementById("close").addEventListener("click", () => window.close());
