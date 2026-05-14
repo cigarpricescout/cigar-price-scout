@@ -93,7 +93,7 @@ CSV/observed wins on collision. Drops are logged at INFO level.
 | `community_retailer_requests` | community | Per-observer requests to add a new retailer. Lazy-fulfilled when hostname enters the registry; powers `chrome.notifications` in the consumer extension. |
 | `community_prices` | legacy website | Website-form-submitted prices. Older system; kept running but dedup'd in `/compare`. |
 | `community_votes` | legacy website | Downvote ledger for `community_prices`. |
-| `extension_staged_approvals` | operator extension | Operator-staged URL → CID approvals. Drained by `tools/extension/publish_extension_approvals.py` into local CSVs + master DB. |
+| `extension_staged_approvals` | operator extension | Operator-staged URL → CID approvals. **Live-overlaid onto `_cache_state["url_index"]` (popup) and `load_all_products()` (website /compare) as soon as the row is inserted with status='pending'** — no need to wait for the publisher script. The publisher (`tools/extension/publish_extension_approvals.py`) drains pending rows into local CSVs + master DB for git-tracked durability; until it runs, the overlay keeps approvals live across cache refreshes. |
 | `pending_new_retailers` | operator extension | URLs the operator hit on unknown hostnames + consumer retailer requests. |
 | `url_skip_list` | operator extension | URLs marked "skip" by the operator. |
 | `review_decisions` | shared | Every operator approve/edit/reject decision. Future ML reviewer training data. |

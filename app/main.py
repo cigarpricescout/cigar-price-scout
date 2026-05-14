@@ -1067,6 +1067,109 @@ def _load_observed_overlay(window_days: int = 14) -> list:
     return products
 
 
+def _load_staged_approval_overlay() -> list:
+    """Live-overlay pending operator approvals onto /compare for blocked retailers.
+
+    Mirrors _load_observed_overlay but reads from extension_staged_approvals
+    (status='pending') instead of observed_prices. Only emits Products for
+    BLOCKED retailers — these are the ones where the staging row carries a
+    price the operator entered manually. For active retailers the staging
+    row has price=NULL (the extractor will fill it in next scrape) so
+    there's nothing useful to render until then.
+
+    Why this exists: when the operator approves a URL→CID mapping via the
+    extension popup, we want it to show up on cigarpricescout.com
+    immediately — no waiting for the local publisher script, git push, or
+    Railway redeploy. Pairs with extension_endpoints._load_staged_approval_url_overlay
+    which handles the popup-side url_index.
+    """
+    blocked_keys = get_blocked_retailer_keys()
+    if not blocked_keys:
+        return []
+    try:
+        conn = get_analytics_conn()
+    except Exception as e:
+        print(f"_load_staged_approval_overlay: analytics conn failed: {e}")
+        return []
+    rows: list = []
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT DISTINCT ON (retailer_key, cid)
+                   retailer_key, cid, url, title, price, in_stock,
+                   box_qty, created_at
+            FROM extension_staged_approvals
+            WHERE status = 'pending'
+              AND retailer_key = ANY(%s)
+              AND price IS NOT NULL
+            ORDER BY retailer_key, cid, created_at DESC
+            """,
+            (list(blocked_keys),),
+        )
+        rows = cur.fetchall()
+    except Exception as e:
+        print(f"_load_staged_approval_overlay: query failed: {e}")
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    retailer_name_by_key = {r["key"]: r["name"] for r in RETAILERS}
+    master_index = load_master_index()
+    products = []
+    for r in rows:
+        (retailer_key, cigar_id, url, title, price, in_stock,
+         box_qty, created_at) = r
+        try:
+            master_row = master_index.get(cigar_id or "")
+            if master_row:
+                brand   = master_row.get("brand", "")
+                line    = master_row.get("line", "")
+                vitola  = master_row.get("vitola", "")
+                size    = master_row.get("size", "")
+                wrapper = master_row.get("wrapper", "")
+                strength = master_row.get("strength", "")
+                country  = master_row.get("country", "")
+                master_box_qty = master_row.get("box_qty") or 0
+                if master_box_qty:
+                    box_qty = master_box_qty
+            else:
+                cid_parts = (cigar_id or "").split("|")
+                brand = cid_parts[0] if cid_parts else ""
+                line = cid_parts[2] if len(cid_parts) > 2 else ""
+                vitola = cid_parts[3] if len(cid_parts) > 3 else ""
+                size = cid_parts[5] if len(cid_parts) > 5 else ""
+                wrapper = cid_parts[6] if len(cid_parts) > 6 else ""
+                strength = ""
+                country = ""
+            products.append(Product(
+                retailer_key=retailer_key,
+                retailer_name=retailer_name_by_key.get(retailer_key, retailer_key),
+                title=title or "",
+                url=url,
+                brand=brand,
+                line=line,
+                wrapper=wrapper,
+                vitola=vitola,
+                size=size,
+                box_qty=box_qty or 25,
+                price=float(price) if price is not None else 0.0,
+                in_stock=bool(in_stock) if in_stock is not None else True,
+                cigar_id=cigar_id or "",
+                price_source="operator_approved",
+                observed_at=created_at.isoformat() if created_at else None,
+                observation_count=1,
+                strength=strength,
+                country=country,
+            ))
+        except Exception as e:
+            print(f"_load_staged_approval_overlay: skipping row: {e}")
+            continue
+    return products
+
+
 _RETAILER_LOOKUP_CACHE: Dict[str, Dict[str, str]] = {"by_name": {}, "by_host": {}}
 
 
@@ -1194,6 +1297,24 @@ def load_all_products():
         for op in observed_products:
             if (op.retailer_key, op.cigar_id) not in seen_csv:
                 all_products.append(op)
+
+    # Live-overlay pending operator approvals (blocked retailers only,
+    # since they're the only ones with a manually-entered price). This
+    # is the website-side companion to the extension's url_index
+    # overlay: when the operator approves via the popup, the new row
+    # appears on /compare on the very next request — no waiting for
+    # the local publisher script, git push, or Railway redeploy.
+    # Operator-approved beats observed beats CSV on collision: the
+    # operator just made an explicit decision, so trust it.
+    staged_approval_products = _load_staged_approval_overlay()
+    if staged_approval_products:
+        seen_pairs = {
+            (p.retailer_key, p.cigar_id)
+            for p in all_products if p.cigar_id
+        }
+        for sp in staged_approval_products:
+            if (sp.retailer_key, sp.cigar_id) not in seen_pairs:
+                all_products.append(sp)
 
     community_products = _load_community_products()
 

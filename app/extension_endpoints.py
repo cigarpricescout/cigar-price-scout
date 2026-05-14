@@ -79,6 +79,41 @@ _cache_state = {
 }
 
 
+def _load_staged_approval_url_overlay() -> Dict[str, Tuple[str, str]]:
+    """Live overlay of pending operator approvals onto the URL index.
+
+    Returns {url: (retailer_key, cigar_id)} for every row in
+    extension_staged_approvals where status='pending' — i.e. the
+    operator has approved a URL→CID mapping but the local publisher
+    hasn't drained it to the per-retailer CSV yet.
+
+    Without this overlay, an operator approval doesn't take effect on
+    the live site until: (1) operator runs publish_extension_approvals,
+    (2) commits the CSV diff, (3) pushes, (4) Railway redeploys, (5)
+    the cache TTL expires. With this overlay, the mapping is live as
+    soon as the row hits Postgres — the publisher becomes a
+    "sync-to-git for audit / next deploy" operation rather than a
+    critical path. Pending rows survive cache rebuilds because we
+    re-overlay them every refresh.
+    """
+    overlay: Dict[str, Tuple[str, str]] = {}
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT url, retailer_key, cid FROM extension_staged_approvals "
+            "WHERE status='pending' AND url IS NOT NULL AND cid IS NOT NULL"
+        )
+        for url, retailer_key, cid in cur.fetchall():
+            if not url or not retailer_key or not cid:
+                continue
+            overlay[url] = (retailer_key, cid)
+        conn.close()
+    except Exception as e:
+        logger.warning("staged-approval URL overlay load failed: %s", e)
+    return overlay
+
+
 def _refresh_cache(force: bool = False) -> None:
     """(Re)load master CSV + retailer registry + per-retailer URL index."""
     now = time.time()
@@ -97,6 +132,16 @@ def _refresh_cache(force: bool = False) -> None:
             extra_hosts = {}
         retailers = build_retailer_registry(STATIC_DATA, extra_hosts=extra_hosts)
         url_index = load_retailer_url_index(STATIC_DATA)
+        # Layer pending operator approvals on top so just-approved URLs
+        # are immediately matchable, without waiting for the publisher
+        # to drain to CSV. CSV wins on collision (already-published
+        # rows shouldn't be overwritten by stale staging data).
+        overlay = _load_staged_approval_url_overlay()
+        overlay_added = 0
+        for url, (retailer_key, cid) in overlay.items():
+            if url not in url_index:
+                url_index[url] = (retailer_key, cid)
+                overlay_added += 1
         master_by_cid = {row["cigar_id"]: row for row in master}
         _cache_state.update({
             "loaded_at": now,
@@ -106,8 +151,9 @@ def _refresh_cache(force: bool = False) -> None:
             "url_index": url_index,
         })
         logger.info(
-            "Extension cache refreshed: %d master CIDs, %d retailer hosts, %d live URLs",
-            len(master), len(retailers), len(url_index),
+            "Extension cache refreshed: %d master CIDs, %d retailer hosts, "
+            "%d live URLs (+%d pending-approval overlay)",
+            len(master), len(retailers), len(url_index), overlay_added,
         )
     except Exception as e:
         logger.error("Extension cache refresh failed: %s", e)
@@ -688,6 +734,30 @@ async def stage_approval(request: Request, body: StageApprovalBody):
 
         conn.commit()
         conn.close()
+
+        # Live overlay: mutate the in-memory URL index immediately so
+        # the consumer popup, /compare page, and any other caller of
+        # _cache_state["url_index"] see this approval within the same
+        # request — no need to wait for the next cache refresh, the
+        # publisher script, a git push, or a Railway redeploy. The
+        # next _refresh_cache call will re-overlay this row from
+        # extension_staged_approvals so it survives until the
+        # publisher drains it to CSV.
+        try:
+            _cache_state["url_index"][body.url] = (body.retailer_key, cid)
+        except Exception as e:
+            logger.warning("live url_index overlay update failed: %s", e)
+
+        # Bust the website's product cache too so /compare reflects
+        # the new mapping on the next request. Without this the
+        # /compare endpoint serves stale Product lists for up to
+        # CACHE_TTL_SECONDS after approval.
+        try:
+            from app.main import _product_cache  # type: ignore
+            _product_cache["data"] = None
+            _product_cache["timestamp"] = 0
+        except Exception as e:
+            logger.warning("/compare cache bust after approval failed: %s", e)
 
         _log_review_decision(
             decision_type="extension_approval",
