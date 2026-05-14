@@ -464,6 +464,43 @@ def hostname_to_retailer_key(
     return None
 
 
+# Hostnames of well-known affiliate / tracking networks that retailers
+# wrap product URLs in. These show up in CSVs as the URL's hostname
+# even though the actual retailer is on a different domain. The
+# registry builder must skip them, otherwise it'll register e.g.
+# anrdoezrs.net → gothamcigars instead of gothamcigars.com → gothamcigars
+# and the consumer/operator extension hostname-gating won't recognize
+# the real retailer page.
+_AFFILIATE_HOSTNAMES = frozenset({
+    # Commission Junction (CJ) — most common in the cigar industry
+    "anrdoezrs.net", "www.anrdoezrs.net",
+    "kqzyfj.com",    "www.kqzyfj.com",
+    "dpbolvw.net",   "www.dpbolvw.net",
+    "jdoqocy.com",   "www.jdoqocy.com",
+    "tkqlhce.com",   "www.tkqlhce.com",
+    "emjcd.com",     "www.emjcd.com",
+    "qksrv.com",     "www.qksrv.com",
+    "qksrv.net",     "www.qksrv.net",
+    "lduhtrp.net",   "www.lduhtrp.net",
+    # Common URL shorteners
+    "bit.ly", "t.co", "goo.gl", "tinyurl.com",
+})
+
+
+def _is_affiliate_host(host: str) -> bool:
+    h = (host or "").lower()
+    if h in _AFFILIATE_HOSTNAMES:
+        return True
+    # Soft-match any subdomain of the known networks (e.g.
+    # tracking.anrdoezrs.net) without forcing the exact list above.
+    for net in ("anrdoezrs.net", "kqzyfj.com", "dpbolvw.net",
+                "jdoqocy.com", "tkqlhce.com", "emjcd.com",
+                "qksrv.com", "qksrv.net", "lduhtrp.net"):
+        if h.endswith("." + net) or h == net:
+            return True
+    return False
+
+
 def build_retailer_registry(
     static_data_dir: Path,
     extra_hosts: Optional[Dict[str, str]] = None,
@@ -471,7 +508,9 @@ def build_retailer_registry(
     """Scan static/data/*.csv and build a hostname -> retailer_key map.
 
     Skips files containing DORMANT/BROKEN/backup in their name. Uses the
-    hostname of the first valid http(s) URL in each CSV.
+    hostname of the first non-affiliate http(s) URL in each CSV — affiliate
+    networks (CJ, etc.) are wrappers around the real retailer URL and
+    must not be registered as the retailer's own host.
 
     ``extra_hosts`` is an optional ``{hostname: retailer_key}`` mapping
     merged into the registry. This is the mechanism for registering
@@ -491,16 +530,21 @@ def build_retailer_registry(
                         continue
                     for row in reader:
                         u = (row.get("url") or "").strip()
-                        if u.startswith("http"):
-                            host = urlparse(u).hostname
-                            if host:
-                                host = host.lower()
-                                registry.setdefault(host, name)
-                                if host.startswith("www."):
-                                    registry.setdefault(host[4:], name)
-                                else:
-                                    registry.setdefault("www." + host, name)
-                            break
+                        if not u.startswith("http"):
+                            continue
+                        host = urlparse(u).hostname
+                        if not host:
+                            continue
+                        host = host.lower()
+                        if _is_affiliate_host(host):
+                            # Affiliate wrapper — try the next row.
+                            continue
+                        registry.setdefault(host, name)
+                        if host.startswith("www."):
+                            registry.setdefault(host[4:], name)
+                        else:
+                            registry.setdefault("www." + host, name)
+                        break
             except Exception:
                 continue
     # Merge explicit blocked-retailer hostnames. setdefault() means CSV
