@@ -3,10 +3,16 @@ Drain extension_staged_approvals from the live API and materialize them into:
 
   1. data/master_cigars.csv         (new CIDs only)
   2. data/master_cigars.db          (new CIDs only)
-  3. static/data/{retailer_key}.csv (every approval — BARE row: cigar_id + url
-                                    only; all other columns empty so the
-                                    retailer's extractor fills in title/
-                                    price/in_stock on the next price run)
+  3. static/data/{retailer_key}.csv (every approval):
+       - Active retailers: BARE row (cigar_id + url only). The daily
+         extractor fills in title/price/in_stock on its next run; the
+         /compare loader's master-first JOIN supplies metadata at read
+         time.
+       - Blocked/dormant retailers: bare row + volatile fields
+         (title/price/in_stock from the operator's manual entry). No
+         metadata columns — those come from master via JOIN, so master
+         remains the single source of truth for brand/line/wrapper/
+         vitola/size/box_qty.
 
 This script must run AFTER `git pull --rebase` and BEFORE `git push`, so that
 the master CSV and per-retailer CSVs reflect the latest state from any other
@@ -265,15 +271,21 @@ def _preview_retailer_outcome(retailer_key: str, cid: str, url: str) -> str:
     return "append BARE row (cigar_id,,url)"
 
 
-def _format_full_row_extras(r: Dict) -> Dict[str, str]:
-    """Convert a staged-approval row into CSV column→value dict for the
-    blocked/dormant 'full row' write path.
+def _format_volatile_row_extras(r: Dict) -> Dict[str, str]:
+    """Convert a staged-approval row into the price-volatile columns ONLY
+    that should land in the per-retailer CSV for blocked/dormant retailers.
 
-    Column names mirror the existing schema in static/data/*.csv (title,
-    brand, line, wrapper, vitola, size, box_qty, price, in_stock). The
-    `wrapper` column uses the human-readable form ("Maduro", "Connecticut
-    Shade") not the canonical CID code, matching what scrapers populate
-    for active retailers.
+    Architectural shift (Gap 3 / master-first JOIN): metadata columns
+    (brand/line/wrapper/vitola/size/box_qty) are NO LONGER written to
+    per-retailer CSVs. The /compare loader pulls those from master_cigars
+    keyed by cigar_id at read time, so per-retailer CSVs only need the
+    volatile, retailer-specific data: price, in_stock, and the operator's
+    typed-in title (kept as a freeform note for debugging).
+
+    Active-retailer rows stay BARE (cigar_id + url only — passing
+    extra_cols=None gives that path). Only blocked/dormant rows get
+    these extras, because they have no extractor that will fill them on
+    a future run.
     """
     def _s(v) -> str:
         return "" if v is None else str(v).strip()
@@ -298,17 +310,14 @@ def _format_full_row_extras(r: Dict) -> Dict[str, str]:
 
     return {
         "title":    _s(r.get("title")),
-        "brand":    _s(r.get("brand")),
-        "line":     _s(r.get("line")),
-        # Operator may not have a wrapper alias yet, fall back to the
-        # canonical code so the column is never empty for a full row.
-        "wrapper":  _s(r.get("wrapper")) or _s(r.get("wrapper_code")),
-        "vitola":   _s(r.get("vitola")),
-        "size":     _s(r.get("size")),
-        "box_qty":  _s(r.get("box_qty")),
         "price":    _price(r.get("price")),
         "in_stock": _stock(r.get("in_stock")),
     }
+
+
+# Back-compat alias for any external callers that imported the old name.
+def _format_full_row_extras(r: Dict) -> Dict[str, str]:  # pragma: no cover
+    return _format_volatile_row_extras(r)
 
 
 def _append_retailer_row(
@@ -325,19 +334,22 @@ def _append_retailer_row(
       `cigar_id` and `url`; the daily extractor fills the rest on its next
       run. This is the legacy behavior every retailer extractor expects.
 
-    - **Full row** (extra_cols={title,brand,line,wrapper,vitola,size,
-      box_qty,price,in_stock}) for `blocked`/`dormant` retailers, where no
-      extractor will ever fill the row. The operator's manual entry IS the
-      data source, so we persist it directly.
+    - **Volatile-fields row** (extra_cols={title, price, in_stock}) for
+      `blocked`/`dormant` retailers, where no extractor will ever fill
+      the row. The operator's manual entry IS the price data source.
+      Gap 3 master-first JOIN means we no longer write brand/line/
+      wrapper/vitola/size/box_qty — those are pulled from master at
+      /compare read time, so the CSV stays minimal and master remains
+      the single source of truth for descriptive metadata.
 
     For both modes:
     - Same (cid, url) pair already present → no-op for bare, **overwrite
-      extras** for full (so re-approval refreshes stale prices).
-    - Same cid, different url → update url on that row; in full mode also
-      refresh the extras.
+      extras** for volatile-fields (so re-approval refreshes stale prices).
+    - Same cid, different url → update url on that row; in volatile-fields
+      mode also refresh the extras.
     - New row → append.
 
-    Returns one of: 'added', 'exists', 'updated_url', 'updated_full',
+    Returns one of: 'added', 'exists', 'updated_url', 'updated_volatile',
     'missing_csv'.
     """
     csv_path = STATIC_DATA / f"{retailer_key}.csv"
@@ -370,7 +382,7 @@ def _append_retailer_row(
             idx = df.index[same_pair][0]
             _apply_extras(idx)
             df.to_csv(csv_path, index=False)
-            return "updated_full"
+            return "updated_volatile"
         return "exists"
 
     # Same cid but different url: update the URL on that row (treat as
@@ -429,12 +441,14 @@ def publish_all(dry_run: bool = False) -> Dict[str, int]:
         # existing row's title/price/in_stock with operator-supplied
         # values. Separate from `retailer_added` so dashboards can show
         # "fresh contributions" vs. "price refreshes".
-        "retailer_full_updated": 0,
+        "retailer_volatile_updated": 0,
         "retailer_missing_csv": 0,
-        # Number of full rows written (added OR updated) for blocked/
-        # dormant retailers. Useful for understanding how much of the
-        # CSV is sourced from operator entry vs. extractors.
-        "retailer_full_rows_written": 0,
+        # Number of rows with volatile fields written (added OR updated)
+        # for blocked/dormant retailers. Useful for understanding how much
+        # of the CSV is sourced from operator entry vs. extractors. Gap 3:
+        # metadata still comes from master via JOIN at read time; this
+        # counter only reflects price/in_stock/title writes.
+        "retailer_volatile_rows_written": 0,
         "marked_published": 0,
     }
 
@@ -507,11 +521,11 @@ def publish_all(dry_run: bool = False) -> Dict[str, int]:
                 )
             outcome = _preview_retailer_outcome(retailer_key, cid, url)
             status = (r.get("extractor_status") or "active").strip().lower()
-            row_kind = "FULL row" if status in ("blocked", "dormant") else "BARE row"
+            row_kind = "+price/in_stock" if status in ("blocked", "dormant") else "bare"
             log.info("      retailer csv: would %s (%s) in static/data/%s.csv",
                      outcome, row_kind, retailer_key)
             if status in ("blocked", "dormant"):
-                log.info("      price : %s  in_stock: %s",
+                log.info("      price : %s  in_stock: %s  (metadata→master at read time)",
                          r.get("price"), r.get("in_stock"))
         return stats
 
@@ -526,31 +540,35 @@ def publish_all(dry_run: bool = False) -> Dict[str, int]:
 
     # Step 2: per-retailer row writes. Active retailers get bare rows (the
     # daily extractor will fill price/title/in_stock on its next run);
-    # blocked/dormant retailers get full rows because no extractor will
-    # ever populate them. The extractor_status field is set per-row by the
-    # /api/admin/pending-extension-approvals response.
+    # blocked/dormant retailers get bare rows PLUS volatile price/in_stock/
+    # title columns because no extractor will ever populate them.
+    # Descriptive metadata (brand/line/wrapper/vitola/size/box_qty) is
+    # NEVER written by the publisher — Gap 3's master-first JOIN pulls
+    # those from master_cigars at /compare read time. The extractor_status
+    # field is set per-row by the /api/admin/pending-extension-approvals
+    # response.
     published_ids: List[int] = []
     for r in valid:
         status = (r.get("extractor_status") or "active").strip().lower()
-        is_full_row = status in ("blocked", "dormant")
-        extras = _format_full_row_extras(r) if is_full_row else None
+        is_volatile = status in ("blocked", "dormant")
+        extras = _format_volatile_row_extras(r) if is_volatile else None
 
         outcome = _append_retailer_row(
             r["retailer_key"], r["cid"], r["url"], extra_cols=extras,
         )
         if outcome == "added":
             stats["retailer_added"] += 1
-            if is_full_row:
-                stats["retailer_full_rows_written"] += 1
+            if is_volatile:
+                stats["retailer_volatile_rows_written"] += 1
         elif outcome == "exists":
             stats["retailer_exists"] += 1
         elif outcome == "updated_url":
             stats["retailer_url_updated"] += 1
-            if is_full_row:
-                stats["retailer_full_rows_written"] += 1
-        elif outcome == "updated_full":
-            stats["retailer_full_updated"] += 1
-            stats["retailer_full_rows_written"] += 1
+            if is_volatile:
+                stats["retailer_volatile_rows_written"] += 1
+        elif outcome == "updated_volatile":
+            stats["retailer_volatile_updated"] += 1
+            stats["retailer_volatile_rows_written"] += 1
         elif outcome == "missing_csv":
             stats["retailer_missing_csv"] += 1
             # Don't mark this one as published — the user needs to know the
@@ -558,9 +576,9 @@ def publish_all(dry_run: bool = False) -> Dict[str, int]:
             continue
         published_ids.append(r["id"])
         # Tag the log line so operators can see at a glance whether each
-        # row was a manual-entry write (FULL) or a scraper-placeholder
-        # (BARE). Helpful when triaging "why didn't this price appear?"
-        tag = "FULL" if is_full_row else "BARE"
+        # row was a manual-entry write (volatile) or a scraper-placeholder
+        # (bare). Helpful when triaging "why didn't this price appear?"
+        tag = "vol " if is_volatile else "bare"
         log.info(
             "  %s %s  %s  %s  %s",
             outcome.ljust(12), tag,

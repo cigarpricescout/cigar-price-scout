@@ -647,7 +647,7 @@ def get_blocked_retailer_keys() -> set:
 
 # Enhanced CSV loader with wrapper and vitola support
 class Product:
-    def __init__(self, retailer_key, retailer_name, title, url, brand, line, wrapper, vitola, size, box_qty, price, in_stock=True, current_promotions_applied='', cigar_id='', community_id=None, price_source='csv', observed_at=None, observation_count=0):
+    def __init__(self, retailer_key, retailer_name, title, url, brand, line, wrapper, vitola, size, box_qty, price, in_stock=True, current_promotions_applied='', cigar_id='', community_id=None, price_source='csv', observed_at=None, observation_count=0, strength='', country=''):
         self.retailer_key = retailer_key
         self.retailer_name = retailer_name
         self.title = title
@@ -673,35 +673,168 @@ class Product:
         # popup to render an absolute "Last observed YYYY-MM-DD" stamp.
         self.observed_at = observed_at
         self.observation_count = observation_count
+        # Master-only fields surfaced via Gap 3 master-first JOIN. Populated
+        # from master_cigars.csv (canonical) when the row's cigar_id resolves
+        # there; empty when no master entry exists yet (e.g. a brand-new CID
+        # in flight before master propagation).
+        self.strength = strength
+        self.country = country
 
-def load_csv(csv_path, retailer_key, retailer_name):
-    """Load products from a CSV file with enhanced format"""
+
+# ── Gap 3: master-first metadata index ────────────────────────────────
+#
+# Per-retailer CSVs duplicate metadata (brand/line/wrapper/vitola/size/
+# box_qty) that master_cigars already owns. Until Sprint 4 the loader
+# read those columns verbatim from each CSV — which meant (a) operator-
+# extension "bare rows" (cigar_id+url only) were invisible until the
+# next daily extractor filled them in, and (b) master corrections never
+# propagated to /compare until every retailer's scraper rewrote the row.
+#
+# load_master_index() builds a dict keyed by cigar_id with the canonical
+# metadata that load_csv() prefers over CSV columns. CSV values stay as
+# a fallback for in-flight new CIDs not yet in master.
+#
+# Also exposes strength + country_of_origin — fields master has had all
+# along but were never read by the loader.
+
+_master_index_cache = {"data": None, "timestamp": 0}
+
+def _master_csv_path() -> Path:
+    """Locate master_cigars.csv with fallbacks for dev / static-served deploys."""
+    candidates = [
+        Path("data/master_cigars.csv"),
+        Path(__file__).resolve().parents[1] / "data" / "master_cigars.csv",
+        Path(f"{STATIC_PATH}/data/master_cigars.csv"),
+    ]
+    for p in candidates:
+        if p.exists():
+            return p
+    return candidates[0]  # nonexistent path; loader returns {}
+
+def load_master_index() -> Dict[str, Dict[str, str]]:
+    """Load master_cigars.csv keyed by cigar_id for metadata enrichment.
+
+    Returns dict: cigar_id -> {brand, line, wrapper, vitola, size, box_qty,
+                               strength, country}.
+    Cached for 5 minutes alongside the product cache.
+    """
+    now = time.time()
+    if (_master_index_cache["data"] is not None
+            and (now - _master_index_cache["timestamp"]) < CACHE_TTL_SECONDS):
+        return _master_index_cache["data"]
+
+    index: Dict[str, Dict[str, str]] = {}
+    csv_path = _master_csv_path()
+    if not csv_path.exists():
+        logger.warning("master_cigars.csv not found at %s; load_master_index returning empty", csv_path)
+        _master_index_cache.update({"data": index, "timestamp": now})
+        return index
+
+    try:
+        with open(csv_path, 'r', newline='', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                cid = (row.get('cigar_id') or '').strip()
+                if not cid:
+                    continue
+                # Size is split across Length + Ring Gauge in master CSV.
+                length = (row.get('Length') or '').strip()
+                ring = (row.get('Ring Gauge') or '').strip()
+                size = f"{length}x{ring}" if (length and ring) else ''
+                box_qty_raw = (row.get('Box Quantity') or '').strip()
+                try:
+                    box_qty = int(float(box_qty_raw)) if box_qty_raw else 0
+                except (TypeError, ValueError):
+                    box_qty = 0
+                # Prefer wrapper_alias for display ("Connecticut Shade")
+                # over the technical wrapper column ("Connecticut"). The
+                # canonical wrapper_code lives in the CID itself.
+                wrapper_alias = (row.get('Wrapper_Alias') or '').strip()
+                wrapper_canon = (row.get('Wrapper') or '').strip()
+                index[cid] = {
+                    'brand':    (row.get('Brand') or '').strip(),
+                    'line':     (row.get('Line') or '').strip(),
+                    'wrapper':  wrapper_alias or wrapper_canon,
+                    'vitola':   (row.get('Vitola') or '').strip(),
+                    'size':     size,
+                    'box_qty':  box_qty,
+                    'strength': (row.get('Strength') or '').strip(),
+                    'country':  (row.get('country_of_origin') or '').strip(),
+                }
+    except Exception as e:
+        logger.warning("load_master_index failed: %s", e)
+    _master_index_cache.update({"data": index, "timestamp": now})
+    return index
+
+
+def _enrich_from_master(field: str, csv_value: str, master_row: Optional[Dict[str, str]]) -> str:
+    """master-first preference. master wins when populated; CSV fallback."""
+    if master_row:
+        m = master_row.get(field)
+        if m not in (None, '', 0):
+            return m
+    return csv_value if csv_value not in (None, '') else ''
+
+
+def load_csv(csv_path, retailer_key, retailer_name, master_index: Optional[Dict[str, Dict[str, str]]] = None):
+    """Load products from a per-retailer CSV with master-first metadata enrichment.
+
+    For every row, the cigar_id is looked up in master_index. When master
+    has the row, its brand/line/wrapper/vitola/size/box_qty/strength/
+    country win over the CSV columns — which makes operator-extension
+    bare rows (cigar_id + url + price + in_stock only) render correctly
+    on /compare immediately, and master corrections propagate without
+    every retailer needing to re-run their scraper.
+
+    CSV cells remain the fallback so brand-new CIDs not yet in master
+    (e.g. just-approved via the operator extension on Friday evening,
+    master append still pending) still surface with the operator's
+    typed-in metadata.
+    """
     items = []
     csv_file = Path(csv_path)
-    
+
     if not csv_file.exists():
         return items
-    
+
+    if master_index is None:
+        master_index = load_master_index()
+
     try:
         with open(csv_file, 'r', newline='', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             for row in reader:
                 try:
+                    cid = (row.get('cigar_id') or '').strip()
+                    master_row = master_index.get(cid) if cid else None
+
+                    brand    = _enrich_from_master('brand',    row.get('brand', ''),    master_row)
+                    line     = _enrich_from_master('line',     row.get('line', ''),     master_row)
+                    wrapper  = _enrich_from_master('wrapper',  row.get('wrapper', ''),  master_row)
+                    vitola   = _enrich_from_master('vitola',   row.get('vitola', ''),   master_row)
+                    size     = _enrich_from_master('size',     row.get('size', ''),     master_row)
+                    box_qty  = _enrich_from_master('box_qty',  row.get('box_qty', 25),  master_row)
+                    # Master-only fields (no CSV equivalent today)
+                    strength = (master_row or {}).get('strength', '') or ''
+                    country  = (master_row or {}).get('country',  '') or ''
+
                     product = Product(
                         retailer_key=retailer_key,
                         retailer_name=retailer_name,
                         title=row.get('title', ''),
                         url=row.get('url', ''),
-                        brand=row.get('brand', ''),
-                        line=row.get('line', ''),
-                        wrapper=row.get('wrapper', ''),
-                        vitola=row.get('vitola', ''),
-                        size=row.get('size', ''),
-                        box_qty=row.get('box_qty', 25),
+                        brand=brand,
+                        line=line,
+                        wrapper=wrapper,
+                        vitola=vitola,
+                        size=size,
+                        box_qty=box_qty,
                         price=row.get('price', 0),
                         in_stock=row.get('in_stock', True),
                         current_promotions_applied=row.get('current_promotions_applied', ''),
-                        cigar_id=row.get('cigar_id', ''),
+                        cigar_id=cid,
+                        strength=strength,
+                        country=country,
                     )
                     # Only include products with valid URLs and prices (exclude empty/zero)
                     if product.brand and product.line and product.size and product.url and product.price_cents > 0:
@@ -710,7 +843,7 @@ def load_csv(csv_path, retailer_key, retailer_name):
                     continue
     except Exception as e:
         print(f"Error loading {csv_path}: {e}")
-    
+
     return items
 
 # In-memory product cache (refreshes every 5 minutes instead of reading 35+ CSVs per request)
@@ -874,17 +1007,40 @@ def _load_observed_overlay(window_days: int = 14) -> list:
             pass
 
     retailer_name_by_key = {r["key"]: r["name"] for r in RETAILERS}
+    master_index = load_master_index()
     products = []
     for r in rows:
         (retailer_key, cigar_id, price_cents, in_stock,
          box_qty, scraped_title, url, observed_at) = r
         try:
-            cid_parts = (cigar_id or "").split("|")
-            brand = cid_parts[0] if cid_parts else ""
-            line = cid_parts[2] if len(cid_parts) > 2 else ""
-            vitola = cid_parts[3] if len(cid_parts) > 3 else ""
-            size = cid_parts[5] if len(cid_parts) > 5 else ""
-            wrapper = cid_parts[6] if len(cid_parts) > 6 else ""
+            # Master-first metadata (Gap 3). For observed rows, master is
+            # the ONLY source of human-readable metadata — the previous
+            # CID-string-split heuristic produced ALL-CAPS slugs
+            # ("ARTUROFUENTE", "HEMINGWAY") that looked broken in
+            # /compare. Master returns the natural-case canonical values.
+            master_row = master_index.get(cigar_id or "")
+            if master_row:
+                brand   = master_row.get("brand", "")
+                line    = master_row.get("line", "")
+                vitola  = master_row.get("vitola", "")
+                size    = master_row.get("size", "")
+                wrapper = master_row.get("wrapper", "")
+                strength = master_row.get("strength", "")
+                country  = master_row.get("country", "")
+                master_box_qty = master_row.get("box_qty") or 0
+                if master_box_qty:
+                    box_qty = master_box_qty
+            else:
+                # Fallback: parse the CID string. Ugly capitalization but
+                # better than empty rows for CIDs not yet in master.
+                cid_parts = (cigar_id or "").split("|")
+                brand = cid_parts[0] if cid_parts else ""
+                line = cid_parts[2] if len(cid_parts) > 2 else ""
+                vitola = cid_parts[3] if len(cid_parts) > 3 else ""
+                size = cid_parts[5] if len(cid_parts) > 5 else ""
+                wrapper = cid_parts[6] if len(cid_parts) > 6 else ""
+                strength = ""
+                country = ""
             products.append(Product(
                 retailer_key=retailer_key,
                 retailer_name=retailer_name_by_key.get(retailer_key, retailer_key),
@@ -902,6 +1058,8 @@ def _load_observed_overlay(window_days: int = 14) -> list:
                 price_source="observed",
                 observed_at=observed_at.isoformat() if observed_at else None,
                 observation_count=counts.get((retailer_key, cigar_id), 1),
+                strength=strength,
+                country=country,
             ))
         except Exception as e:
             print(f"_load_observed_overlay: skipping row: {e}")
@@ -1010,10 +1168,15 @@ def load_all_products():
     now = time.time()
     if _product_cache["data"] is not None and (now - _product_cache["timestamp"]) < CACHE_TTL_SECONDS:
         return _product_cache["data"]
-    
+
+    # Build the master metadata index ONCE per cache refresh and pass it
+    # into every per-retailer load_csv call. This avoids re-parsing
+    # master_cigars.csv 35+ times (once per retailer) on a cold cache.
+    master_index = load_master_index()
+
     all_products = []
     for retailer in RETAILERS:
-        products = load_csv(retailer["csv"], retailer["key"], retailer["name"])
+        products = load_csv(retailer["csv"], retailer["key"], retailer["name"], master_index=master_index)
         all_products.extend(products)
 
     # Overlay consumer observations on top of CSV data. For blocked retailers
@@ -1668,6 +1831,12 @@ def compare(
             "price_source": getattr(product, "price_source", "csv"),
             "observed_at": getattr(product, "observed_at", None),
             "observation_count": getattr(product, "observation_count", 0),
+            # Gap 3: master-only fields surfaced for the first time.
+            # Empty strings when a CID isn't in master yet (in-flight new
+            # CID). Consumed by /compare and the public comparison API;
+            # template surfaces these where shopper-relevant.
+            "strength": getattr(product, "strength", "") or "",
+            "country": getattr(product, "country", "") or "",
         }
         results.append(result)
     
@@ -1838,6 +2007,8 @@ def compare_all(
             "community_id": product.community_id,
             "price_context": price_context,
             "current_promotions_applied": product.current_promotions_applied,
+            "strength": getattr(product, "strength", "") or "",
+            "country": getattr(product, "country", "") or "",
         }
         results.append(result)
 

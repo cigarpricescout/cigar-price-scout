@@ -960,6 +960,10 @@ def _build_comparison_for_cid(
             "vitola": first.vitola,
             "size": first.size,
             "box_qty": first.box_qty,
+            # Gap 3: master-only fields, now JOINed into Product at load
+            # time. Empty when the CID isn't in master yet (in-flight).
+            "strength": getattr(first, "strength", "") or "",
+            "country":  getattr(first, "country", "")  or "",
             "zip": zip or None,
             "state": state,
             "results": results[:limit],

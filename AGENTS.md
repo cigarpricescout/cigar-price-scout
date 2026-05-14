@@ -102,6 +102,40 @@ CSV/observed wins on collision. Drops are logged at INFO level.
 
 Master CSV → DB sync is handled by `tools/master/` scripts.
 
+### 4a. Master-first JOIN (Gap 3 / Sprint 5)
+
+The `/compare` loader does NOT trust per-retailer CSVs for descriptive
+metadata. Every `Product` is enriched by `load_master_index()` at load
+time:
+
+```
+              cigar_id (from per-retailer CSV row)
+                    │
+                    ▼
+        ┌───────────────────────────┐
+        │  load_master_index()      │
+        │  (master_cigars.csv,      │
+        │   cached 5 minutes)       │
+        └───────────────────────────┘
+                    │
+                    ▼  master wins; CSV fallback
+        brand / line / wrapper / vitola / size / box_qty
+        strength / country_of_origin  (master-only)
+```
+
+Consequences for the per-retailer CSV files in `static/data/`:
+
+- **Active retailers** (extractor exists): write `cigar_id + url` only.
+  The daily extractor fills in price/title/in_stock on its next run.
+  Metadata columns can stay populated for historical reasons but are
+  IGNORED by the loader — master wins.
+- **Blocked/dormant retailers** (no extractor): write
+  `cigar_id + url + price + in_stock + title`. NO metadata columns are
+  written by the publisher; they're sourced from master at read time.
+- **Master corrections propagate immediately** to `/compare` because the
+  loader re-reads master every 5 minutes — no per-retailer CSV rewrite
+  needed.
+
 ---
 
 ## 5. Endpoints
