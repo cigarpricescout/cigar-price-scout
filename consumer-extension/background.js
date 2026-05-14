@@ -25,6 +25,7 @@ import {
   resolveRetailerKey,
   getZip,
   getObserverId,
+  getPreferredCidForUrl,
 } from "./config.js";
 
 // ── First-run consent flow ─────────────────────────────────────────────
@@ -133,9 +134,10 @@ function looksLikeProductPage(rawUrl, state) {
 const STATUS_CACHE = new Map(); // url -> { fetchedAt, response, scraped }
 const STATUS_TTL_MS = 60 * 1000;
 
-async function fetchUrlStatus(url) {
-  const zip = await getZip();
-  return publicFetch("/api/public/url-status", { query: { url, zip } });
+async function fetchUrlStatus(url, zip, cid) {
+  const query = { url, zip };
+  if (cid) query.cid = cid;
+  return publicFetch("/api/public/url-status", { query });
 }
 
 async function refreshForTab(tab) {
@@ -166,11 +168,13 @@ async function refreshForTab(tab) {
     // actually clicks the icon they get a real response.
   }
 
+  const zip = await getZip();
+  const prefCid = await getPreferredCidForUrl(tab.url);
   // Fresh status + scrape, in parallel.
   let response, scraped;
   try {
     const [s, sc] = await Promise.all([
-      fetchUrlStatus(tab.url).catch(() => null),
+      fetchUrlStatus(tab.url, zip, prefCid).catch(() => null),
       scrapeActiveTab(tab.id).catch(() => null),
     ]);
     response = s;
@@ -198,6 +202,7 @@ async function refreshForTab(tab) {
   ) {
     postObservation({
       url: tab.url,
+      cigar_id: prefCid || undefined,
       scraped_title: scraped.title || scraped.jsonldName || null,
       price: scraped.price ?? null,
       currency: scraped.currency || "USD",

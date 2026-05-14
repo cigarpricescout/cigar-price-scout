@@ -158,9 +158,11 @@ Consequences for the per-retailer CSV files in `static/data/`:
 | Method | Path | Use |
 |---|---|---|
 | GET  | `/api/public/retailer-registry` | Hostnames the extension activates on |
-| GET  | `/api/public/url-status?url=&zip=` | Single-call popup state (matched / candidate / seen / no_scraper) + inline top-3 comparison. `seen_status` is prefixed by source: `extension_pending` / `extension_published` (operator-staged via op-extension, awaiting publish) vs `community_pending` / `community_approved` / `community_rejected` (consumer-submitted). The popup treats anything `extension_*` or `community_approved` as "Approved — prices coming soon" so consumers see honest feedback once the operator has acted. |
-| POST | `/api/community/observe` | Anonymous passive price observation |
+| GET  | `/api/public/url-status?url=&zip=&cid=` | Single-call popup state (matched / candidate / seen / no_scraper) + inline comparison. `seen_status` prefixes mirror operator vs community queues (see above). **Multi-cigar URLs:** when more than one `cigar_id` shares the same canonical URL, the response includes `cigar_options: [{cigar_id, label}, ...]`; pass `cid=` to select the active comparison (the extension persists the dropdown and sends `cigar_id` on `POST /api/community/observe`). |
+| POST | `/api/community/observe` | Anonymous passive price observation. Optional `cigar_id` when the URL maps to multiple CIDs (consumer dropdown selection). |
 | POST | `/api/community/propose-metadata` | Consumer-suggested brand/line/vitola/box_qty/price for an unmapped URL |
+| POST | `/api/community/preview-candidate` | **"Is this the cigar?" step 1** — HIGH-confidence CID match + human-readable label; **read-only** (no DB write). |
+| POST | `/api/community/confirm-candidate` | **"Is this the cigar?" YES** — stages `extension_staged_approvals` with `source='consumer_auto'`, merges into live `url_index`. Reversible via `POST /api/admin/reject-auto-publish`. |
 | POST | `/api/public/guess-metadata` | Snaps a scraped product title to canonical `master_cigars` brand/line/vitola for the candidate-state form's prefill. Returns `{prefill, catalog, matched_via}`. Empty prefill fields mean "no catalog match" — the popup leaves the input empty rather than re-introducing the noisy split-token guesses we used before. Also returns the brand/line whitelists so the form can offer `<datalist>` typeahead (soft constraint — legit new brands are still typable and operator review picks them up). |
 | POST | `/api/community/report-correction` | Consumer-submitted correction for a URL we already mapped to a CID. Same `community_url_proposals` row but with `is_correction=TRUE`, `current_cid`, `current_price_cents`. Server enforces loose price guardrails (must be in [$5, $5,000] AND within ±75% of `current_price`); identical-to-current submissions short-circuit with `status="no_changes_detected"` and don't queue anything. |
 | POST | `/api/community/request-retailer` | "Please add this retailer" — observer-linked |
@@ -172,7 +174,7 @@ Consequences for the per-retailer CSV files in `static/data/`:
 | Method | Path | Use |
 |---|---|---|
 | GET  | `/api/admin/retailer-registry` | Full registry view |
-| GET  | `/api/admin/url-status?url=` | Per-URL state for the operator extension |
+| GET  | `/api/admin/url-status?url=&cid=` | Per-URL state for the operator extension (optional `cid=` when the URL maps to multiple CIDs). |
 | GET  | `/api/admin/master-vocab` | Brand/line/vitola/wrapper vocab for the popup datalist |
 | POST | `/api/admin/stage-approval` | Stage an extension approval |
 | POST | `/api/admin/skip-url` | Add a URL to `url_skip_list` |
@@ -181,6 +183,8 @@ Consequences for the per-retailer CSV files in `static/data/`:
 | GET  | `/api/admin/observed-prices-recent` | Debug: most recent observations |
 | POST | `/api/admin/cleanup-orphan-observations` | Delete non-product / tracking-param / empty observation rows |
 | POST | `/api/admin/mark-extension-published` | Local publisher confirms a row landed in the CSV |
+| GET  | `/api/admin/auto-publish-report` | Lists recent consumer auto-confirms (`source='consumer_auto'`) for daily spot-check; optional artifact via `daily-consumer-auto-publish-report.yml` when `ADMIN_SECRET_KEY` is set on the repo |
+| POST | `/api/admin/reject-auto-publish` | Operator reverses a bad consumer auto-publish row |
 | POST | `/api/admin/resolve-community-proposal` | Operator approves/edits/rejects a `community_url_proposals` row. The `/admin/review?source=community` page uses this for one-click triage. |
 
 Note: `/api/admin/url-status` also returns a `community_proposal` object

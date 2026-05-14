@@ -103,6 +103,38 @@ export async function setZip(value) {
   return v;
 }
 
+// ── Per-URL preferred CID (multi-cigar PDP picker) ─────────────────────
+// Keyed by protocol+host+pathname so ?variant=… shares one preference.
+
+const CID_PREF_PREFIX = "cidPref:v1:";
+
+export function urlPickDedupeKey(rawUrl) {
+  try {
+    const u = new URL(rawUrl);
+    return `${u.protocol}//${u.host}${u.pathname}`;
+  } catch (_) {
+    return rawUrl;
+  }
+}
+
+export async function getPreferredCidForUrl(rawUrl) {
+  try {
+    const key = CID_PREF_PREFIX + urlPickDedupeKey(rawUrl);
+    const out = await chrome.storage.local.get(key);
+    return out[key] || "";
+  } catch (_) {
+    return "";
+  }
+}
+
+export async function setPreferredCidForUrl(rawUrl, cigarId) {
+  try {
+    const key = CID_PREF_PREFIX + urlPickDedupeKey(rawUrl);
+    if (!cigarId) await chrome.storage.local.remove(key);
+    else await chrome.storage.local.set({ [key]: cigarId });
+  } catch (_) {}
+}
+
 // ── Best-effort page scrape (executed in target tab via scripting API) ─
 // Identical extraction logic to the operator extension's scrapeActiveTab.
 // Kept in lockstep so a consumer install + an operator install observing

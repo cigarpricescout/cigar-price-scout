@@ -20,7 +20,7 @@ from __future__ import annotations
 import csv
 import re
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 # Query parameters we strip from URLs before any URL-index lookup or
@@ -563,16 +563,63 @@ def build_retailer_registry(
     return registry
 
 
+def merge_cid_into_url_index(
+    index: Dict[str, Tuple[str, List[str]]],
+    url: str,
+    retailer_key: str,
+    cid: str,
+) -> None:
+    """Attach one more CID to a canonical product URL (multi-SKU pages).
+
+    Same retailer_key only — if another retailer already owns the URL slot,
+    we skip (cross-retailer collisions on identical canonical URLs are rare
+    and need human resolution).
+    """
+    if not url or not retailer_key or not cid:
+        return
+    if url not in index:
+        index[url] = (retailer_key, [cid])
+        return
+    rk, cids = index[url]
+    if rk != retailer_key:
+        return
+    if cid not in cids:
+        cids.append(cid)
+
+
+def url_index_entry_cids(
+    entry: Optional[Tuple[Any, ...]],
+) -> Tuple[Optional[str], List[str]]:
+    """Normalize a url_index cache entry to (retailer_key, [cigar_id, ...]).
+
+    Accepts the modern ``(retailer_key, [cid, ...])`` shape and the legacy
+    ``(retailer_key, single_cid_str)`` tuple left over from older in-memory
+    overlays.
+    """
+    if not entry:
+        return None, []
+    rk = entry[0]
+    if rk is None:
+        return None, []
+    tail = entry[1] if len(entry) > 1 else None
+    if isinstance(tail, list):
+        return rk, [c for c in tail if isinstance(c, str) and c]
+    if isinstance(tail, str) and tail:
+        return rk, [tail]
+    return rk, []
+
+
 def load_retailer_url_index(
     static_data_dir: Path,
     retailers: Optional[Iterable[str]] = None,
-) -> Dict[str, Tuple[str, str]]:
-    """Build a {url: (retailer_key, cigar_id)} index from per-retailer CSVs.
+) -> Dict[str, Tuple[str, List[str]]]:
+    """Build ``{canonical_url: (retailer_key, [cigar_id, ...])}`` from CSVs.
 
-    Used by /api/admin/url-status to detect URLs that are already published
-    in the live data, regardless of staging state.
+    Multiple CSV rows may share the same canonical URL (e.g. one PDP for
+    several box SKUs). All distinct ``cigar_id`` values are collected so
+    the consumer extension can offer a per-URL picker.
     """
-    index: Dict[str, Tuple[str, str]] = {}
+    index: Dict[str, Tuple[str, List[str]]] = {}
     if not static_data_dir.exists():
         return index
     keys = set(retailers) if retailers else None
@@ -591,11 +638,12 @@ def load_retailer_url_index(
                     u = (row.get("url") or "").strip()
                     cid = (row.get("cigar_id") or "").strip()
                     if u and cid:
-                        # Key the index by canonical URL so lookups from
-                        # the extension (which may carry ?variant=… or
-                        # utm_* cruft) hit even when the CSV stores the
-                        # bare URL.
-                        index[canonicalize_url(u)] = (name, cid)
+                        merge_cid_into_url_index(
+                            index,
+                            canonicalize_url(u),
+                            name,
+                            cid,
+                        )
         except Exception:
             continue
     return index

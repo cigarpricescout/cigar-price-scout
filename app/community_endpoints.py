@@ -43,14 +43,18 @@ import logging
 import re
 import time
 from collections import defaultdict, deque
-from typing import Any, Deque, Dict, Optional
+from typing import Any, Deque, Dict, List, Optional
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from app.cid_matcher import canonicalize_url
+from app.cid_matcher import (
+    canonicalize_url,
+    merge_cid_into_url_index,
+    url_index_entry_cids,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -292,6 +296,9 @@ class ObserveBody(BaseModel):
     # Raw JSON-LD captured for debugging / future re-parsing. Cap so a
     # rogue page can't ship a megabyte of HTML.
     jsonld: Optional[Dict[str, Any]] = None
+    # When a URL maps to multiple CIDs, the consumer extension passes the
+    # user's dropdown pick so observations attach to the right variant.
+    cigar_id: Optional[str] = Field(None, max_length=200)
     # 'operator' or 'consumer'. We default to 'consumer'; the operator
     # extension overrides to 'operator' so we can slice "my data" later.
     observer_source: Optional[str] = "consumer"
@@ -401,6 +408,7 @@ def _resolve_cigar_id_from_url(
     url: str,
     retailer_key: Optional[str],
     observed_box_qty: Optional[int] = None,
+    preferred_cid: Optional[str] = None,
 ) -> Optional[str]:
     """If the URL is already in the live retailer CSV, return its CID — but
     REFUSE to attach the CID when the observation's box_qty contradicts the
@@ -421,9 +429,12 @@ def _resolve_cigar_id_from_url(
     try:
         from app.extension_endpoints import _cache_state  # type: ignore
         live = _cache_state.get("url_index", {}).get(url)
-        if not (live and live[0] == retailer_key):
+        if not live:
             return None
-        cid = live[1]
+        rk, cids = url_index_entry_cids(live)
+        if rk != retailer_key or not cids:
+            return None
+        cid = preferred_cid if preferred_cid and preferred_cid in cids else cids[0]
         if observed_box_qty is not None:
             cid_qty = _cid_box_qty(cid)
             if cid_qty is not None and cid_qty != observed_box_qty:
@@ -478,7 +489,9 @@ async def observe(request: Request, body: ObserveBody):
     body.url = canonicalize_url(body.url)
 
     retailer_key = _resolve_retailer_key(body.url)
-    cigar_id = _resolve_cigar_id_from_url(body.url, retailer_key, body.box_qty)
+    cigar_id = _resolve_cigar_id_from_url(
+        body.url, retailer_key, body.box_qty, _trim(body.cigar_id) or None,
+    )
     qty_type = _coerce_quantity_type(body.quantity_type, body.box_qty)
     price_cents = _to_price_cents(body.price)
     source = (body.observer_source or "consumer").lower()
@@ -604,6 +617,336 @@ async def propose_metadata(request: Request, body: ProposeMetadataBody):
     except Exception as e:
         logger.exception("propose_metadata failed: %s", e)
         return JSONResponse({"error": str(e)}, status_code=500)
+
+
+# ── POST /api/community/preview-candidate ──────────────────────────────
+#
+# The "Is this the cigar?" confirmation flow.
+#
+# Why this exists: when a consumer lands on an unmonitored URL and fills
+# out the metadata form (brand / line / vitola / wrapper / box qty /
+# price), most of the time the master catalog already has a CID that
+# fits — we just need them to confirm. Old flow: submit -> 24h+ wait for
+# the operator to review every single proposal. New flow:
+#
+#   1. Consumer fills the form, hits "Submit".
+#   2. Client calls /preview-candidate. Server runs the same HIGH-
+#      confidence matcher used elsewhere AND, if it finds a match, builds
+#      a human-readable label (no pipes, no duplicated parts, no codes).
+#   3. Consumer sees "Is this the cigar? Punch Knuckle Buster Gordo •
+#      6x60 • Habano (Nicaraguan) • Box of 20"  [Yes] [No, not quite].
+#   4a. YES  -> /confirm-candidate auto-publishes the URL->CID mapping
+#       to extension_staged_approvals with source='consumer_auto'. Live
+#       overlay picks it up immediately so the consumer ALSO sees the
+#       comparison card in the same popup session. Operator sees these
+#       in a daily spot-check report (GET /api/admin/auto-publish-report)
+#       so a wrong auto-match can be reversed.
+#   4b. NO   -> /propose-metadata (existing) puts it in
+#       community_url_proposals for operator review. The operator may
+#       need to create a brand-new CID.
+#   4c. No candidate at all -> /propose-metadata as before.
+
+
+def _build_candidate_display_label(
+    cigar_id: str,
+    master_index: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> Optional[Dict[str, Any]]:
+    """Render a CID as a reader-friendly "Is this the cigar?" preview.
+
+    Returns a dict with the individual fields plus a single ``label``
+    string the popup can drop directly into the confirmation card:
+
+        "Punch Knuckle Buster Gordo • 6x60 • Habano (Nicaraguan) • Box of 20"
+
+    Why this lives here (and not in the matcher): the matcher returns
+    only the raw canon wrapper. To present the cigar the way the main
+    site does — alias-first with the canonical name in parens — we need
+    load_master_index which carries both wrapper_alias and wrapper_canon.
+    """
+    if not cigar_id:
+        return None
+    if master_index is None:
+        try:
+            from app.main import load_master_index  # type: ignore
+            master_index = load_master_index()
+        except Exception:
+            return None
+    row = master_index.get(cigar_id)
+    if not row:
+        return None
+
+    brand = (row.get("brand") or "").strip()
+    line = (row.get("line") or "").strip()
+    vitola = (row.get("vitola") or "").strip()
+    size = (row.get("size") or "").strip()
+    box_qty = row.get("box_qty")
+    wrapper_alias = (row.get("wrapper_alias") or "").strip()
+    wrapper_canon = (row.get("wrapper_canon") or "").strip()
+
+    # alias-first display, matching the main-page dropdown convention:
+    # "Habano (Nicaraguan)" reads better than "Nicaraguan (Habano)"
+    # when alias is the band-printed term. Falls back gracefully when
+    # only one of the two is populated.
+    if wrapper_alias and wrapper_canon and wrapper_alias.lower() != wrapper_canon.lower():
+        wrapper_display = f"{wrapper_alias} ({wrapper_canon})"
+    else:
+        wrapper_display = wrapper_alias or wrapper_canon or ""
+
+    parts: list[str] = []
+    head = " ".join(p for p in (brand, line, vitola) if p)
+    if head:
+        parts.append(head)
+    if size:
+        parts.append(size)
+    if wrapper_display:
+        parts.append(wrapper_display)
+    if box_qty:
+        try:
+            parts.append(f"Box of {int(box_qty)}")
+        except (TypeError, ValueError):
+            pass
+    label = " • ".join(parts)
+
+    return {
+        "cigar_id": cigar_id,
+        "label": label,
+        "brand": brand,
+        "line": line,
+        "vitola": vitola,
+        "size": size,
+        "wrapper_display": wrapper_display,
+        "box_qty": int(box_qty) if box_qty else None,
+    }
+
+
+@router.post("/preview-candidate")
+async def preview_candidate(request: Request, body: ProposeMetadataBody):
+    """Step 1 of the "Is this the cigar?" flow.
+
+    Reuses the propose-metadata payload and the existing HIGH-confidence
+    matcher. Returns a candidate (if any) wrapped with a human-readable
+    label. Does NOT write anything — that's deliberate so the user can
+    back out cleanly if the candidate is wrong.
+    """
+    observer = _observer_id(body.observer_id, request)
+    # Reuses the propose-metadata bucket: this endpoint is one of two
+    # required hops in the submit flow, so it should share the cap.
+    if not _rate_limit(_prop_hour, observer, 3600, _PROPOSE_MAX_PER_HOUR):
+        return JSONResponse({"error": "rate_limited", "scope": "per_hour"}, status_code=429)
+
+    body.url = canonicalize_url(body.url)
+    retailer_key = _resolve_retailer_key(body.url)
+
+    try:
+        match_info = _try_match_proposal_to_cid(body)
+    except Exception as e:
+        logger.exception("preview_candidate match failed: %s", e)
+        match_info = None
+
+    candidate = None
+    if match_info:
+        candidate = _build_candidate_display_label(match_info["cigar_id"])
+        if candidate:
+            candidate["confidence"] = match_info.get("confidence")
+
+    return {
+        "ok": True,
+        "retailer_key": retailer_key,
+        "candidate": candidate,  # None -> client falls through to review-queue submit
+    }
+
+
+# ── POST /api/community/confirm-candidate ──────────────────────────────
+
+
+class ConfirmCandidateBody(BaseModel):
+    """Consumer says "Yes, that's the cigar" against a preview-candidate result.
+
+    We trust the candidate cigar_id ONLY when (a) it parses and (b) it
+    exists in master_cigars — both checked server-side. The auto-publish
+    path bypasses operator review on purpose; the operator backstop is
+    the daily auto-publish report.
+    """
+    url: str = Field(..., min_length=1, max_length=2048)
+    cigar_id: str = Field(..., min_length=1, max_length=200)
+    observer_id: Optional[str] = None
+    observer_source: Optional[str] = "consumer"
+    # Scraped context (kept on the staged row for the audit trail; not
+    # used to overwrite the retailer CSV during the daily drain).
+    scraped_title: Optional[str] = Field(None, max_length=500)
+    confirmed_price: Optional[float] = None
+    in_stock: Optional[bool] = None
+
+
+@router.post("/confirm-candidate")
+async def confirm_candidate(request: Request, body: ConfirmCandidateBody):
+    """Step 2 (YES path) of the "Is this the cigar?" flow.
+
+    Inserts a staged-approval row with source='consumer_auto' and flips
+    the in-memory URL index so the same popup session can render the
+    comparison card immediately. Same idempotency guarantees as the
+    operator approval path (UNIQUE on retailer_key, url, cid).
+    """
+    observer = _observer_id(body.observer_id, request)
+    if not _rate_limit(_prop_hour, observer, 3600, _PROPOSE_MAX_PER_HOUR):
+        return JSONResponse({"error": "rate_limited", "scope": "per_hour"}, status_code=429)
+
+    body.url = canonicalize_url(body.url)
+    retailer_key = _resolve_retailer_key(body.url)
+    if not retailer_key:
+        return JSONResponse(
+            {"error": "unknown_retailer",
+             "detail": "URL host is not in the active retailer registry."},
+            status_code=400,
+        )
+
+    # The candidate cigar_id MUST already exist in master_cigars — this
+    # whole flow only fires after a HIGH-confidence match against the
+    # master catalog. Defensive recheck here so a malicious client can't
+    # auto-publish an arbitrary CID.
+    try:
+        from app.main import load_master_index  # type: ignore
+        master_index = load_master_index()
+    except Exception as e:
+        logger.exception("confirm_candidate: load_master_index failed: %s", e)
+        return JSONResponse({"error": "master_unavailable"}, status_code=503)
+
+    master_row = master_index.get(body.cigar_id)
+    if not master_row:
+        return JSONResponse(
+            {"error": "unknown_cigar_id",
+             "detail": "Candidate CID is not in master_cigars."},
+            status_code=400,
+        )
+
+    # Parse the CID so we can populate the descriptive columns alongside
+    # the master JOIN — keeps the staged row self-describing for the
+    # daily report and for the publisher's CSV append.
+    try:
+        from app.cid_matcher import parse_cid  # type: ignore
+        parts = parse_cid(body.cigar_id) or {}
+    except Exception:
+        parts = {}
+
+    confirmed_cents = _to_price_cents(body.confirmed_price)
+    confirmed_dollars = (
+        round(confirmed_cents / 100.0, 2) if confirmed_cents is not None else None
+    )
+
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO extension_staged_approvals
+              (cid, retailer_key, url, is_new_cid,
+               brand, parent_brand, line, vitola, vitola2, size,
+               wrapper_code, wrapper, box_qty,
+               title, price, in_stock, status, source)
+            VALUES (%s,%s,%s,FALSE,
+                    %s,%s,%s,%s,%s,%s,
+                    %s,%s,%s,
+                    %s,%s,%s,'pending','consumer_auto')
+            ON CONFLICT (retailer_key, url, cid) DO UPDATE
+              SET title  = COALESCE(EXCLUDED.title,  extension_staged_approvals.title),
+                  price  = COALESCE(EXCLUDED.price,  extension_staged_approvals.price),
+                  in_stock = COALESCE(EXCLUDED.in_stock, extension_staged_approvals.in_stock),
+                  -- Don't downgrade an operator-staged row to consumer_auto.
+                  source = CASE
+                    WHEN extension_staged_approvals.source = 'operator' THEN 'operator'
+                    ELSE EXCLUDED.source
+                  END,
+                  status = CASE
+                    WHEN extension_staged_approvals.status = 'published' THEN 'published'
+                    ELSE 'pending'
+                  END
+            RETURNING id
+            """,
+            (
+                body.cigar_id, retailer_key, body.url,
+                master_row.get("brand"),
+                parts.get("parent_brand") or master_row.get("brand"),
+                master_row.get("line"),
+                master_row.get("vitola"),
+                parts.get("vitola2") or master_row.get("vitola"),
+                master_row.get("size"),
+                parts.get("wrapper_code"),
+                master_row.get("wrapper"),
+                master_row.get("box_qty"),
+                _trim(body.scraped_title),
+                confirmed_dollars,
+                body.in_stock,
+            ),
+        )
+        staged_id = cur.fetchone()[0]
+
+        # If this confirmation resolves an earlier consumer proposal for
+        # the same URL, mark it auto_resolved so the operator review
+        # queue doesn't carry duplicates. (Mirrors what the operator
+        # stage_approval handler does for body.community_proposal_id,
+        # except we resolve every pending proposal for the URL.)
+        cur.execute(
+            """
+            UPDATE community_url_proposals
+               SET status='approved',
+                   resolved_cid=%s,
+                   reviewed_at=NOW()
+             WHERE url=%s AND status='pending'
+            """,
+            (body.cigar_id, body.url),
+        )
+        resolved = cur.rowcount or 0
+
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.exception("confirm_candidate insert failed: %s", e)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+    # Live overlay: same trick as the operator stage_approval path — push
+    # the mapping into the in-memory URL index so this popup session
+    # immediately shows the comparison without waiting for the cache TTL.
+    try:
+        from app.extension_endpoints import _cache_state  # type: ignore
+        merge_cid_into_url_index(
+            _cache_state["url_index"],
+            body.url,
+            retailer_key,
+            body.cigar_id,
+        )
+    except Exception as e:
+        logger.warning("confirm_candidate live overlay failed: %s", e)
+
+    # Bust /compare cache so the next page render reflects the new mapping.
+    try:
+        from app.main import _product_cache  # type: ignore
+        _product_cache["data"] = None
+        _product_cache["timestamp"] = 0
+    except Exception:
+        pass
+
+    # Build the comparison the popup can render right away. We use the
+    # same builder as propose-metadata's auto-match path so the consumer
+    # sees identical UI regardless of which branch they came through.
+    comparison = None
+    try:
+        comparison = _build_comparison_for_cid(body.cigar_id, zip="", limit=3)
+        if comparison and not comparison.get("results"):
+            comparison = None
+    except Exception as e:
+        logger.warning(
+            "confirm_candidate: comparison build for cid=%s failed: %s",
+            body.cigar_id, e,
+        )
+
+    return {
+        "ok": True,
+        "staged_id": staged_id,
+        "cigar_id": body.cigar_id,
+        "retailer_key": retailer_key,
+        "resolved_proposal_count": resolved,
+        "comparison": comparison,
+    }
 
 
 # ── POST /api/community/report-correction ──────────────────────────────
@@ -922,6 +1265,7 @@ async def public_url_status(
     request: Request,
     url: str,
     zip: str = "",
+    cid: str = "",
 ):
     """Single-call popup state.
 
@@ -954,15 +1298,25 @@ async def public_url_status(
             "retailer_key": retailer_key,
         }
 
-    # Live retailer CSV hit?
+    # Live retailer CSV hit (may list multiple CIDs for one PDP).
     matched_cid: Optional[str] = None
+    cigar_options: Optional[List[Dict[str, str]]] = None
     try:
         from app.extension_endpoints import _cache_state  # type: ignore
         live = _cache_state.get("url_index", {}).get(url)
-        if live and live[0] == retailer_key:
-            matched_cid = live[1]
+        rk_live, cids_live = url_index_entry_cids(live)
+        if rk_live == retailer_key and cids_live:
+            sel = (cid or "").strip()
+            matched_cid = sel if sel and sel in cids_live else cids_live[0]
+            if len(cids_live) > 1:
+                cigar_options = []
+                for c in sorted(cids_live):
+                    disp = _build_candidate_display_label(c)
+                    lab = disp["label"] if disp else c
+                    cigar_options.append({"cigar_id": c, "label": lab})
     except Exception:
         matched_cid = None
+        cigar_options = None
 
     # Has the operator already touched this URL via the extension?
     # When the URL has a pending community_url_proposal, also surface
@@ -1024,6 +1378,7 @@ async def public_url_status(
             "url": url,
             "retailer_key": retailer_key,
             "matched_cid": matched_cid,
+            "cigar_options": cigar_options,
             "seen_status": seen_status,
             "comparison": comparison,
         }

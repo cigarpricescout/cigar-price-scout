@@ -144,12 +144,13 @@
       <ol>
         <li>Open a JR Cigars (or any other blocked-retailer) product page the system hasn't seen.</li>
         <li>Click the consumer extension popup. Confirm amber "? Help us identify this cigar" form.</li>
-        <li>Edit/confirm the 5 fields (Brand, Line, Vitola, Box Qty, Price) and hit Submit.</li>
-        <li>Click <em>Refresh</em> to verify the proposal landed.</li>
+        <li>Edit/confirm the fields and hit Submit — if the server finds a confident catalog match, you should see <strong>Is this the cigar?</strong> before anything is saved.</li>
+        <li>Choose <em>Yes</em> to auto-publish (or <em>No</em> to send to operator review). Click <em>Refresh</em> below to verify the proposal or staged row landed.</li>
       </ol>
       <div class="actions">
         <button class="primary" onclick="openJRCigars()">Open JR Cigars (find a product)</button>
         <button onclick="refreshProposals()">Refresh proposals</button>
+        <button onclick="refreshAutoPublishReport()">Consumer auto-publish report</button>
       </div>
       <p class="expected">
         Expected: a new <code>status='pending'</code> row with your brand/line/vitola/box_qty and <code>confirmed_price_cents</code> set.
@@ -393,6 +394,19 @@
       } else {
         setStatus(3, "pending", "no pending proposals yet");
       }
+    } catch (e) {
+      $("result3").textContent = "ERROR: " + e.message;
+      setStatus(3, "fail", "error");
+    }
+  }
+
+  async function refreshAutoPublishReport() {
+    setStatus(3, "pending", "auto-publish…");
+    try {
+      const data = await apiGet("/api/admin/auto-publish-report", { days: 7, limit: 50 });
+      const merged = { counts_by_status: data.counts_by_status, sample: (data.results || []).slice(0, 10) };
+      $("result3").textContent = JSON.stringify(merged, null, 2);
+      setStatus(3, "ok", `✓ ${data.count || 0} rows (7d)`);
     } catch (e) {
       $("result3").textContent = "ERROR: " + e.message;
       setStatus(3, "fail", "error");

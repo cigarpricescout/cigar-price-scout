@@ -3,6 +3,7 @@ import {
   hasConsented,
   getObserverId,
   getZip,
+  setPreferredCidForUrl,
 } from "./config.js";
 
 const root = document.getElementById("root");
@@ -62,7 +63,7 @@ function buildCigarLandingUrl(brand, line) {
 
   switch (response.state) {
     case "matched":     return renderMatched(tab, response, scraped);
-    case "candidate":   return renderCandidate(tab, response, scraped);
+    case "candidate":   return renderCandidate(tab, response, scraped, null);
     case "seen":        return renderSeen(tab, response, scraped);
     case "no_scraper":  return renderNoScraper(tab, response);
     case "non_product": return renderEmpty("Browse a cigar product page to see comparisons.");
@@ -187,12 +188,25 @@ function renderMatched(tab, response, scraped) {
         <div class="empty-state" style="padding: 16px 0;">
           ${escapeHtml(comparison?.reason || "Not enough retailers yet to compare.")}
         </div>
+        <div class="actions" style="padding-top:8px">
+          <button type="button" id="add-cigar-empty" class="link-btn">Add another cigar</button>
+        </div>
+        <div class="hint-below" style="font-size:11px;color:#6b7280">Packs and singles excluded — to be added in future iterations.</div>
       </div>
       <div class="footer">
         <a href="#" id="open-options">Settings</a>
         <a href="https://cigarpricescout.com" target="_blank">cigarpricescout.com</a>
       </div>
     `;
+    const addBtn = document.getElementById("add-cigar-empty");
+    if (addBtn) {
+      addBtn.addEventListener("click", () => {
+        renderCandidate(tab, response, scraped, {
+          mode: "add_another",
+          previousMatched: { tab, response, scraped },
+        });
+      });
+    }
     wireFooter();
     return;
   }
@@ -205,6 +219,18 @@ function renderMatched(tab, response, scraped) {
     ? currentRow.delivered_cents - cheapestDeliv
     : 0;
 
+  const pickRow = (response.cigar_options && response.cigar_options.length > 1)
+    ? `
+      <div class="field cigar-picker" style="margin-bottom:12px">
+        <label for="cigar-pick" style="font-size:12px;font-weight:600">Which cigar on this page?</label>
+        <select id="cigar-pick" style="width:100%;margin-top:4px;padding:6px 8px;font-size:13px;border-radius:6px;border:1px solid #d1d5db">
+          ${response.cigar_options.map((o) => `
+            <option value="${escapeAttr(o.cigar_id)}" ${o.cigar_id === response.matched_cid ? "selected" : ""}>${escapeHtml(o.label)}</option>
+          `).join("")}
+        </select>
+      </div>`
+    : "";
+
   root.innerHTML = `
     ${renderHeader(tab, response)}
     <div class="banner matched">✓ Cheapest: ${formatMoney(cheapestDeliv)} at ${escapeHtml(cheapest.retailer_name)}</div>
@@ -213,6 +239,7 @@ function renderMatched(tab, response, scraped) {
       <div class="cigar-meta">
         ${escapeHtml(comparison.wrapper || "")} · ${escapeHtml(comparison.vitola || "")} · ${escapeHtml(comparison.size || "")} · Box of ${comparison.box_qty || "?"}
       </div>
+      ${pickRow}
       <div class="results">
         ${comparison.results.map((r, i) => renderResultRow(r, i, cheapestDeliv)).join("")}
       </div>
@@ -225,8 +252,10 @@ function renderMatched(tab, response, scraped) {
     <div class="actions">
       <button id="view-all">See all ${comparison.total_retailers || comparison.results.length} retailers</button>
       <button id="report-incorrect" class="link-btn" title="Report incorrect data for this listing">Report incorrect</button>
+      <button type="button" id="add-cigar" class="link-btn">Add another cigar</button>
       <button id="close">Close</button>
     </div>
+    <div class="hint-below" style="padding:0 14px 8px;font-size:11px;color:#6b7280">Packs and singles excluded — to be added in future iterations.</div>
     <div class="footer">
       <a href="#" id="open-options">Settings</a>
       <a href="https://cigarpricescout.com" target="_blank">cigarpricescout.com</a>
@@ -241,7 +270,27 @@ function renderMatched(tab, response, scraped) {
   document.getElementById("report-incorrect").addEventListener("click", () => {
     renderCorrection(tab, response, scraped);
   });
+  document.getElementById("add-cigar").addEventListener("click", () => {
+    renderCandidate(tab, response, scraped, {
+      mode: "add_another",
+      previousMatched: { tab, response, scraped },
+    });
+  });
   document.getElementById("close").addEventListener("click", () => window.close());
+  if (response.cigar_options && response.cigar_options.length > 1) {
+    const sel = document.getElementById("cigar-pick");
+    if (sel) {
+      sel.addEventListener("change", async () => {
+        await setPreferredCidForUrl(tab.url, sel.value);
+        chrome.runtime.sendMessage({ type: "invalidateCache", url: tab.url });
+        chrome.runtime.sendMessage({ type: "getStatusForTab" }, (resp) => {
+          if (resp && resp.response && resp.tab) {
+            renderMatched(resp.tab, resp.response, resp.scraped);
+          }
+        });
+      });
+    }
+  }
   wireFooter();
 }
 
@@ -514,7 +563,11 @@ function renderResultRow(r, idx, cheapestDeliv) {
 
 // ── State: candidate (URL unknown — propose metadata) ─────────────────
 
-async function renderCandidate(tab, response, scraped) {
+async function renderCandidate(tab, response, scraped, opts = null) {
+  // opts: null | { formStateOverride } | { mode: "add_another", previousMatched: { tab, response, scraped } }
+  const mode = opts && opts.mode === "add_another" ? "add_another" : "default";
+  const formStateOverride = opts && opts.formStateOverride != null ? opts.formStateOverride : null;
+  const previousMatched = opts && opts.previousMatched ? opts.previousMatched : null;
   const scrapedQty = (scraped && scraped.quantityType) || "unknown";
   const isBox = scrapedQty === "box" || scrapedQty === "unknown";
 
@@ -574,10 +627,26 @@ async function renderCandidate(tab, response, scraped) {
     // can still type freely; the only thing we lose is autocomplete.
   }
 
+  // Apply form-state override (from "Edit my answers"). Lets the user
+  // refine their inputs without losing the catalog-snapped prefill +
+  // datalists.
+  const initialValues = {
+    brand:   formStateOverride?.brand   ?? prefill.brand,
+    line:    formStateOverride?.line    ?? prefill.line,
+    vitola:  formStateOverride?.vitola  ?? prefill.vitola,
+    wrapper: formStateOverride?.wrapper ?? localGuess.wrapper_bucket,
+    box_qty: (formStateOverride && formStateOverride.box_qty != null)
+               ? formStateOverride.box_qty
+               : localGuess.box_qty,
+    price:   (formStateOverride && formStateOverride.confirmed_price != null)
+               ? formStateOverride.confirmed_price
+               : localGuess.price,
+  };
+
   const brandOptions = (catalog.brands || [])
     .map(b => `<option value="${escapeAttr(b)}">`).join("");
-  const initialLines = (prefill.brand && catalog.lines_by_brand)
-    ? (catalog.lines_by_brand[prefill.brand] || []) : [];
+  const initialLines = (initialValues.brand && catalog.lines_by_brand)
+    ? (catalog.lines_by_brand[initialValues.brand] || []) : [];
   const lineOptions = initialLines
     .map(l => `<option value="${escapeAttr(l)}">`).join("");
   const vitolaOptions = (catalog.vitolas_for_match || [])
@@ -585,7 +654,8 @@ async function renderCandidate(tab, response, scraped) {
 
   root.innerHTML = `
     ${renderHeader(tab, response)}
-    <div class="banner candidate">? Help us identify this cigar</div>
+    <div class="banner candidate">${mode === "add_another" ? "+ Add another cigar" : "? Help us identify this cigar"}</div>
+    ${mode === "add_another" ? `<div class="hint-below" style="margin:-4px 14px 12px">Packs and singles excluded — to be added in future iterations.</div>` : ""}
     <div class="section">
       <div class="scraper-chip">
         Detected on page: <b>${escapeHtml(scraped?.title || scraped?.jsonldName || tab.title || "(no title)")}</b>
@@ -593,44 +663,46 @@ async function renderCandidate(tab, response, scraped) {
       <div class="fields" id="cid-form">
         <div class="field">
           <label for="f-brand">Brand</label>
-          <input type="text" id="f-brand" list="brands-list" value="${escapeAttr(prefill.brand)}" placeholder="e.g. Arturo Fuente" autocomplete="off" />
+          <input type="text" id="f-brand" list="brands-list" value="${escapeAttr(initialValues.brand)}" placeholder="e.g. Arturo Fuente" autocomplete="off" />
           <datalist id="brands-list">${brandOptions}</datalist>
         </div>
         <div class="field">
           <label for="f-line">Line</label>
-          <input type="text" id="f-line" list="lines-list" value="${escapeAttr(prefill.line)}" placeholder="e.g. Hemingway" autocomplete="off" />
+          <input type="text" id="f-line" list="lines-list" value="${escapeAttr(initialValues.line)}" placeholder="e.g. Hemingway" autocomplete="off" />
           <datalist id="lines-list">${lineOptions}</datalist>
         </div>
         <div class="field">
           <label for="f-vitola">Vitola</label>
-          <input type="text" id="f-vitola" list="vitolas-list" value="${escapeAttr(prefill.vitola)}" placeholder="e.g. Signature" autocomplete="off" />
+          <input type="text" id="f-vitola" list="vitolas-list" value="${escapeAttr(initialValues.vitola)}" placeholder="e.g. Signature" autocomplete="off" />
           <datalist id="vitolas-list">${vitolaOptions}</datalist>
         </div>
         <div class="field">
           <label for="f-wrapper">Wrapper <span class="hint-inline">(optional)</span></label>
           <select id="f-wrapper">
             <option value="">Not sure</option>
-            <option value="Natural / Connecticut" ${localGuess.wrapper_bucket === "Natural / Connecticut" ? "selected" : ""}>Natural / Connecticut</option>
-            <option value="Habano" ${localGuess.wrapper_bucket === "Habano" ? "selected" : ""}>Habano</option>
-            <option value="Sun Grown" ${localGuess.wrapper_bucket === "Sun Grown" ? "selected" : ""}>Sun Grown</option>
-            <option value="Maduro" ${localGuess.wrapper_bucket === "Maduro" ? "selected" : ""}>Maduro</option>
+            <option value="Natural / Connecticut" ${initialValues.wrapper === "Natural / Connecticut" ? "selected" : ""}>Natural / Connecticut</option>
+            <option value="Habano" ${initialValues.wrapper === "Habano" ? "selected" : ""}>Habano</option>
+            <option value="Sun Grown" ${initialValues.wrapper === "Sun Grown" ? "selected" : ""}>Sun Grown</option>
+            <option value="Maduro" ${initialValues.wrapper === "Maduro" ? "selected" : ""}>Maduro</option>
           </select>
         </div>
         <div class="field-row">
           <div class="field">
             <label for="f-box_qty">Box quantity</label>
-            <input type="number" id="f-box_qty" value="${escapeAttr(localGuess.box_qty || "")}" placeholder="25" min="1" max="100" />
+            <input type="number" id="f-box_qty" value="${escapeAttr(initialValues.box_qty || "")}" placeholder="25" min="1" max="100" />
           </div>
           <div class="field">
             <label for="f-price">Price (USD)</label>
-            <input type="number" id="f-price" value="${escapeAttr(localGuess.price || "")}" placeholder="340.00" step="0.01" min="0" />
+            <input type="number" id="f-price" value="${escapeAttr(initialValues.price || "")}" placeholder="340.00" step="0.01" min="0" />
           </div>
         </div>
       </div>
     </div>
     <div class="actions">
       <button class="approve" id="submit">Submit</button>
-      <button id="close">Cancel</button>
+      ${mode === "add_another"
+        ? `<button type="button" id="cancel-add-another">Back to comparison</button>`
+        : `<button type="button" id="close">Cancel</button>`}
     </div>
     <div class="footer">
       Operator reviews submissions before they go live.
@@ -666,14 +738,21 @@ async function renderCandidate(tab, response, scraped) {
   }
 
   document.getElementById("submit").addEventListener("click", () => submitProposal(tab, response, scraped));
-  document.getElementById("close").addEventListener("click", () => window.close());
+  const closeBtn = document.getElementById("close");
+  if (closeBtn) closeBtn.addEventListener("click", () => window.close());
+  const cancelAdd = document.getElementById("cancel-add-another");
+  if (cancelAdd && previousMatched) {
+    cancelAdd.addEventListener("click", () => {
+      renderMatched(previousMatched.tab, previousMatched.response, previousMatched.scraped);
+    });
+  }
   wireFooter();
 }
 
 async function submitProposal(tab, response, scraped) {
   const btn = document.getElementById("submit");
   btn.disabled = true;
-  btn.textContent = "Submitting…";
+  btn.textContent = "Checking…";
 
   const get = (id) => (document.getElementById(id).value || "").trim();
   const brand = get("f-brand");
@@ -692,62 +771,194 @@ async function submitProposal(tab, response, scraped) {
 
   const box_qty = parseInt(boxQtyRaw, 10);
   const confirmed_price = priceRaw ? parseFloat(priceRaw) : null;
+  const formMeta = {
+    brand, line, vitola,
+    wrapper: wrapperBucket || null,
+    box_qty,
+    confirmed_price,
+    scraped_title: scraped?.title || scraped?.jsonldName || null,
+  };
 
   try {
     const observerId = await getObserverId();
-    const proposeRes = await publicFetch("/api/community/propose-metadata", {
-      method: "POST",
-      body: {
-        observer_id: observerId,
-        observer_source: "consumer",
-        url: tab.url,
-        brand,
-        line,
-        vitola,
-        // Friendly consumer-facing bucket name (e.g. "Maduro"). Empty
-        // string means "Not sure" — operator handles wrapper-code lookup
-        // during review by matching brand+line+vitola+box_qty in the
-        // master catalog.
-        wrapper: wrapperBucket || null,
-        box_qty,
-        confirmed_price,
-        scraped_title: scraped?.title || scraped?.jsonldName || null,
-      },
-    });
-    chrome.runtime.sendMessage({ type: "invalidateCache", url: tab.url });
 
-    // Gap 2: hybrid instant feedback. If the server auto-matched the
-    // submission to a CID with HIGH confidence AND a multi-retailer
-    // comparison is available, re-render the popup with the comparison
-    // immediately. The proposal is still 'pending' on the operator's
-    // queue, but the consumer sees value right away. A subtle banner
-    // makes the "provisional / awaiting operator confirmation" status
-    // unambiguous so users don't treat an incorrect auto-match as final.
-    if (proposeRes && proposeRes.comparison
-        && proposeRes.comparison.results
-        && proposeRes.comparison.results.length > 0) {
-      renderProvisionalComparison(tab, response, scraped, proposeRes);
+    // Step 1: "Is this the cigar?" preview. Server runs the HIGH-
+    // confidence matcher and (a) returns a human-readable candidate
+    // when it finds one, or (b) returns null so we fall through to the
+    // operator-review queue. Doing this BEFORE writing anything means
+    // a user who picks "No, not quite" doesn't accidentally publish a
+    // wrong CID — they get the standard review-queue flow.
+    let preview = null;
+    try {
+      preview = await publicFetch("/api/community/preview-candidate", {
+        method: "POST",
+        body: {
+          observer_id: observerId,
+          observer_source: "consumer",
+          url: tab.url,
+          ...formMeta,
+        },
+      });
+    } catch (_) {
+      // Preview is best-effort. If it fails (network blip, server
+      // hiccup), fall through to the legacy review-queue path so the
+      // user doesn't lose their submission.
+      preview = null;
+    }
+
+    if (preview && preview.candidate && preview.candidate.cigar_id) {
+      renderCigarConfirm(tab, response, scraped, formMeta, preview.candidate);
       return;
     }
 
-    // No HIGH-confidence auto-match → render a thank-you screen with a
-    // "Search prices on cigarpricescout.com" CTA using the user's own
-    // form inputs. Previously this branch just toasted and closed,
-    // which felt like a dead-end after the user spent 30 seconds
-    // filling out the form.
-    renderSubmittedWithSearch(tab, response, scraped, {
-      brand,
-      line,
-      vitola,
-      box_qty,
-      wrapper: wrapperBucket || null,
-    });
-    return;
+    // No candidate available → submit straight to the operator review
+    // queue with the form state.
+    await submitToReviewQueue(tab, response, scraped, formMeta, observerId);
   } catch (e) {
     btn.disabled = false;
     btn.textContent = "Submit";
     toast(`Submit failed: ${e.message || e}`);
   }
+}
+
+
+// ── "Is this the cigar?" confirmation screen ──────────────────────────
+//
+// Renders a card with the candidate CID parsed into readable form and
+// three actions: YES (auto-publish), NO (operator review), Edit. YES
+// is the primary because most candidates the matcher offers will be
+// correct — this is HIGH-confidence only on the server side.
+
+function renderCigarConfirm(tab, response, scraped, formMeta, candidate) {
+  root.innerHTML = `
+    ${renderHeader(tab, response)}
+    <div class="banner candidate">? Is this the cigar?</div>
+    <div class="section">
+      <div class="cigar-meta" style="font-size:14px; line-height:1.5">
+        We found a likely match in our catalog:
+      </div>
+      <div class="candidate-card">
+        <div class="candidate-label">${escapeHtml(candidate.label || "")}</div>
+      </div>
+      <div class="hint-below">
+        Confirming maps this page to that cigar so you (and everyone else)
+        can compare prices across retailers right away.
+      </div>
+    </div>
+    <div class="actions">
+      <button class="approve" id="confirm-yes">Yes, that's it</button>
+      <button id="confirm-no">No, not quite</button>
+    </div>
+    <div class="actions" style="padding-top:0">
+      <button class="link-btn" id="confirm-edit">Edit my answers</button>
+    </div>
+    <div class="footer">
+      <a href="#" id="open-options">Settings</a>
+    </div>
+  `;
+
+  document.getElementById("confirm-yes").addEventListener("click", async () => {
+    const yesBtn = document.getElementById("confirm-yes");
+    const noBtn = document.getElementById("confirm-no");
+    yesBtn.disabled = true;
+    if (noBtn) noBtn.disabled = true;
+    yesBtn.textContent = "Publishing…";
+    try {
+      const observerId = await getObserverId();
+      const confirmRes = await publicFetch("/api/community/confirm-candidate", {
+        method: "POST",
+        body: {
+          observer_id: observerId,
+          observer_source: "consumer",
+          url: tab.url,
+          cigar_id: candidate.cigar_id,
+          scraped_title: formMeta.scraped_title,
+          confirmed_price: formMeta.confirmed_price,
+          in_stock: null,
+        },
+      });
+      chrome.runtime.sendMessage({ type: "invalidateCache", url: tab.url });
+
+      if (confirmRes && confirmRes.comparison
+          && confirmRes.comparison.results
+          && confirmRes.comparison.results.length > 0) {
+        // Reuse the provisional renderer — same comparison shape, same
+        // sort, same row template. Banner copy makes clear that this
+        // mapping is now live for everyone.
+        renderProvisionalComparison(tab, response, scraped, confirmRes);
+        return;
+      }
+      // No comparison yet (single-retailer CID or build error) — still
+      // a successful publish, so show the thank-you with a CTA.
+      renderSubmittedWithSearch(tab, response, scraped, formMeta);
+    } catch (e) {
+      yesBtn.disabled = false;
+      if (noBtn) noBtn.disabled = false;
+      yesBtn.textContent = "Yes, that's it";
+      toast(`Couldn't publish: ${e.message || e}`);
+    }
+  });
+
+  document.getElementById("confirm-no").addEventListener("click", async () => {
+    // User rejected the candidate. Route to operator review (likely a
+    // new CID is needed). Same payload as before — just no auto-publish.
+    const noBtn = document.getElementById("confirm-no");
+    const yesBtn = document.getElementById("confirm-yes");
+    noBtn.disabled = true;
+    if (yesBtn) yesBtn.disabled = true;
+    noBtn.textContent = "Sending…";
+    try {
+      const observerId = await getObserverId();
+      await submitToReviewQueue(tab, response, scraped, formMeta, observerId);
+    } catch (e) {
+      noBtn.disabled = false;
+      if (yesBtn) yesBtn.disabled = false;
+      noBtn.textContent = "No, not quite";
+      toast(`Submit failed: ${e.message || e}`);
+    }
+  });
+
+  document.getElementById("confirm-edit").addEventListener("click", () => {
+    // Go back to the form with the user's last inputs preserved so they
+    // don't have to retype everything.
+    renderCandidate(tab, response, scraped, { formStateOverride: formMeta });
+  });
+
+  wireFooter();
+}
+
+
+// Submit the user's metadata to the operator review queue (legacy path).
+// Extracted from the old submitProposal so both "No, not quite" and the
+// no-candidate fallback can call the same code without duplication.
+async function submitToReviewQueue(tab, response, scraped, formMeta, observerId) {
+  const proposeRes = await publicFetch("/api/community/propose-metadata", {
+    method: "POST",
+    body: {
+      observer_id: observerId,
+      observer_source: "consumer",
+      url: tab.url,
+      brand: formMeta.brand,
+      line: formMeta.line,
+      vitola: formMeta.vitola,
+      wrapper: formMeta.wrapper,
+      box_qty: formMeta.box_qty,
+      confirmed_price: formMeta.confirmed_price,
+      scraped_title: formMeta.scraped_title,
+    },
+  });
+  chrome.runtime.sendMessage({ type: "invalidateCache", url: tab.url });
+
+  // Same instant-feedback shortcut as before: propose-metadata's own
+  // server-side auto-matcher may still return a comparison when the
+  // preview path didn't (e.g. cache was cold at preview time). Honor it.
+  if (proposeRes && proposeRes.comparison
+      && proposeRes.comparison.results
+      && proposeRes.comparison.results.length > 0) {
+    renderProvisionalComparison(tab, response, scraped, proposeRes);
+    return;
+  }
+  renderSubmittedWithSearch(tab, response, scraped, formMeta);
 }
 
 // Post-submit thank-you with a homepage CTA. We deliberately don't deep-link

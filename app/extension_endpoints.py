@@ -52,7 +52,9 @@ from app.cid_matcher import (
     hostname_to_retailer_key,
     load_master_cigars,
     load_retailer_url_index,
+    merge_cid_into_url_index,
     parse_cid,
+    url_index_entry_cids,
 )
 
 logger = logging.getLogger(__name__)
@@ -76,28 +78,18 @@ _cache_state = {
     "master": [],          # list[dict] from load_master_cigars
     "master_by_cid": {},    # dict[str, dict]
     "retailers": {},       # hostname -> retailer_key
-    "url_index": {},       # url -> (retailer_key, cigar_id)
+    "url_index": {},       # url -> (retailer_key, List[cigar_id])
 }
 
 
-def _load_staged_approval_url_overlay() -> Dict[str, Tuple[str, str]]:
-    """Live overlay of pending operator approvals onto the URL index.
+def _load_staged_approval_url_overlay() -> List[Tuple[str, str, str]]:
+    """Pending extension approvals as (canonical_url, retailer_key, cid).
 
-    Returns {url: (retailer_key, cigar_id)} for every row in
-    extension_staged_approvals where status='pending' — i.e. the
-    operator has approved a URL→CID mapping but the local publisher
-    hasn't drained it to the per-retailer CSV yet.
-
-    Without this overlay, an operator approval doesn't take effect on
-    the live site until: (1) operator runs publish_extension_approvals,
-    (2) commits the CSV diff, (3) pushes, (4) Railway redeploys, (5)
-    the cache TTL expires. With this overlay, the mapping is live as
-    soon as the row hits Postgres — the publisher becomes a
-    "sync-to-git for audit / next deploy" operation rather than a
-    critical path. Pending rows survive cache rebuilds because we
-    re-overlay them every refresh.
+    Multiple pending rows may reference the same URL with different CIDs
+    (multi-SKU PDP). Every row is returned so ``_refresh_cache`` can merge
+    each into the live index.
     """
-    overlay: Dict[str, Tuple[str, str]] = {}
+    rows: List[Tuple[str, str, str]] = []
     try:
         conn = _get_conn()
         cur = conn.cursor()
@@ -108,11 +100,11 @@ def _load_staged_approval_url_overlay() -> Dict[str, Tuple[str, str]]:
         for url, retailer_key, cid in cur.fetchall():
             if not url or not retailer_key or not cid:
                 continue
-            overlay[url] = (retailer_key, cid)
+            rows.append((canonicalize_url(url), retailer_key, cid))
         conn.close()
     except Exception as e:
         logger.warning("staged-approval URL overlay load failed: %s", e)
-    return overlay
+    return rows
 
 
 def _refresh_cache(force: bool = False) -> None:
@@ -137,11 +129,12 @@ def _refresh_cache(force: bool = False) -> None:
         # are immediately matchable, without waiting for the publisher
         # to drain to CSV. CSV wins on collision (already-published
         # rows shouldn't be overwritten by stale staging data).
-        overlay = _load_staged_approval_url_overlay()
+        overlay_rows = _load_staged_approval_url_overlay()
         overlay_added = 0
-        for url, (retailer_key, cid) in overlay.items():
-            if url not in url_index:
-                url_index[url] = (retailer_key, cid)
+        for o_url, retailer_key, cid in overlay_rows:
+            before = url_index.get(o_url)
+            merge_cid_into_url_index(url_index, o_url, retailer_key, cid)
+            if url_index.get(o_url) != before:
                 overlay_added += 1
         master_by_cid = {row["cigar_id"]: row for row in master}
         _cache_state.update({
@@ -200,10 +193,24 @@ def init_extension_tables() -> None:
                 price NUMERIC(10,2),
                 in_stock BOOLEAN,
                 status TEXT DEFAULT 'pending',
+                -- 'operator'        — staged by the operator extension (default)
+                -- 'consumer_auto'   — auto-published from the consumer extension
+                --                    after a "Yes, this is the cigar?" confirmation
+                --                    against a HIGH-confidence master-catalog
+                --                    candidate. Surfaced in a daily spot-check
+                --                    report so the operator can verify the
+                --                    auto-match was correct.
+                source TEXT DEFAULT 'operator',
                 created_at TIMESTAMPTZ DEFAULT NOW(),
                 published_at TIMESTAMPTZ,
                 UNIQUE (retailer_key, url, cid)
             )
+        """)
+        # Backfill source column for older DBs that pre-date this addition.
+        # ADD COLUMN IF NOT EXISTS is idempotent and a no-op when present.
+        cur.execute("""
+            ALTER TABLE extension_staged_approvals
+            ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'operator'
         """)
         cur.execute("""
             CREATE INDEX IF NOT EXISTS idx_ext_staged_status
@@ -212,6 +219,10 @@ def init_extension_tables() -> None:
         cur.execute("""
             CREATE INDEX IF NOT EXISTS idx_ext_staged_url
                 ON extension_staged_approvals(url)
+        """)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_ext_staged_source_created
+                ON extension_staged_approvals(source, created_at DESC)
         """)
         cur.execute("""
             CREATE TABLE IF NOT EXISTS pending_new_retailers (
@@ -330,6 +341,41 @@ class IdsBody(BaseModel):
     ids: List[int] = Field(default_factory=list)
 
 
+def _pick_matched_cid(cids: List[str], cid_query: Optional[str]) -> Optional[str]:
+    if not cids:
+        return None
+    if cid_query and cid_query in cids:
+        return cid_query
+    return cids[0]
+
+
+def _cigar_pick_options(cids: List[str]) -> List[Dict[str, str]]:
+    """Human labels for a multi-CID URL picker (operator + consumer UIs)."""
+    master = _cache_state.get("master_by_cid") or {}
+    out: List[Dict[str, str]] = []
+    for cid in sorted(cids):
+        row = master.get(cid)
+        if row:
+            head = " ".join(
+                p for p in (row.get("brand"), row.get("line"), row.get("vitola")) if p
+            )
+            bits: List[str] = []
+            if head:
+                bits.append(head)
+            if row.get("size"):
+                bits.append(str(row["size"]))
+            if row.get("wrapper"):
+                bits.append(str(row["wrapper"]))
+            bq = row.get("box_qty")
+            if bq is not None:
+                bits.append(f"Box of {bq}")
+            label = " • ".join(bits) if bits else cid
+        else:
+            label = cid
+        out.append({"cigar_id": cid, "label": label})
+    return out
+
+
 # ── GET /api/admin/url-status ──────────────────────────────────────────
 
 @router.get("/url-status")
@@ -338,6 +384,10 @@ async def url_status(
     url: str = Query(..., min_length=1),
     title: Optional[str] = Query(None),
     refresh: bool = Query(False),
+    cid: Optional[str] = Query(
+        None,
+        description="When multiple CIDs share this URL, which one to treat as active.",
+    ),
 ):
     """Verdict + candidates for a single URL.
 
@@ -348,6 +398,7 @@ async def url_status(
           "hostname": str,
           "url": str,
           "matched_cid": str | null,        # when state == "matched" or "seen"
+          "cigar_options": [ { cigar_id, label } ] | null,  # when URL has 2+ CIDs
           "seen_status": str | null,        # when state == "seen"
           "candidates": [ { cigar_id, score, confidence, details, brand, ... } ],
           "available_in_master": [ ... ],   # subset of candidates already in master
@@ -402,6 +453,7 @@ async def url_status(
             "hostname": hostname,
             "url": url,
             "matched_cid": None,
+            "cigar_options": None,
             "seen_status": None,
             "extractor_status": None,
             "candidates": [],
@@ -415,13 +467,17 @@ async def url_status(
     # canonical URLs too, so this dict-get hits the right row even for
     # Shopify ?variant=… or utm_* URLs.
     live_hit = _cache_state["url_index"].get(url)
-    if live_hit and live_hit[0] == retailer_key:
+    rk_live, cids_live = url_index_entry_cids(live_hit)
+    if rk_live == retailer_key and cids_live:
+        matched_cid = _pick_matched_cid(cids_live, cid)
+        cigar_options = _cigar_pick_options(cids_live) if len(cids_live) > 1 else None
         return {
             "state": "matched",
             "retailer_key": retailer_key,
             "hostname": hostname,
             "url": url,
-            "matched_cid": live_hit[1],
+            "matched_cid": matched_cid,
+            "cigar_options": cigar_options,
             "seen_status": "published",
             "extractor_status": extractor_status,
             "candidates": _candidates_for(url, title),
@@ -439,6 +495,7 @@ async def url_status(
             "hostname": hostname,
             "url": url,
             "matched_cid": seen_cid,
+            "cigar_options": None,
             "seen_status": seen_status,
             "extractor_status": extractor_status,
             "candidates": _candidates_for(url, title),
@@ -456,6 +513,7 @@ async def url_status(
         "hostname": hostname,
         "url": url,
         "matched_cid": None,
+        "cigar_options": None,
         "seen_status": None,
         "extractor_status": extractor_status,
         "candidates": cands,
@@ -757,7 +815,12 @@ async def stage_approval(request: Request, body: StageApprovalBody):
         # extension_staged_approvals so it survives until the
         # publisher drains it to CSV.
         try:
-            _cache_state["url_index"][body.url] = (body.retailer_key, cid)
+            merge_cid_into_url_index(
+                _cache_state["url_index"],
+                body.url,
+                body.retailer_key,
+                cid,
+            )
         except Exception as e:
             logger.warning("live url_index overlay update failed: %s", e)
 
@@ -1843,3 +1906,142 @@ async def resolve_community_proposal(request: Request, body: ResolveProposalBody
     except Exception as e:
         logger.exception("resolve_community_proposal failed: %s", e)
         return JSONResponse({"error": str(e)}, status_code=500)
+
+
+# ── Auto-publish spot-check report (Is this the cigar? confirmations) ──
+
+
+@router.get("/auto-publish-report")
+async def auto_publish_report(
+    request: Request,
+    days: int = Query(7, ge=1, le=90),
+    status: Optional[str] = Query(None,
+        description="Filter by status: 'pending', 'published', 'rejected'. "
+                    "Omit to include all."),
+    limit: int = Query(200, ge=1, le=1000),
+):
+    """Daily spot-check feed for "Is this the cigar?" consumer confirmations.
+
+    Every row staged with source='consumer_auto' goes live immediately
+    via the URL-index overlay — operator backstop is reviewing these
+    here. If a row looks wrong, POST /api/admin/reject-auto-publish
+    flips its status to 'rejected', which (a) removes it from the live
+    overlay on the next refresh and (b) keeps the publisher from
+    drainage to the retailer CSV.
+
+    Defaults to the last 7 days so the operator can sweep a week's worth
+    in one sitting; widen with ?days=30 when needed.
+    """
+    auth = _check_admin(request)
+    if auth:
+        return auth
+
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
+        params: List[Any] = [days]
+        sql = """
+            SELECT id, cid, retailer_key, url, status,
+                   brand, line, vitola, size, wrapper, wrapper_code, box_qty,
+                   title, price, in_stock,
+                   created_at, published_at
+              FROM extension_staged_approvals
+             WHERE source = 'consumer_auto'
+               AND created_at >= NOW() - (%s || ' days')::INTERVAL
+        """
+        if status:
+            sql += " AND status = %s"
+            params.append(status)
+        sql += " ORDER BY created_at DESC LIMIT %s"
+        params.append(limit)
+        cur.execute(sql, tuple(params))
+        cols = [c[0] for c in cur.description]
+        rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+
+        # Per-status totals so the dashboard can show a small summary
+        # without re-querying. Same WHERE filter on the time window.
+        cur.execute(
+            """
+            SELECT status, COUNT(*)
+              FROM extension_staged_approvals
+             WHERE source = 'consumer_auto'
+               AND created_at >= NOW() - (%s || ' days')::INTERVAL
+             GROUP BY status
+            """,
+            (days,),
+        )
+        counts = {row[0]: row[1] for row in cur.fetchall()}
+        conn.close()
+        return {
+            "results": rows,
+            "count": len(rows),
+            "window_days": days,
+            "counts_by_status": counts,
+        }
+    except Exception as e:
+        logger.exception("auto_publish_report failed: %s", e)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+class RejectAutoPublishBody(BaseModel):
+    """Operator reverses a consumer auto-publish that turned out wrong."""
+    staged_id: int = Field(..., ge=1)
+    reason: Optional[str] = Field(None, max_length=500)
+
+
+@router.post("/reject-auto-publish")
+async def reject_auto_publish(request: Request, body: RejectAutoPublishBody):
+    """Mark a consumer_auto staged approval as rejected.
+
+    Effect: (a) the row stays for the audit trail but is excluded from
+    the live URL-index overlay on the next cache refresh; (b) the
+    publisher's daily drain skips it so it never reaches the retailer
+    CSV. The operator can re-approve via the normal stage_approval flow
+    if the reject was a mistake.
+    """
+    auth = _check_admin(request)
+    if auth:
+        return auth
+
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            UPDATE extension_staged_approvals
+               SET status = 'rejected'
+             WHERE id = %s
+               AND source = 'consumer_auto'
+               AND status IN ('pending','published')
+             RETURNING id, url, retailer_key, cid, status
+            """,
+            (body.staged_id,),
+        )
+        row = cur.fetchone()
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.exception("reject_auto_publish failed: %s", e)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+    if not row:
+        return JSONResponse(
+            {"error": "not_found",
+             "detail": "No consumer_auto row in pending/published status with that id."},
+            status_code=404,
+        )
+
+    # Force the URL-index overlay to drop this row on the next refresh
+    # so the live site stops serving the now-rejected mapping.
+    try:
+        _refresh_cache(force=True)
+    except Exception as e:
+        logger.warning("cache refresh after reject_auto_publish failed: %s", e)
+
+    return {
+        "ok": True,
+        "rejected": {
+            "id": row[0], "url": row[1], "retailer_key": row[2],
+            "cid": row[3], "status": row[4],
+        },
+    }
