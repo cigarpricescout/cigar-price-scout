@@ -265,7 +265,11 @@ Rules:
   see the codes — they pick from 4 friendly buckets defined in
   `app/wrapper_buckets.py` (Natural/Connecticut, Habano, Sun Grown,
   Maduro) which map to canonical codes. The bucket name is stored as
-  `community_url_proposals.proposed_wrapper`; the operator picks the
+  `community_url_proposals.proposed_wrapper`; the operator extension uses
+  the SAME 4-bucket picker (Gap 4) so a consumer's bucket pick round-
+  trips into the operator's review form without the operator having to
+  re-translate to a code. Power-users can still pick a specific code
+  via the "Use specific code" toggle in the operator popup. The operator picks the
   canonical code during review.
 - `BOXQTY` is `BOX25` / `PACK5` / `SINGLE`. The box quantity is part of the
   identity — a Box-of-25 and a Pack-of-5 of the "same" cigar are different

@@ -11,6 +11,38 @@ const WRAPPER_CODES = [
   "DOM", "OSC", "CON", "CORO", "CRIO", "ROS", "SUN", "CAND", "OLOR",
 ];
 
+// Friendly consumer-facing wrapper categories. Operator extension Gap 4
+// uses the same 4 buckets the consumer extension uses, so when an
+// operator approves a consumer-proposed URL the bucket round-trips
+// cleanly without code translation. Must stay in sync with
+// app/wrapper_buckets.py — the Python module is the source of truth.
+const WRAPPER_BUCKETS = {
+  "Natural / Connecticut": ["NAT", "CT", "CAM", "CL"],
+  "Habano":                ["HAB", "CORO", "CON"],
+  "Sun Grown":             ["SUN", "ECU", "NIC"],
+  "Maduro":                ["MAD", "MEX", "MD", "DOM"],
+};
+
+// Default canonical code per bucket — used when the operator picks a
+// bucket but neither candidate matching nor master lookup gives us a
+// specific code (e.g. brand-new CID). The default is the most common
+// code in each bucket, so a "best guess" is at least sensible.
+const BUCKET_DEFAULT_CODE = {
+  "Natural / Connecticut": "NAT",
+  "Habano":                "HAB",
+  "Sun Grown":             "SUN",
+  "Maduro":                "MAD",
+};
+
+function bucketForCode(code) {
+  if (!code) return "";
+  const upper = code.toUpperCase();
+  for (const [bucket, codes] of Object.entries(WRAPPER_BUCKETS)) {
+    if (codes.includes(upper)) return bucket;
+  }
+  return "";  // outside the 4 buckets → "Specific code" override
+}
+
 // Master-vocabulary rows from the backend. Used to populate context-aware
 // <datalist> dropdowns on the brand/line/vitola/size/box_qty fields.
 let VOCAB_ROWS = [];
@@ -141,6 +173,21 @@ function renderCandidate(tab, response) {
   // their input more than the matcher's heuristics on the URL alone.
   const parts = proposalParts
     || (top ? partsFromCandidate(top) : suggestPartsFromUrl(tab.url, response.scraped_title));
+
+  // Gap 4 + Gap 1 bridge: when a consumer proposal pre-filled the form
+  // it stored the wrapper as a friendly BUCKET name (e.g. "Maduro"),
+  // not a canonical code. Resolve bucket → wrapper_code using the
+  // matcher's top candidates so the form lands with a populated CID
+  // preview that the operator can approve in one click.
+  if (proposalParts
+      && !parts.wrapper_code
+      && response.community_proposal
+      && response.community_proposal.proposed_wrapper) {
+    parts.wrapper_code = resolveBucketToCode(
+      response.community_proposal.proposed_wrapper,
+      response,
+    );
+  }
 
   root.innerHTML = `
     ${renderHeader(tab, response)}
@@ -301,21 +348,105 @@ function manualPricingBlock(response) {
 }
 
 function wrapperField(value) {
-  const options = WRAPPER_CODES.map(c =>
+  // Gap 4: operator extension uses the same 4 friendly buckets the
+  // consumer extension does. The hidden f-wrapper_code input remains
+  // the truth source readFields() consumes — wireWrapperBucket() keeps
+  // it synced with the bucket selection. A "Specific code" toggle
+  // reveals the legacy 14-code dropdown for power-user overrides
+  // (e.g. picking BRZ or OSC that no bucket includes).
+  const currentBucket = bucketForCode(value);
+  const bucketOptions = Object.keys(WRAPPER_BUCKETS).map(b =>
+    `<option value="${escapeAttr(b)}" ${b === currentBucket ? "selected" : ""}>${escapeHtml(b)}</option>`
+  ).join("");
+  const codeOptions = WRAPPER_CODES.map(c =>
     `<option value="${c}" ${c === value ? "selected" : ""}>${c}</option>`
   ).join("");
   const custom = value && !WRAPPER_CODES.includes(value)
     ? `<option value="${escapeAttr(value)}" selected>${escapeHtml(value)} (custom)</option>`
     : "";
+  const showSpecific = !!value && !currentBucket;  // off-bucket → reveal override
   return `
-    <div class="field">
-      <label for="f-wrapper_code">Wrapper Code</label>
-      <select id="f-wrapper_code" name="wrapper_code">
+    <div class="field wrapper-field">
+      <label for="f-wrapper_bucket">Wrapper</label>
+      <select id="f-wrapper_bucket" name="wrapper_bucket"${showSpecific ? ' style="display:none"' : ""}>
+        <option value="">— pick one —</option>
+        ${bucketOptions}
+      </select>
+      <span class="wrapper-resolved" id="wrapper-resolved"${value ? "" : ' style="display:none"'}>
+        → <code>${escapeHtml(value || "")}</code>
+      </span>
+      <a href="#" class="wrapper-toggle" id="wrapper-specific-toggle">
+        ${showSpecific ? "Use friendly bucket" : "Use specific code"}
+      </a>
+      <select id="f-wrapper_code" name="wrapper_code"${showSpecific ? "" : ' style="display:none"'}>
         <option value=""></option>
-        ${custom}${options}
+        ${custom}${codeOptions}
       </select>
     </div>
   `;
+}
+
+// Resolves a bucket pick to the canonical wrapper_code, preferring
+// codes that already appear in the response's top candidates (so we
+// reuse master's existing CID when the operator's bucket lines up
+// with one of them). Falls back to the bucket's default code for
+// brand-new CIDs.
+function resolveBucketToCode(bucket, response) {
+  if (!bucket) return "";
+  const allowed = WRAPPER_BUCKETS[bucket] || [];
+  if (!allowed.length) return "";
+  const cands = (response && response.candidates) || [];
+  for (const c of cands) {
+    const code = (c.wrapper_code || "").toUpperCase();
+    if (code && allowed.includes(code)) return code;
+  }
+  return BUCKET_DEFAULT_CODE[bucket] || allowed[0] || "";
+}
+
+// Called once after renderCandidate paints the form. Wires bucket
+// changes → hidden wrapper_code updates → CID-preview refresh.
+function wireWrapperBucket(response) {
+  const bucketEl  = document.getElementById("f-wrapper_bucket");
+  const codeEl    = document.getElementById("f-wrapper_code");
+  const resolved  = document.getElementById("wrapper-resolved");
+  const toggle    = document.getElementById("wrapper-specific-toggle");
+  const preview   = document.getElementById("cid-preview");
+  if (!bucketEl || !codeEl) return;
+
+  const refreshResolved = () => {
+    const v = codeEl.value || "";
+    if (resolved) {
+      resolved.style.display = v ? "" : "none";
+      const codeNode = resolved.querySelector("code");
+      if (codeNode) codeNode.textContent = v;
+    }
+    if (preview) preview.textContent = buildCidString(readFields());
+  };
+
+  bucketEl.addEventListener("change", () => {
+    const code = resolveBucketToCode(bucketEl.value, response);
+    codeEl.value = code;
+    refreshResolved();
+  });
+
+  codeEl.addEventListener("change", refreshResolved);
+
+  if (toggle) {
+    toggle.addEventListener("click", (e) => {
+      e.preventDefault();
+      const showingSpecific = codeEl.style.display !== "none";
+      if (showingSpecific) {
+        codeEl.style.display = "none";
+        bucketEl.style.display = "";
+        toggle.textContent = "Use specific code";
+        // Keep the current wrapper_code; just hide the picker.
+      } else {
+        codeEl.style.display = "";
+        bucketEl.style.display = "none";
+        toggle.textContent = "Use friendly bucket";
+      }
+    });
+  }
 }
 
 function renderMatchChips(details) {
@@ -366,6 +497,9 @@ function wireMatchedActions(tab, response) {
 }
 
 function wireCandidateActions(tab, response) {
+  // Gap 4: wire the friendly bucket picker → wrapper_code resolution.
+  wireWrapperBucket(response);
+
   // Live-update the CID preview, the datalist dropdowns (context-aware
   // suggestions from master), AND the similar-CIDs panel as the user edits.
   const fields = document.querySelectorAll("#cid-fields input, #cid-fields select");
@@ -627,6 +761,32 @@ function applyFields(parts) {
     const el = document.getElementById(`f-${k}`);
     if (!el) continue;
     el.value = v ?? "";
+  }
+  // Gap 4: keep the friendly bucket dropdown in sync with wrapper_code.
+  // When the operator clicks an alt candidate, this ensures the bucket
+  // visibly reflects the candidate's canonical wrapper without forcing
+  // them into the "Specific code" override.
+  const code = (parts.wrapper_code || "").toUpperCase();
+  const bucket = bucketForCode(code);
+  const bucketEl  = document.getElementById("f-wrapper_bucket");
+  const codeEl    = document.getElementById("f-wrapper_code");
+  const resolved  = document.getElementById("wrapper-resolved");
+  const toggle    = document.getElementById("wrapper-specific-toggle");
+  if (bucketEl && bucket) {
+    bucketEl.value = bucket;
+    bucketEl.style.display = "";
+    if (codeEl) codeEl.style.display = "none";
+    if (toggle) toggle.textContent = "Use specific code";
+  } else if (codeEl && code && !bucket) {
+    // Off-bucket code (BRZ, OSC, etc.) — reveal the specific-code UI.
+    codeEl.style.display = "";
+    if (bucketEl) bucketEl.style.display = "none";
+    if (toggle) toggle.textContent = "Use friendly bucket";
+  }
+  if (resolved) {
+    const codeNode = resolved.querySelector("code");
+    if (codeNode) codeNode.textContent = code;
+    resolved.style.display = code ? "" : "none";
   }
 }
 

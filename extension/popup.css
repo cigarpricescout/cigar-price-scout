@@ -69,6 +69,35 @@ body { padding: 0; }
   margin-top: 8px;
 }
 .field { display: flex; flex-direction: column; }
+
+/* Gap 4: friendly wrapper bucket picker. The resolved-code badge sits
+   inline next to the bucket select so the operator sees the canonical
+   code that will land in the CID. The "Use specific code" toggle
+   reveals the legacy 14-code dropdown for power-user overrides. */
+.wrapper-field .wrapper-resolved {
+  display: inline-block;
+  margin-top: 3px;
+  font-size: 11px;
+  color: #666;
+}
+.wrapper-field .wrapper-resolved code {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 11px;
+  background: #f0f0f0;
+  color: #333;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.wrapper-field .wrapper-toggle {
+  font-size: 10px;
+  color: #888;
+  margin-top: 4px;
+  text-decoration: underline;
+  text-decoration-color: #ccc;
+}
+.wrapper-field .wrapper-toggle:hover {
+  color: #333;
+}
 .field label {
   font-size: 10px;
   text-transform: uppercase;
