@@ -179,7 +179,7 @@ Consequences for the per-retailer CSV files in `static/data/`:
 | GET  | `/api/admin/observed-prices-recent` | Debug: most recent observations |
 | POST | `/api/admin/cleanup-orphan-observations` | Delete non-product / tracking-param / empty observation rows |
 | POST | `/api/admin/mark-extension-published` | Local publisher confirms a row landed in the CSV |
-| POST | `/api/admin/resolve-proposal` | Operator approves/edits/rejects a `community_url_proposals` row |
+| POST | `/api/admin/resolve-community-proposal` | Operator approves/edits/rejects a `community_url_proposals` row. The `/admin/review?source=community` page uses this for one-click triage. |
 
 Note: `/api/admin/url-status` also returns a `community_proposal` object
 on every response (null when none exists) so the operator extension
@@ -364,7 +364,7 @@ review via `tools/ai/review_matches.py`.
 
 (Operator-side UI not built yet as of 2026-05-13. Workflow:)
 1. `GET /api/admin/observed-prices-recent` to see context.
-2. `POST /api/admin/resolve-proposal` with the proposal_id and either:
+2. `POST /api/admin/resolve-community-proposal` with the proposal_id and either:
    - `action="approve_existing"` + `cid="..."`, OR
    - `action="approve_new"` + `cid_parts={...}` (creates a new master CID).
 3. The local publisher next picks up the resulting `extension_staged_approvals` row.

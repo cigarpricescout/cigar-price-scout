@@ -74,8 +74,13 @@
 </head>
 <body>
 <div class="header">
-  <h1>Match Review</h1>
+  <h1 id="page-title">Match Review</h1>
   <div class="stats" id="stats">Loading...</div>
+</div>
+
+<div class="filters source-toggle" id="source-toggle" style="background:#fafafa;border-bottom:1px solid #ddd;justify-content:center">
+  <button id="btn-src-harvester" class="active" onclick="setSource('harvester')">Harvester queue</button>
+  <button id="btn-src-community" onclick="setSource('community')">Community submissions <span id="cnt-community"></span></button>
 </div>
 
 <div class="filters" id="filters">
@@ -122,8 +127,15 @@ let currentBrand = '';
 let currentSearch = '';
 let totalMatches = 0;
 let selectedTokens = new Set();
+// Source toggle: 'harvester' uses url_staged_matches (default, the
+// existing weekly-discovery agent flow). 'community' uses
+// community_url_proposals (consumer extension submissions). Persisted
+// via ?source= so links into either view are stable.
+let currentSource = (new URLSearchParams(location.search).get('source') || 'harvester').toLowerCase();
+if (currentSource !== 'community') currentSource = 'harvester';
 
 async function fetchMatches() {
+  if (currentSource === 'community') return fetchCommunityProposals();
   const params = new URLSearchParams({key: KEY, offset: currentOffset, limit: PAGE_SIZE});
   if (currentConfidence) params.set('confidence', currentConfidence);
   if (currentRetailer) params.set('retailer', currentRetailer);
@@ -133,6 +145,108 @@ async function fetchMatches() {
   const resp = await fetch('/api/admin/pending-matches?' + params);
   if (!resp.ok) { document.getElementById('cards').innerHTML = '<div class="empty"><h2>Error loading</h2></div>'; return null; }
   return resp.json();
+}
+
+async function fetchCommunityProposals() {
+  // Community mode: same shape as fetchMatches() output so the
+  // existing pager/empty-state/stats wiring works unchanged. We
+  // remap proposal fields → match-card fields and synthesize a
+  // confidence label from the matcher's top_candidate score.
+  const params = new URLSearchParams({
+    key: KEY, status: 'pending', limit: PAGE_SIZE,
+  });
+  let resp;
+  try {
+    resp = await fetch('/api/admin/community-proposals?' + params);
+  } catch (e) {
+    document.getElementById('cards').innerHTML = '<div class="empty"><h2>Network error</h2></div>';
+    return null;
+  }
+  if (!resp.ok) {
+    document.getElementById('cards').innerHTML = '<div class="empty"><h2>Error loading community proposals</h2></div>';
+    return null;
+  }
+  const data = await resp.json();
+  let proposals = data.results || [];
+
+  // Apply client-side filters that mirror the harvester filters.
+  // Server endpoint is small and unfiltered today; if the queue
+  // grows we can push these to the API later.
+  if (currentRetailer) proposals = proposals.filter(p => p.retailer_key === currentRetailer);
+  if (currentBrand) proposals = proposals.filter(p => (p.proposed_brand || '').toLowerCase() === currentBrand.toLowerCase());
+  if (currentSearch) {
+    const q = currentSearch.toLowerCase();
+    proposals = proposals.filter(p =>
+      (p.proposed_brand || '').toLowerCase().includes(q) ||
+      (p.proposed_line || '').toLowerCase().includes(q) ||
+      (p.scraped_title || '').toLowerCase().includes(q) ||
+      (p.url || '').toLowerCase().includes(q)
+    );
+  }
+  if (currentConfidence) {
+    proposals = proposals.filter(p => confidenceLabel(p) === currentConfidence);
+  }
+
+  const matches = proposals.map(proposalToMatchCard);
+  const conf_counts = {HIGH: 0, MEDIUM: 0, LOW: 0};
+  for (const p of (data.results || [])) conf_counts[confidenceLabel(p)] = (conf_counts[confidenceLabel(p)] || 0) + 1;
+  const retailers = [...new Set((data.results || []).map(p => p.retailer_key).filter(Boolean))].sort();
+  const brands = [...new Set((data.results || []).map(p => p.proposed_brand).filter(Boolean))].sort();
+
+  return {
+    total: matches.length,
+    offset: 0,
+    limit: PAGE_SIZE,
+    confidence_counts: conf_counts,
+    available_retailers: retailers,
+    available_brands: brands,
+    matches: matches,
+    _community_count: (data.results || []).length,
+  };
+}
+
+function confidenceLabel(p) {
+  const tc = p.top_candidate;
+  if (!tc) return 'LOW';
+  const s = tc.score || 0;
+  if (s >= 0.80) return 'HIGH';
+  if (s >= 0.50) return 'MEDIUM';
+  return 'LOW';
+}
+
+function proposalToMatchCard(p) {
+  // Bridge the proposal shape onto the match-card renderer.
+  // - token: encodes "community:<id>" so reviewOne()/bulkAction() can
+  //   route to the resolve-community-proposal endpoint
+  // - cid: top_candidate.cigar_id when matcher found one, else blank
+  // - reason: synthesizes "product='<scraped_title>' variant='<source>'"
+  //   so the existing parseReason() pulls a sensible product title
+  const tc = p.top_candidate || null;
+  const productTitle = p.scraped_title
+    || [p.proposed_brand, p.proposed_line, p.proposed_vitola].filter(Boolean).join(' ')
+    || '(no title)';
+  const variantLabel = p.observer_source ? `consumer ext (${p.observer_source})` : 'consumer ext';
+  const reason = `product='${productTitle.replace(/'/g, "")}' variant='${variantLabel}'`;
+  return {
+    token: `community:${p.id}`,
+    cid: tc ? tc.cigar_id : '',
+    retailer_key: p.retailer_key || '',
+    url: p.url || '',
+    confidence: confidenceLabel(p),
+    reason: reason,
+    brand: p.proposed_brand || (tc && tc.brand) || '',
+    line: p.proposed_line || (tc && tc.line) || '',
+    vitola: p.proposed_vitola || '',
+    wrapper: p.proposed_wrapper || '',
+    size: p.proposed_size || '',
+    box_qty: p.proposed_box_qty || null,
+    price: null,
+    in_stock: null,
+    created_at: p.created_at,
+    _community: true,
+    _proposal_id: p.id,
+    _top_candidate: tc,
+  };
 }
 
 function parseReason(reason) {
@@ -146,6 +260,7 @@ function parseReason(reason) {
 }
 
 function renderCard(m) {
+  if (m._community) return renderCommunityCard(m);
   const price = m.price ? `$${m.price.toFixed(2)}` : '';
   const stock = m.in_stock === true ? 'In Stock' : m.in_stock === false ? 'Out of Stock' : '';
   const stockColor = m.in_stock === true ? '#2e7d32' : '#c62828';
@@ -181,11 +296,90 @@ function renderCard(m) {
   </div>`;
 }
 
+function renderCommunityCard(m) {
+  const tc = m._top_candidate;
+  const haveCID = !!(tc && tc.cigar_id);
+  const isHigh = m.confidence === 'HIGH';
+  const selected = selectedTokens.has(m.token) ? ' selected' : '';
+  const consumerLine = [m.brand, m.line, m.vitola].filter(Boolean).join(' ');
+  const consumerMeta = [
+    m.box_qty ? `Box of ${m.box_qty}` : null,
+    m.wrapper || null,
+    m.size || null,
+  ].filter(Boolean).join(' · ');
+
+  // Approve button behaviour:
+  //   HIGH-confidence + CID: one-click stages an approve_existing.
+  //   MEDIUM/LOW: requires extension popup for CID confirmation, so
+  //   we show "Open in extension" pointing at the URL — operator
+  //   visits the page, the popup pre-fills with this proposal data
+  //   (Gap 1), they approve there.
+  const approveBtn = (haveCID && isHigh)
+    ? `<button class="approve-btn" onclick="reviewOne('${m.token}','approve')">Approve →</button>`
+    : `<button class="approve-btn" style="background:#fff3e0;color:#e65100" onclick="openInExtension('${m.url.replace(/'/g, "\\'")}')">Open in extension</button>`;
+
+  return `<div class="card" id="card-${m.token}">
+    <div class="card-body">
+      <div class="top-row">
+        <div>
+          <div class="section-label">Consumer suggested</div>
+          <div class="cid-name">${escHTML(consumerLine || m.reason || '(no metadata)')}</div>
+          <div class="cid-details">${escHTML(consumerMeta)}</div>
+        </div>
+        <span class="confidence ${m.confidence}">${m.confidence}</span>
+      </div>
+
+      ${haveCID ? `
+        <hr class="divider">
+        <div class="section-label">Matcher's best CID guess</div>
+        <div class="cid-full">${escHTML(tc.cigar_id)}</div>
+        <div class="cid-details" style="margin-top:4px">
+          <span class="label">score</span> ${(tc.score || 0).toFixed(2)}
+          ${tc.brand ? `&nbsp;·&nbsp;<span class="label">brand</span> ${escHTML(tc.brand)}` : ''}
+          ${tc.line ? `&nbsp;·&nbsp;<span class="label">line</span> ${escHTML(tc.line)}` : ''}
+        </div>
+      ` : `
+        <hr class="divider">
+        <div class="cid-details" style="color:#c62828">No confident CID match — needs operator review via extension popup.</div>
+      `}
+
+      <hr class="divider">
+
+      <div class="section-label">Source</div>
+      <div class="product-meta">
+        <span class="retailer-tag">${escHTML(m.retailer_key || 'unknown retailer')}</span>
+      </div>
+      <div class="url-row"><a href="${m.url}" target="_blank" rel="noopener">${escHTML(m.url)}</a></div>
+    </div>
+    <div class="actions">
+      ${approveBtn}
+      <button class="reject-btn" onclick="reviewOne('${m.token}','reject')">Reject</button>
+      <button class="select-btn${selected}" onclick="toggleSelect('${m.token}')" title="Select for bulk action">&#9744;</button>
+    </div>
+  </div>`;
+}
+
+function escHTML(s) {
+  if (s == null) return '';
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function openInExtension(url) {
+  // Best we can do from a web page: open the URL in a new tab so the
+  // operator can use the extension popup there.
+  window.open(url, '_blank', 'noopener');
+}
+
 async function loadPage() {
   selectedTokens.clear();
   updateBulkBar();
   const data = await fetchMatches();
   if (!data) return;
+
+  // Refresh the community-queue badge whenever we load a page so a
+  // local action (approve/reject) immediately decrements it without
+  // waiting for the 60s timer.
+  refreshCommunityBadge();
 
   totalMatches = data.total;
   const cc = data.confidence_counts || {};
@@ -232,9 +426,35 @@ async function reviewOne(token, action) {
   card.classList.add('removing');
 
   try {
-    await fetch(`/admin/match/${token}/${action}`, {method: 'GET'});
-    showToast(action === 'approve' ? 'Approved' : 'Rejected');
-  } catch(e) { showToast('Error', true); }
+    if (token.startsWith('community:')) {
+      // Community proposal: hits resolve-community-proposal with the
+      // top_candidate's CID for approve, or action='reject' for reject.
+      const proposal_id = parseInt(token.split(':')[1], 10);
+      // Pull the suggested CID off the rendered card (we stashed it on
+      // the dataset in renderCommunityCard's CID block — fall back to
+      // empty string which the server will reject loudly).
+      const cidEl = card.querySelector('.cid-full');
+      const cid = cidEl ? cidEl.textContent.trim() : '';
+      const body = (action === 'approve')
+        ? {proposal_id, action: 'approve_existing', cid}
+        : {proposal_id, action: 'reject'};
+      const resp = await fetch('/api/admin/resolve-community-proposal', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-Admin-Key': KEY},
+        body: JSON.stringify(body),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data.error || 'failed');
+      showToast(action === 'approve' ? 'Approved & staged' : 'Rejected');
+    } else {
+      await fetch(`/admin/match/${token}/${action}`, {method: 'GET'});
+      showToast(action === 'approve' ? 'Approved' : 'Rejected');
+    }
+  } catch(e) {
+    card.classList.remove('removing');
+    showToast('Error: ' + (e.message || 'failed'), true);
+    return;
+  }
 
   setTimeout(() => {
     card.remove();
@@ -268,16 +488,44 @@ function clearSelection() {
 async function bulkAction(action) {
   if (selectedTokens.size === 0) return;
   const tokens = [...selectedTokens];
-  const count = tokens.length;
+  const harvesterTokens = tokens.filter(t => !t.startsWith('community:'));
+  const communityIds = tokens
+    .filter(t => t.startsWith('community:'))
+    .map(t => parseInt(t.split(':')[1], 10));
 
   try {
-    const resp = await fetch('/api/admin/bulk-review', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json', 'X-Admin-Key': KEY},
-      body: JSON.stringify({action, tokens})
-    });
-    const data = await resp.json();
-    showToast(`${data.updated} ${action === 'approve' ? 'approved' : 'rejected'}`);
+    if (harvesterTokens.length) {
+      const resp = await fetch('/api/admin/bulk-review', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-Admin-Key': KEY},
+        body: JSON.stringify({action, tokens: harvesterTokens})
+      });
+      const data = await resp.json();
+      showToast(`${data.updated || 0} harvester ${action === 'approve' ? 'approved' : 'rejected'}`);
+    }
+    if (communityIds.length) {
+      // No bulk endpoint on the server side yet — fan out one request
+      // per proposal. Cheap for typical queue sizes (single-digits to
+      // low double-digits per session).
+      let ok = 0, fail = 0;
+      for (const id of communityIds) {
+        const card = document.getElementById('card-community:' + id);
+        const cidEl = card ? card.querySelector('.cid-full') : null;
+        const cid = cidEl ? cidEl.textContent.trim() : '';
+        const body = (action === 'approve')
+          ? {proposal_id: id, action: 'approve_existing', cid}
+          : {proposal_id: id, action: 'reject'};
+        try {
+          const resp = await fetch('/api/admin/resolve-community-proposal', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-Admin-Key': KEY},
+            body: JSON.stringify(body),
+          });
+          if (resp.ok) ok++; else fail++;
+        } catch(e) { fail++; }
+      }
+      showToast(`${ok} community ${action === 'approve' ? 'approved' : 'rejected'}${fail ? `, ${fail} failed` : ''}`, fail > 0);
+    }
   } catch(e) { showToast('Bulk action failed', true); }
 
   tokens.forEach(t => {
@@ -292,9 +540,54 @@ async function bulkAction(action) {
 function setConfidence(val) {
   currentConfidence = val;
   currentOffset = 0;
-  document.querySelectorAll('.filters button[id^="btn-"]').forEach(b => b.classList.remove('active'));
+  // Only toggle confidence buttons inside #filters (NOT the source-toggle bar).
+  document.querySelectorAll('#filters button[id^="btn-"]').forEach(b => b.classList.remove('active'));
   document.getElementById(val ? `btn-${val.toLowerCase()}` : 'btn-all').classList.add('active');
   loadPage();
+}
+
+function setSource(src) {
+  if (src !== 'community' && src !== 'harvester') return;
+  if (currentSource === src) return;
+  currentSource = src;
+  currentOffset = 0;
+  currentConfidence = '';
+  currentRetailer = '';
+  currentBrand = '';
+  currentSearch = '';
+  document.getElementById('search-box').value = '';
+  // Update toggle button styles
+  document.getElementById('btn-src-harvester').classList.toggle('active', src === 'harvester');
+  document.getElementById('btn-src-community').classList.toggle('active', src === 'community');
+  // Reset the confidence-row "All" pill so the previous selection
+  // doesn't visually persist when switching.
+  document.querySelectorAll('#filters button[id^="btn-"]').forEach(b => b.classList.remove('active'));
+  const allBtn = document.getElementById('btn-all');
+  if (allBtn) allBtn.classList.add('active');
+  // Update page title + URL so refresh keeps the chosen view.
+  document.getElementById('page-title').textContent =
+    src === 'community' ? 'Community Submissions' : 'Match Review';
+  const url = new URL(location.href);
+  if (src === 'harvester') url.searchParams.delete('source');
+  else url.searchParams.set('source', src);
+  history.replaceState(null, '', url);
+  loadPage();
+}
+
+async function refreshCommunityBadge() {
+  // Independent of the active mode — always show how many community
+  // proposals are pending so the operator sees the queue at a glance.
+  // Skip candidate matching to keep the badge query fast.
+  try {
+    const resp = await fetch('/api/admin/community-proposals?' + new URLSearchParams({
+      key: KEY, status: 'pending', limit: 500, include_candidates: 'false',
+    }));
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const n = (data.results || []).length;
+    const badge = document.getElementById('cnt-community');
+    if (badge) badge.textContent = n > 0 ? `(${n >= 500 ? '500+' : n})` : '';
+  } catch (e) { /* silent */ }
 }
 function setRetailer(val) { currentRetailer = val; currentOffset = 0; loadPage(); }
 function setBrand(val) { currentBrand = val; currentOffset = 0; loadPage(); }
@@ -313,6 +606,20 @@ function showToast(msg, err) {
   t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), 1500);
 }
+
+// Sync the source-toggle UI with whatever ?source= we landed on.
+(function initSource() {
+  document.getElementById('btn-src-harvester').classList.toggle('active', currentSource === 'harvester');
+  document.getElementById('btn-src-community').classList.toggle('active', currentSource === 'community');
+  document.getElementById('page-title').textContent =
+    currentSource === 'community' ? 'Community Submissions' : 'Match Review';
+})();
+
+refreshCommunityBadge();
+// Refresh the badge every 60s so operator notices new submissions
+// without having to reload — same cadence the popup uses for its
+// own /url-status pings.
+setInterval(refreshCommunityBadge, 60_000);
 
 loadPage();
 </script>

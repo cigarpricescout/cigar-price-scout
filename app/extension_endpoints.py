@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -1563,12 +1564,23 @@ async def community_proposals(
     request: Request,
     status: str = Query("pending"),
     limit: int = Query(50, ge=1, le=500),
+    include_candidates: bool = Query(True),
 ):
-    """Paginated list of consumer-submitted metadata proposals."""
+    """Paginated list of consumer-submitted metadata proposals.
+
+    When ``include_candidates=True`` (default), each row also gets a
+    ``top_candidate`` field — the highest-confidence CID match the
+    matcher can derive from the proposal's URL + scraped_title +
+    proposed brand/line/vitola/box_qty. This powers the
+    /admin/review?source=community one-click approve flow: HIGH-confidence
+    rows get an "Approve {CID}" button; lower-confidence rows fall
+    back to "Open in extension" so the operator can edit via the popup.
+    """
     auth = _check_admin(request)
     if auth:
         return auth
     try:
+        _refresh_cache()
         conn = _get_conn()
         cur = conn.cursor()
         cur.execute("""
@@ -1585,6 +1597,56 @@ async def community_proposals(
         cols = [c[0] for c in cur.description]
         rows = [dict(zip(cols, r)) for r in cur.fetchall()]
         conn.close()
+
+        if include_candidates and rows:
+            master = _cache_state.get("master") or []
+            for row in rows:
+                # Synthesize a title from the proposed metadata so the
+                # matcher has the same signal an extractor would feed it.
+                bits = [
+                    row.get("proposed_brand"),
+                    row.get("proposed_line"),
+                    row.get("proposed_vitola"),
+                    row.get("proposed_size"),
+                ]
+                synth_title = " ".join(b for b in bits if b)
+                title = row.get("scraped_title") or synth_title
+                try:
+                    cands = find_top_candidates(
+                        row.get("url") or "",
+                        title,
+                        master,
+                        limit=3,
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "candidate match failed for proposal %s: %s",
+                        row.get("id"), e,
+                    )
+                    cands = []
+                # Filter to candidates whose box_qty matches the
+                # proposal's — wrong box quantity is the single
+                # most-common reason a HIGH-confidence text match
+                # is actually wrong (singles vs box).
+                proposed_box = row.get("proposed_box_qty")
+                if proposed_box:
+                    same_box = []
+                    for c in cands:
+                        cid = c.get("cigar_id") or ""
+                        parts = cid.split("|")
+                        # CID format: ...|BOXQTY where BOXQTY is "BOX25"
+                        bq_str = parts[-1] if parts else ""
+                        try:
+                            bq = int(re.sub(r"[^0-9]", "", bq_str) or "0")
+                        except Exception:
+                            bq = 0
+                        if bq == int(proposed_box):
+                            same_box.append(c)
+                    if same_box:
+                        cands = same_box
+                row["candidates"] = cands[:3]
+                row["top_candidate"] = cands[0] if cands else None
+
         return {"results": rows, "count": len(rows), "status": status}
     except Exception as e:
         logger.exception("community_proposals failed: %s", e)
