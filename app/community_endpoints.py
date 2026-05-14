@@ -737,7 +737,15 @@ async def public_url_status(
         )
         row = cur.fetchone()
         if row:
-            seen_status = row[0]
+            # Prefix with `extension_` so the consumer popup can
+            # distinguish "operator already approved this, waiting for
+            # the publisher to drain it to CSV" (extension_pending /
+            # extension_published) from "consumer suggested it, no
+            # operator review yet" (community_pending). Without the
+            # prefix the popup saw bare "pending" and incorrectly
+            # rendered "Under review" even though the operator had
+            # already approved.
+            seen_status = f"extension_{row[0]}"
         if seen_status is None:
             cur.execute(
                 "SELECT status, proposed_brand, proposed_line, proposed_vitola, "

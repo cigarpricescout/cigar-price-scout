@@ -158,7 +158,7 @@ Consequences for the per-retailer CSV files in `static/data/`:
 | Method | Path | Use |
 |---|---|---|
 | GET  | `/api/public/retailer-registry` | Hostnames the extension activates on |
-| GET  | `/api/public/url-status?url=&zip=` | Single-call popup state (matched / candidate / seen / no_scraper) + inline top-3 comparison |
+| GET  | `/api/public/url-status?url=&zip=` | Single-call popup state (matched / candidate / seen / no_scraper) + inline top-3 comparison. `seen_status` is prefixed by source: `extension_pending` / `extension_published` (operator-staged via op-extension, awaiting publish) vs `community_pending` / `community_approved` / `community_rejected` (consumer-submitted). The popup treats anything `extension_*` or `community_approved` as "Approved — prices coming soon" so consumers see honest feedback once the operator has acted. |
 | POST | `/api/community/observe` | Anonymous passive price observation |
 | POST | `/api/community/propose-metadata` | Consumer-suggested brand/line/vitola/box_qty/price for an unmapped URL |
 | POST | `/api/community/request-retailer` | "Please add this retailer" — observer-linked |

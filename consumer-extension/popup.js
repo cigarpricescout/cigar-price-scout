@@ -413,48 +413,33 @@ async function submitProposal(tab, response, scraped) {
   }
 }
 
-// Post-submit thank-you with website search deep-link. Reuses the same
-// buildScoutSearchUrl helper as the seen-state branch so the
-// /compare?brand=&line=&vitola=&box_qty= shape stays consistent.
+// Post-submit thank-you with a homepage CTA. We deliberately don't deep-link
+// to /compare — that endpoint returns JSON, not HTML, so any direct visit
+// looks like a 404 to a real user. The homepage's search is the right
+// surface for poking around while the operator reviews the submission.
 function renderSubmittedWithSearch(tab, response, scraped, submittedMeta) {
-  const searchUrl = buildScoutSearchUrl(submittedMeta);
-  const haveSearch = !!searchUrl;
   root.innerHTML = `
     ${renderHeader(tab, response)}
     <div class="banner matched">✓ Thanks for contributing!</div>
     <div class="section">
       <div class="cigar-meta" style="line-height:1.45">
         We're reviewing your submission and will map this URL to a
-        comparison shortly. ${haveSearch
-          ? `In the meantime, search prices for what you just submitted on
-             cigarpricescout.com — it may already be in our catalog.`
-          : `Browse other cigars on cigarpricescout.com in the meantime.`}
+        comparison shortly. In the meantime, browse cigarpricescout.com
+        — this cigar may already be in our catalog.
       </div>
     </div>
     <div class="actions">
-      ${haveSearch
-        ? `<button id="search-scout" class="primary">Search prices on cigarpricescout.com</button>`
-        : `<button id="open-scout">Browse cigarpricescout.com</button>`}
+      <button id="open-scout" class="primary">Visit cigarpricescout.com</button>
       <button id="close">Close</button>
     </div>
     <div class="footer">
       <a href="#" id="open-options">Settings</a>
     </div>
   `;
-  const searchBtn = document.getElementById("search-scout");
-  if (searchBtn) {
-    searchBtn.addEventListener("click", () => {
-      chrome.tabs.create({ url: searchUrl });
-      window.close();
-    });
-  }
-  const openBtn = document.getElementById("open-scout");
-  if (openBtn) {
-    openBtn.addEventListener("click", () => {
-      chrome.tabs.create({ url: "https://cigarpricescout.com" });
-      window.close();
-    });
-  }
+  document.getElementById("open-scout").addEventListener("click", () => {
+    chrome.tabs.create({ url: "https://cigarpricescout.com" });
+    window.close();
+  });
   document.getElementById("close").addEventListener("click", () => window.close());
   wireFooter();
 }
@@ -525,31 +510,47 @@ function renderProvisionalComparison(tab, response, scraped, proposeRes) {
 // ── State: seen (someone already proposed or operator already touched) ─
 
 function renderSeen(tab, response, scraped) {
-  const status = (response.seen_status || "").replace(/_/g, " ");
-  // When a previous consumer proposed metadata for this URL, the
-  // backend now ships the proposed brand/line/vitola/box_qty/wrapper
-  // alongside the seen_status. Build a "Search prices on
-  // cigarpricescout.com" deep-link so the user gets immediate value
-  // instead of a dead-end "check back soon". When no metadata is
-  // available, fall back to a generic homepage link.
-  const meta = response.proposed_metadata || null;
-  const searchUrl = buildScoutSearchUrl(meta);
-  const havePrimaryCTA = !!searchUrl;
+  // Differentiate seen sub-states so the copy reflects what actually
+  // happened. Pending proposals stay "Under review"; resolved ones
+  // (operator already approved, awaiting publish) get a clearer
+  // "Approved — prices coming soon" so the user understands their
+  // contribution did land. Anything not approved-or-pending falls back
+  // to the raw status label for transparency.
+  const ss = (response.seen_status || "").toLowerCase();
+  // "extension_*" rows live in extension_staged_approvals — the operator
+  // already approved them and they're waiting on the publisher to drain
+  // to CSV. Treat them as approved so the user gets honest feedback.
+  // "community_pending" is the only true "consumer suggested, no review
+  // yet" state.
+  const isOperatorApproved =
+    ss.startsWith("extension_") ||
+    ss === "community_approved" ||
+    ss.includes("published");
+  const isRejected = ss.includes("rejected");
+  const isCommunityPending = ss === "community_pending";
+  let bannerText, bodyText;
+  if (isOperatorApproved) {
+    bannerText = "✓ Approved — prices coming soon";
+    bodyText = "We've matched this cigar to our catalog. Prices will appear here within a few minutes once published.";
+  } else if (isRejected) {
+    bannerText = "Submission was rejected";
+    bodyText = "We couldn't match this listing to our catalog.";
+  } else if (isCommunityPending) {
+    bannerText = "Under review";
+    bodyText = "Someone already suggested info for this cigar.";
+  } else {
+    bannerText = `Under review · ${escapeHtml(ss.replace(/_/g, " "))}`;
+    bodyText = "Someone already suggested info for this cigar.";
+  }
   root.innerHTML = `
     ${renderHeader(tab, response)}
-    <div class="banner seen">Under review · ${escapeHtml(status)}</div>
+    <div class="banner seen">${bannerText}</div>
     <div class="empty-state" style="padding: 16px 14px 10px;">
-      Someone already suggested info for this cigar. We're waiting on
-      operator review before this URL maps directly to a comparison.
-      ${havePrimaryCTA
-        ? `In the meantime, search prices below — the proposed cigar may
-          already be on cigarpricescout.com.`
-        : `Check back soon!`}
+      ${bodyText} In the meantime, browse cigarpricescout.com to search
+      for similar cigars.
     </div>
     <div class="actions">
-      ${havePrimaryCTA
-        ? `<button id="search-scout" class="primary">Search prices on cigarpricescout.com</button>`
-        : `<button id="open-scout">Browse cigarpricescout.com</button>`}
+      <button id="open-scout" class="primary">Visit cigarpricescout.com</button>
       <button id="close">Close</button>
     </div>
     <div class="footer">
@@ -557,38 +558,11 @@ function renderSeen(tab, response, scraped) {
     </div>
   `;
   document.getElementById("close").addEventListener("click", () => window.close());
-  const searchBtn = document.getElementById("search-scout");
-  if (searchBtn) {
-    searchBtn.addEventListener("click", () => {
-      chrome.tabs.create({ url: searchUrl });
-      window.close();
-    });
-  }
-  const openBtn = document.getElementById("open-scout");
-  if (openBtn) {
-    openBtn.addEventListener("click", () => {
-      chrome.tabs.create({ url: "https://cigarpricescout.com" });
-      window.close();
-    });
-  }
+  document.getElementById("open-scout").addEventListener("click", () => {
+    chrome.tabs.create({ url: "https://cigarpricescout.com" });
+    window.close();
+  });
   wireFooter();
-}
-
-// Build a deep-link to cigarpricescout.com/compare with the proposed
-// metadata as query params. Returns "" when we don't have enough
-// (brand+line is the minimum; everything else is optional narrowing).
-// Wrapper is intentionally NOT forwarded today — the bucket name
-// ("Maduro", "Natural / Connecticut") doesn't match the /compare
-// endpoint's expected wrapper string format and could over-filter the
-// result set. Box_qty + vitola are safe pass-throughs.
-function buildScoutSearchUrl(meta) {
-  if (!meta || !meta.brand || !meta.line) return "";
-  const params = new URLSearchParams();
-  params.set("brand", meta.brand);
-  params.set("line", meta.line);
-  if (meta.vitola)  params.set("vitola", meta.vitola);
-  if (meta.box_qty) params.set("box_qty", String(meta.box_qty));
-  return `https://cigarpricescout.com/compare?${params.toString()}`;
 }
 
 // ── State: no_scraper (unknown retailer) ──────────────────────────────
