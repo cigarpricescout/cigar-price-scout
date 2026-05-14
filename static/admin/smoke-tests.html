@@ -230,6 +230,32 @@
     </div>
   </section>
 
+  <!-- Test 8 -->
+  <section class="test" id="test8">
+    <div class="test-head">
+      <div class="test-num">8</div>
+      <div class="test-title">Overnight automation health</div>
+      <div class="test-status idle" id="status8">idle</div>
+    </div>
+    <div class="test-body">
+      <p>
+        One-click morning check. Verifies that every overnight automation
+        ran cleanly and that yesterday's submissions made it through the
+        full pipeline (extension → DB → CSV → <code>/compare</code>).
+      </p>
+      <div class="actions">
+        <button class="primary" onclick="runMorningChecks()">Run morning checks</button>
+      </div>
+      <p class="expected">
+        Expected (all green): Daily Pricing Update succeeded in the last
+        24h, Drain Extension Approvals succeeded in the last hour, no
+        affiliate hosts in the retailer registry, no extension approvals
+        stuck pending &gt;1h.
+      </p>
+      <pre id="result8">Click "Run morning checks" tomorrow morning to verify everything processed.</pre>
+    </div>
+  </section>
+
   <!-- Test 7 -->
   <section class="test" id="test7">
     <div class="test-head">
@@ -428,6 +454,130 @@
     } catch (e) {
       $("result6").textContent = "ERROR: " + e.message;
       setStatus(6, "fail", "error");
+    }
+  }
+
+  // ---- Test 8: overnight automation health ----
+  // GitHub's REST API allows unauthenticated CORS reads on public repos
+  // (60 req/hr per IP, plenty for one-click morning checks). We hit the
+  // workflows directly instead of polling Railway logs because the GH
+  // run is the source of truth for "did the cron actually fire".
+  const GH_REPO = "cigarpricescout/cigar-price-scout";
+  const GH_WORKFLOWS = {
+    daily_pricing: "daily-pricing-update.yml",
+    drain_approvals: "drain-extension-approvals.yml",
+    daily_discovery: "daily-discovery.yml",
+  };
+
+  async function ghLatestRun(workflowFile) {
+    const url = `https://api.github.com/repos/${GH_REPO}/actions/workflows/${workflowFile}/runs?per_page=1`;
+    const resp = await fetch(url, { headers: { "Accept": "application/vnd.github+json" } });
+    if (!resp.ok) throw new Error(`GitHub API ${resp.status}`);
+    const data = await resp.json();
+    const run = (data.workflow_runs || [])[0];
+    if (!run) return null;
+    return {
+      status: run.status,
+      conclusion: run.conclusion,
+      run_started_at: run.run_started_at,
+      updated_at: run.updated_at,
+      html_url: run.html_url,
+      age_hours: ((Date.now() - new Date(run.run_started_at).getTime()) / 3.6e6).toFixed(1),
+    };
+  }
+
+  async function runMorningChecks() {
+    setStatus(8, "pending", "running…");
+    const report = {};
+    const failures = [];
+
+    // 1) Daily pricing update — should have succeeded in the last 24h.
+    try {
+      const run = await ghLatestRun(GH_WORKFLOWS.daily_pricing);
+      report.daily_pricing_update = run;
+      if (!run) failures.push("daily_pricing: no runs found");
+      else if (run.conclusion !== "success") failures.push(`daily_pricing: last run was ${run.conclusion}`);
+      else if (parseFloat(run.age_hours) > 30) failures.push(`daily_pricing: last run ${run.age_hours}h ago (>30h)`);
+    } catch (e) {
+      report.daily_pricing_update = { error: e.message };
+      failures.push("daily_pricing: " + e.message);
+    }
+
+    // 2) Drain extension approvals — should have succeeded in the last hour.
+    try {
+      const run = await ghLatestRun(GH_WORKFLOWS.drain_approvals);
+      report.drain_extension_approvals = run;
+      if (!run) failures.push("drain: no runs found");
+      else if (run.conclusion !== "success") failures.push(`drain: last run was ${run.conclusion}`);
+      else if (parseFloat(run.age_hours) > 1.5) failures.push(`drain: last run ${run.age_hours}h ago (>1.5h)`);
+    } catch (e) {
+      report.drain_extension_approvals = { error: e.message };
+      failures.push("drain: " + e.message);
+    }
+
+    // 3) Daily discovery — informational, no pass/fail.
+    try {
+      report.daily_discovery = await ghLatestRun(GH_WORKFLOWS.daily_discovery);
+    } catch (e) {
+      report.daily_discovery = { error: e.message };
+    }
+
+    // 4) Retailer registry integrity — no affiliate hosts, gothamcigars present.
+    // This catches the bug we just fixed: build_retailer_registry() previously
+    // registered anrdoezrs.net as gothamcigars because that was the first URL
+    // in the CSV. If this regression ever returns, we want to know on the
+    // first morning, not when a user hits the "new retailer" prompt again.
+    try {
+      const reg = await fetch("/api/public/retailer-registry").then(r => r.json());
+      const hosts = (reg.retailers || []).map(r => (r.hostname || "").toLowerCase());
+      const affiliateRe = /(anrdoezrs|kqzyfj|dpbolvw|jdoqocy|tkqlhce|emjcd|qksrv|lduhtrp)\.(net|com)$/;
+      const affiliateHits = hosts.filter(h => affiliateRe.test(h));
+      const hasGotham = hosts.includes("gothamcigars.com");
+      report.retailer_registry = {
+        total_hosts: hosts.length,
+        affiliate_hosts_found: affiliateHits,
+        gothamcigars_present: hasGotham,
+      };
+      if (affiliateHits.length > 0) failures.push(`registry: ${affiliateHits.length} affiliate host(s) leaked into registry`);
+      if (!hasGotham) failures.push("registry: gothamcigars.com missing");
+    } catch (e) {
+      report.retailer_registry = { error: e.message };
+      failures.push("registry: " + e.message);
+    }
+
+    // 5) Stuck pending extension approvals — drain runs every 30 min, so any
+    // pending row >1h old means either the drain is failing or the row has a
+    // problem the publisher can't process.
+    try {
+      const data = await apiGet("/api/extension/pending-extension-approvals");
+      const pending = data.pending || [];
+      const cutoff = Date.now() - 60 * 60 * 1000;
+      const stuck = pending.filter(p => {
+        const t = p.created_at ? new Date(p.created_at + (p.created_at.endsWith("Z") ? "" : "Z")).getTime() : 0;
+        return t > 0 && t < cutoff;
+      });
+      report.extension_approvals = {
+        total_pending: pending.length,
+        stuck_over_1h: stuck.length,
+        stuck_samples: stuck.slice(0, 3).map(s => ({
+          retailer: s.retailer_key, url: s.url, created_at: s.created_at,
+        })),
+      };
+      if (stuck.length > 0) failures.push(`approvals: ${stuck.length} pending row(s) stuck >1h`);
+    } catch (e) {
+      report.extension_approvals = { error: e.message };
+      failures.push("approvals: " + e.message);
+    }
+
+    report.summary = failures.length === 0
+      ? "✓ All overnight automation healthy"
+      : `✗ ${failures.length} issue(s):\n  - ${failures.join("\n  - ")}`;
+
+    $("result8").textContent = JSON.stringify(report, null, 2);
+    if (failures.length === 0) {
+      setStatus(8, "ok", "✓ all healthy");
+    } else {
+      setStatus(8, "fail", `${failures.length} issue(s)`);
     }
   }
 
