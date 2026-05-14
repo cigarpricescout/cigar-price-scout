@@ -1,0 +1,126 @@
+name: Drain Extension Approvals
+
+# Periodically drains pending operator approvals from
+# extension_staged_approvals into the git-tracked CSVs (per-retailer +
+# master_cigars). Runs every 30 minutes so any approval the operator
+# made in the extension popup or via /admin/review?source=community is
+# synced to the repo within 30 min — without requiring the operator to
+# run anything locally.
+#
+# Why this exists alongside the live-overlay (Phase 1):
+#   * Live overlay makes approvals VISIBLE on the site within seconds
+#     (in-memory only).
+#   * This action makes approvals DURABLE in git (CSV+master), so:
+#       - they survive Railway redeploys / cache purges,
+#       - they show up in code review / blame,
+#       - the publisher's "mark-published" tag closes the staging row.
+
+on:
+  schedule:
+    # Every 30 minutes. Adjust the cron if you want it less chatty.
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Prevent overlapping runs (the publisher rebuilds the same CSVs).
+concurrency:
+  group: drain-extension-approvals
+  cancel-in-progress: false
+
+jobs:
+  drain:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+          ref: main
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas requests
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Configure git
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+
+      # The publisher hits the live API to fetch pending rows and
+      # then POSTs back /api/admin/mark-extension-published when the
+      # CSV row is committed locally. ADMIN_SECRET_KEY authenticates
+      # both calls.
+      - name: Drain pending approvals to local CSVs
+        id: drain
+        run: |
+          set -e
+          OUTPUT=$(python tools/extension/publish_extension_approvals.py 2>&1)
+          echo "$OUTPUT"
+          # Save a one-line summary for the job summary block below.
+          echo "$OUTPUT" | tail -n 20 > /tmp/drain-summary.txt
+        env:
+          ADMIN_SECRET_KEY: ${{ secrets.ADMIN_SECRET_KEY }}
+          EXTENSION_API_BASE: ${{ secrets.APP_BASE_URL }}
+          PYTHONUNBUFFERED: 1
+
+      - name: Commit and push (if anything changed)
+        run: |
+          # Quick exit when the publisher had nothing to do.
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "No CSV/master changes — nothing to commit."
+            echo "no_changes=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Stage only the paths the publisher is allowed to touch, so
+          # an unrelated dirty file doesn't sneak into this commit.
+          git add data/master_cigars.csv data/master_cigars.db static/data/*.csv 2>/dev/null || true
+
+          # Re-check after restricted staging.
+          if git diff --cached --quiet; then
+            echo "Publisher modified files outside the allowlist — skipping commit."
+            git status --short
+            exit 0
+          fi
+
+          # Count approvals we're about to commit (rough — counts
+          # added lines in retailer CSVs).
+          ADDED=$(git diff --cached --numstat -- 'static/data/*.csv' | awk '{s+=$1} END {print s+0}')
+
+          git commit -m "chore(extension): auto-drain ${ADDED} approval(s) from extension_staged_approvals
+
+Triggered by .github/workflows/drain-extension-approvals.yml. Pulled
+pending rows from extension_staged_approvals via the publish_extension_approvals
+script, wrote bare retailer-CSV rows (+ master rows for new CIDs),
+and marked each row published. The next /compare cache refresh will
+pick them up; the live-overlay (Phase 1) already had them visible in
+the popup the moment the operator approved."
+
+          git push origin HEAD:main
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## Drain Extension Approvals"
+            echo ""
+            echo "**Run at:** $(date -u +'%Y-%m-%d %H:%M UTC')"
+            echo ""
+            if [ -f /tmp/drain-summary.txt ]; then
+              echo "### Publisher output (tail)"
+              echo '```'
+              cat /tmp/drain-summary.txt
+              echo '```'
+            fi
+          } >> $GITHUB_STEP_SUMMARY
