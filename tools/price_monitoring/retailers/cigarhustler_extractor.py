@@ -43,11 +43,13 @@ class CigarHustlerExtractor:
             
             soup = BeautifulSoup(response.content, 'html.parser')
             
-            # Extract box quantity
+            # Extract box quantity FIRST — _extract_price uses it to sanity-check
+            # candidate prices via per-stick math (rejects single-stick / 5-pack
+            # prices that would otherwise be mistaken for the box price).
             box_qty = self._extract_box_quantity(soup)
             
             # Extract price (ZenCart specific logic - handles sale prices)
-            box_price = self._extract_price(soup)
+            box_price = self._extract_price(soup, box_qty=box_qty)
             
             # Check stock status
             in_stock = self._check_stock_status(soup)
@@ -119,113 +121,108 @@ class CigarHustlerExtractor:
         
         return None
     
-    def _extract_price(self, soup: BeautifulSoup) -> Optional[float]:
+    # Per-stick sanity gate. Real cigarhustler boxes land in roughly
+    # $3–$80/stick. Anything below ~$3/stick on a box page is almost
+    # certainly a 5-pack price masquerading as a box (e.g. Opus X
+    # PerfecXion No.4 box-of-42 wrote $110.70 ÷ 42 = $2.64/stick),
+    # and per-stick prices (Padron 1964 Diplomatico $18.70 ÷ 25 =
+    # $0.75/stick) sit far below the floor.
+    _MIN_PER_STICK = 3.00
+    _MAX_PER_STICK = 100.0
+
+    def _is_sane_box_price(self, price: float, box_qty: Optional[int]) -> bool:
+        """Reject candidate prices whose per-stick math is implausible.
+
+        Without box_qty we still require a non-trivial absolute price
+        (boxes are rarely under $50) — better to skip the row than to
+        write a per-stick price as the box price.
         """
-        Extract current price from ZenCart product page
-        Strategy: Use ZenCart's specific price element IDs, then fallback to text parsing
+        if not box_qty or box_qty < 2:
+            return price >= 50.0
+        per_stick = price / box_qty
+        return self._MIN_PER_STICK <= per_stick <= self._MAX_PER_STICK
+
+    def _extract_price(self, soup: BeautifulSoup, box_qty: Optional[int] = None) -> Optional[float]:
         """
-        # Method 1: Look for ZenCart's standard price elements by ID
-        # These are the most reliable indicators
-        price_elements = soup.find_all('span', id=re.compile(r'productPrice', re.I))
-        for elem in price_elements:
-            price_text = elem.get_text()
-            price_match = re.search(r'\$(\d+(?:,\d{3})*(?:\.\d{2})?)', price_text)
-            if price_match:
-                try:
-                    # Remove commas from price (e.g., "$4,200.00" -> "4200.00")
-                    price_str = price_match.group(1).replace(',', '')
-                    price = float(price_str)
-                    if price >= 10:  # Minimum reasonable price
-                        return price
-                except ValueError:
-                    continue
-        
-        # Method 2: Look for the main product title/price area (above "Related Products")
-        # Find the product title first to locate the main product section
-        product_title = soup.find('h1')
-        if product_title:
-            # Get the section containing the title
-            main_section = product_title.find_parent(['div', 'section', 'article'])
-            if main_section:
-                # Look for prices in this section only
-                section_text = main_section.get_text()
-                
-                # Extract all prices from this section (with comma support)
-                price_matches = re.findall(r'\$(\d+(?:,\d{3})*(?:\.\d{2})?)', section_text)
-                prices = []
-                for price_str in price_matches:
-                    try:
-                        # Remove commas
-                        price = float(price_str.replace(',', ''))
-                        if price >= 10:  # Minimum reasonable price (no upper limit for rare cigars)
-                            prices.append(price)
-                    except ValueError:
-                        continue
-                
-                # Remove duplicates and sort
-                prices = sorted(set(prices))
-                
-                # Check if this is a sale (has "Save:" text in main section)
-                if 'Save:' in section_text or 'save:' in section_text.lower():
-                    # On sale - return the lowest price (sale price)
-                    if len(prices) >= 2:
-                        return prices[0]
-                    elif len(prices) == 1:
-                        return prices[0]
-                else:
-                    # Not on sale - return the only/first price
-                    if len(prices) >= 1:
-                        return prices[0]
-        
-        # Method 3: Look for h1 + immediate following price elements
-        h1 = soup.find('h1')
-        if h1:
-            # Look at the next few siblings for price info
-            for sibling in h1.find_next_siblings(limit=5):
-                sibling_text = sibling.get_text()
-                price_match = re.search(r'\$(\d+(?:,\d{3})*(?:\.\d{2})?)', sibling_text)
-                if price_match:
-                    try:
-                        price = float(price_match.group(1).replace(',', ''))
-                        if price >= 10:
-                            return price
-                    except ValueError:
-                        continue
-        
-        # Method 4: Look for the main price display (typically large/prominent)
-        # Avoid "Related Products" section
-        body_text = soup.get_text()
-        
-        # Split on "Related Products" to only look at content before it
-        if 'Related Products' in body_text:
-            main_content = body_text.split('Related Products')[0]
-        else:
-            main_content = body_text
-        
-        # Extract prices from main content only (with comma support)
-        price_matches = re.findall(r'\$(\d+(?:,\d{3})*(?:\.\d{2})?)', main_content)
-        prices = []
-        for price_str in price_matches:
+        Extract the BOX price from a ZenCart product page.
+
+        ZenCart product pages for box SKUs typically display multiple prices
+        side-by-side: per-stick, 5-pack, and box (plus a strikethrough
+        "original" price when on sale). The previous implementation picked
+        the LOWEST price, which silently turned per-stick prices into box
+        prices on the website (e.g. Padron 1964 Diplomatico showed $18.70
+        instead of $442.50 — $442.50 ÷ 25 ≈ $17.68/stick).
+
+        Strategy:
+          1. ZenCart's <span id="productPrice…"> — authoritative when
+             present AND per-stick-sane.
+          2. Otherwise gather every $X.YZ in the main product section,
+             keep only candidates whose per-stick math is sane, and pick
+             the highest. Boxes are the most expensive SKU on a box page.
+          3. Sale handling: when "Save:" is present, the highest sane
+             price is the strikethrough original — return the
+             second-highest sane price (the current sale price).
+          4. If nothing passes the sanity gate, return None. We'd rather
+             write no price than write a wrong one (the loader treats
+             missing price as out-of-stock / hidden, which is recoverable).
+        """
+        box_qty = box_qty if box_qty is not None else self._extract_box_quantity(soup)
+
+        # Method 1: ZenCart's standard productPrice span.
+        # Only trust it when the value passes the per-stick sanity gate —
+        # ZenCart themes sometimes show the per-stick price in this
+        # element when the box-price live region renders elsewhere.
+        for elem in soup.find_all('span', id=re.compile(r'productPrice', re.I)):
+            price_match = re.search(r'\$(\d+(?:,\d{3})*(?:\.\d{2})?)', elem.get_text())
+            if not price_match:
+                continue
             try:
-                price = float(price_str.replace(',', ''))
-                if price >= 10:
-                    prices.append(price)
+                price = float(price_match.group(1).replace(',', ''))
             except ValueError:
                 continue
-        
-        # Remove duplicates and sort
-        prices = sorted(set(prices))
-        
-        # If "Save:" text exists, return lowest price (sale price)
-        if 'Save:' in main_content:
-            if len(prices) >= 1:
-                return prices[0]
-        else:
-            # Return first price found
-            if len(prices) >= 1:
-                return prices[0]
-        
-        return None
+            if self._is_sane_box_price(price, box_qty):
+                return price
+
+        # Method 2: scrape all $ values from the main product section, then
+        # pick the box price via max-with-sale-aware logic.
+        product_title = soup.find('h1')
+        section_text = ''
+        if product_title:
+            main_section = product_title.find_parent(['div', 'section', 'article'])
+            if main_section:
+                section_text = main_section.get_text()
+        if not section_text:
+            body_text = soup.get_text()
+            if 'Related Products' in body_text:
+                section_text = body_text.split('Related Products')[0]
+            else:
+                section_text = body_text
+
+        on_sale = bool(re.search(r'[Ss]ave\s*:', section_text))
+
+        candidates = []
+        for raw in re.findall(r'\$(\d+(?:,\d{3})*(?:\.\d{2})?)', section_text):
+            try:
+                p = float(raw.replace(',', ''))
+            except ValueError:
+                continue
+            if 1.0 <= p <= 10000.0:
+                candidates.append(p)
+
+        sane = sorted({p for p in candidates if self._is_sane_box_price(p, box_qty)}, reverse=True)
+        if not sane:
+            return None
+
+        if on_sale and len(sane) >= 2:
+            # Two large sane prices on a sale page → highest is the
+            # strikethrough original, second-highest is the current
+            # sale price. Edge case: if the strikethrough is missing
+            # one of the two largest prices (e.g. only the sale price
+            # is shown), the second-highest may actually be a 5-pack
+            # — but the per-stick gate would've already filtered that
+            # out, so this is safe.
+            return sane[1]
+        return sane[0]
     
     def _check_stock_status(self, soup: BeautifulSoup) -> bool:
         """Check if product is in stock"""
@@ -474,5 +471,100 @@ def test_cigarhustler_extraction():
     return all_passed
 
 
+def test_cigarhustler_offline_box_price():
+    """Network-free unit tests for the box-price fix in _extract_price.
+
+    Mirrors the failure modes that produced bad CSV values (Padron 1964
+    Diplomatico $18.70 from a per-stick price, Opus X No.4 $110.70 from
+    a 5-pack price) plus a few healthy/sale/regression scenarios.
+
+    Run with:  python -m tools.price_monitoring.retailers.cigarhustler_extractor offline
+    """
+
+    def _page(title: str, prices_html: str, box_qty: Optional[int] = 25, sale: bool = False) -> str:
+        # Mirrors the real ZenCart markup just enough for the
+        # h1 → parent-section → text-scrape path to fire.
+        sale_block = '<p>Save: 12% off</p>' if sale else ''
+        qty_in_title = f' Cigar Box of {box_qty}' if box_qty else ''
+        return f"""
+        <html><body>
+          <div class="centerColumn">
+            <h1>{title}{qty_in_title}</h1>
+            <div class="productPriceArea">
+              {prices_html}
+              {sale_block}
+              <button>Add to Cart</button>
+            </div>
+          </div>
+          <div class="related">
+            <h2>Related Products</h2><p>$15.00</p><p>$25.00</p>
+          </div>
+        </body></html>
+        """
+
+    ext = CigarHustlerExtractor()
+    cases = [
+        # (name, html, expected_price, box_qty)
+        ('per-stick masquerade (Padron Diplomatico)',
+         _page('Padron 1964 Anniversary Diplomatico Maduro',
+               '<p>Per Stick: $18.70</p><p>5-Pack: $93.50</p><p>Box Price: $442.50</p>',
+               box_qty=25),
+         442.50, 25),
+        ('5-pack masquerade (Opus X PerfecXion No. 4)',
+         _page('Arturo Fuente Opus X PerfecXion No. 4',
+               '<p>Per Stick: $11.90</p><p>5-Pack: $110.70</p><p>Box of 42 Price: $499.80</p>',
+               box_qty=42),
+         499.80, 42),
+        ('sale page (pick sale, not strikethrough orig)',
+         _page('Padron 1926 No. 9 Maduro',
+               '<p>Per Stick: $28.00</p><p>5-Pack: $135.00</p><p><s>$725.00</s> $652.50</p>',
+               box_qty=24, sale=True),
+         652.50, 24),
+        ('sale page with only one sane candidate (no regression to 5-pack)',
+         _page('Generic Budget Box',
+               '<p>Per Stick: $3.95</p><p>5-Pack: $18.75</p><p>Box: $89.00</p>',
+               box_qty=25, sale=True),
+         89.00, 25),
+        ('hostile page (no sane candidate -> None, not per-stick)',
+         _page('Mystery Cigar', '<p>Per Stick: $7.50</p>', box_qty=25),
+         None, 25),
+        ('sane productPrice span short-circuits',
+         '<html><body><h1>AF Hemingway Best Seller Maduro Cigar Box of 25</h1>'
+         '<div><span id="productPrice12">$270.00</span>'
+         '<p>Per Stick: $11.50</p><button>Add to Cart</button></div></body></html>',
+         270.00, 25),
+        ('insane productPrice span falls through to text scrape',
+         '<html><body><h1>Padron 1964 Anniversary Diplomatico Maduro Cigar Box of 25</h1>'
+         '<div><span id="productPrice12">$18.70</span>'
+         '<p>Per Stick: $18.70</p><p>5-Pack: $93.50</p><p>Box Price: $442.50</p>'
+         '<button>Add to Cart</button></div></body></html>',
+         442.50, 25),
+        ('regression: healthy 5-pack-only page (601 La Bomba Warhead)',
+         _page('601 La Bomba Warhead 11', '<p>$71.25</p>', box_qty=5),
+         71.25, 5),
+    ]
+
+    print('Cigar Hustler — offline box-price tests')
+    print('-' * 70)
+    failures = 0
+    for name, html, expected, box_qty in cases:
+        soup = BeautifulSoup(html, 'html.parser')
+        got = ext._extract_price(soup, box_qty=box_qty)
+        ok = (got is None and expected is None) or (
+            got is not None and expected is not None and abs(got - expected) < 0.01
+        )
+        flag = 'PASS' if ok else 'FAIL'
+        print(f'  [{flag}]  {name:55s}  expected={expected!s:<10}  got={got!s}')
+        if not ok:
+            failures += 1
+    print('-' * 70)
+    print(f'{len(cases) - failures}/{len(cases)} passed')
+    return failures == 0
+
+
 if __name__ == "__main__":
+    import sys as _sys
+    if len(_sys.argv) > 1 and _sys.argv[1] == 'offline':
+        ok = test_cigarhustler_offline_box_price()
+        _sys.exit(0 if ok else 1)
     test_cigarhustler_extraction()

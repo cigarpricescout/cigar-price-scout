@@ -701,6 +701,32 @@ class Product:
 
 _master_index_cache = {"data": None, "timestamp": 0}
 
+
+def _format_wrapper_display(alias: str, canon: str) -> str:
+    """Combine the canonical wrapper category and its specific varietal alias.
+
+    The cigar landing page (/cigars/<brand>/<line>) historically showed the
+    industry-friendly wrapper category first, with the specific botanical
+    varietal in parentheses — e.g. "Maduro (Connecticut Broadleaf)" or
+    "Sun Grown (Ecuadorian Sungrown)" — so a shopper who knows the cigar
+    by either term can find it. This helper preserves that ordering.
+
+    Examples:
+      _format_wrapper_display("Connecticut Broadleaf", "Maduro") -> "Maduro (Connecticut Broadleaf)"
+      _format_wrapper_display("Ecuadorian Sungrown", "Sun Grown") -> "Sun Grown (Ecuadorian Sungrown)"
+      _format_wrapper_display("Natural", "Cameroon")            -> "Cameroon (Natural)"
+      _format_wrapper_display("Maduro", "Maduro")               -> "Maduro"
+      _format_wrapper_display("", "Habano")                     -> "Habano"
+      _format_wrapper_display("Natural", "")                    -> "Natural"
+      _format_wrapper_display("", "")                           -> ""
+    """
+    a = (alias or "").strip()
+    c = (canon or "").strip()
+    if a and c and a.lower() != c.lower():
+        return f"{c} ({a})"
+    return c or a
+
+
 def _master_csv_path() -> Path:
     """Locate master_cigars.csv with fallbacks for dev / static-served deploys."""
     candidates = [
@@ -751,12 +777,18 @@ def load_master_index() -> Dict[str, Dict[str, str]]:
                 # Prefer wrapper_alias for display ("Connecticut Shade")
                 # over the technical wrapper column ("Connecticut"). The
                 # canonical wrapper_code lives in the CID itself.
+                # Both fields are also exposed separately so endpoints
+                # that want the formal+colloquial combined display
+                # (e.g. /compare-all → cigar landing page dropdown) can
+                # build "alias (canon)" without re-reading the master CSV.
                 wrapper_alias = (row.get('Wrapper_Alias') or '').strip()
                 wrapper_canon = (row.get('Wrapper') or '').strip()
                 index[cid] = {
                     'brand':    (row.get('Brand') or '').strip(),
                     'line':     (row.get('Line') or '').strip(),
                     'wrapper':  wrapper_alias or wrapper_canon,
+                    'wrapper_alias': wrapper_alias,
+                    'wrapper_canon': wrapper_canon,
                     'vitola':   (row.get('Vitola') or '').strip(),
                     'size':     size,
                     'box_qty':  box_qty,
@@ -2058,6 +2090,14 @@ def compare_all(
     results = []
     in_stock_prices = []
 
+    # Pull the master index once for wrapper-display lookups below. The
+    # cigar landing page (this endpoint's only consumer) wants the
+    # combined "alias (canon)" form — e.g. "Maduro (Connecticut Broadleaf)"
+    # — so a shopper who knows the cigar by either term still finds it.
+    # /compare (used by the main page search) stays on the single-value
+    # wrapper for filter-equality compatibility.
+    master_index_for_display = load_master_index()
+
     for product in matching_products:
         base_cents = product.price_cents
         shipping_cents = estimate_shipping_cents(base_cents, product.retailer_key, state) or 0
@@ -2107,11 +2147,24 @@ def compare_all(
         else:
             final_delivered_cents = delivered_cents
 
+        # Combined "alias (canon)" wrapper display for the cigar landing
+        # page. Falls back to product.wrapper when the master row is
+        # missing (in-flight CIDs not yet promoted to master) or when
+        # one of the two fields is empty.
+        master_row_for_display = master_index_for_display.get(product.cigar_id or "")
+        if master_row_for_display:
+            wrapper_display = _format_wrapper_display(
+                master_row_for_display.get("wrapper_alias", ""),
+                master_row_for_display.get("wrapper_canon", ""),
+            ) or product.wrapper
+        else:
+            wrapper_display = product.wrapper
+
         result = {
             "retailer": product.retailer_name,
             "retailer_key": product.retailer_key,
             "product": product_name,
-            "wrapper": product.wrapper,
+            "wrapper": wrapper_display,
             "vitola": product.vitola,
             "size": product.size,
             "box_qty": product.box_qty,
