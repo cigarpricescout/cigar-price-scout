@@ -98,14 +98,7 @@ jobs:
           # added lines in retailer CSVs).
           ADDED=$(git diff --cached --numstat -- 'static/data/*.csv' | awk '{s+=$1} END {print s+0}')
 
-          git commit -m "chore(extension): auto-drain ${ADDED} approval(s) from extension_staged_approvals
-
-Triggered by .github/workflows/drain-extension-approvals.yml. Pulled
-pending rows from extension_staged_approvals via the publish_extension_approvals
-script, wrote bare retailer-CSV rows (+ master rows for new CIDs),
-and marked each row published. The next /compare cache refresh will
-pick them up; the live-overlay (Phase 1) already had them visible in
-the popup the moment the operator approved."
+          git commit -m "chore(extension): auto-drain ${ADDED} approval(s) [skip ci]"
 
           git push origin HEAD:main
 
