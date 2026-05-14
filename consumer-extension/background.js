@@ -145,16 +145,25 @@ async function refreshForTab(tab) {
     return null;
   }
 
-  // Cheap host gate: skip everything when the registry doesn't know
-  // this host. Saves a backend round-trip on every non-cigar page.
+  // Cheap host gate: skip the backend call when the registry doesn't
+  // know this host AND the URL doesn't look cigar-shaped at all.
+  // Previously this returned null unconditionally on unknown hosts,
+  // which made the popup render "Couldn't reach the price database"
+  // — wrong message, the network was fine, the registry just hadn't
+  // refreshed (or the operator's CSV was missing). Now we still try
+  // the server: it returns state="no_scraper" with the hostname,
+  // which the popup turns into a "New retailer — request to be
+  // added?" UI. Saves the bad error state.
   let host = "";
   try { host = new URL(tab.url).hostname.toLowerCase(); } catch (_) {}
   const registry = await getRetailerRegistry();
   const retailerKey = resolveRetailerKey(host, registry);
   if (!retailerKey) {
     await setBadgeForTab(tab.id, "off");
-    STATUS_CACHE.delete(tab.url);
-    return null;
+    // Don't fully short-circuit — still hit the public endpoint so
+    // the popup can render the proper no_scraper UI. The badge stays
+    // off (we don't want every random tab lit up) but if the user
+    // actually clicks the icon they get a real response.
   }
 
   // Fresh status + scrape, in parallel.
