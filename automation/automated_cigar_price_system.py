@@ -20,6 +20,7 @@ import sys
 import copy
 import sqlite3
 import json
+import csv
 import subprocess
 import time
 import glob
@@ -307,6 +308,33 @@ class AutomatedCigarPriceSystem:
                 csv_path = self.static_data_dir / csv_file
                 
                 if csv_path.exists():
+                    # CSV exists — also check it has at least one data row.
+                    # Anti-bot / blocked retailers (Sprint 3) ship the CSV
+                    # with a header but no rows; their updater scripts treat
+                    # an empty load_csv() as a hard failure and sys.exit(1),
+                    # which cascades to "Daily Pricing Update: failed" even
+                    # when 30+ other retailers updated successfully. Skip
+                    # header-only CSVs here so the run reports an accurate
+                    # success status.
+                    has_data = False
+                    try:
+                        with open(csv_path, 'r', encoding='utf-8', newline='') as f:
+                            reader = csv.reader(f)
+                            next(reader, None)  # discard header
+                            has_data = next(reader, None) is not None
+                    except Exception as e:
+                        self.logger.warning(
+                            f"  Skipping: {script_name} (CSV read error: {e})"
+                        )
+                        continue
+
+                    if not has_data:
+                        self.logger.info(
+                            f"  Skipping: {script_name} ({csv_file} has no data rows — "
+                            "likely a blocked/dormant retailer awaiting first observation)"
+                        )
+                        continue
+
                     retailers[retailer_name] = {
                         'script_path': str(script_path),
                         'csv_path': csv_path,
