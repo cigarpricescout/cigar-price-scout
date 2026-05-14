@@ -74,6 +74,8 @@ except Exception:
             return 0
         elif retailer_key == 'cigarking' and base_dollars >= 150:
             return 0
+        elif retailer_key == 'cigarpage':
+            return 0  # Free shipping advertised on every page (banner: "FREE Shipping")
         elif retailer_key == 'cigarsdirect' and base_dollars >= 99:
             return 0
         elif retailer_key == 'cigora':
