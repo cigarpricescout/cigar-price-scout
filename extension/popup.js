@@ -58,7 +58,13 @@ let VOCAB_ROWS = [];
 
   let payload;
   try {
-    payload = await chrome.runtime.sendMessage({ type: "getStatusForTab" });
+    // forceRefresh: the background-worker badge cache has a 5-min TTL,
+    // so without this the popup can serve stale data — most painfully,
+    // a community_proposal that landed in Postgres AFTER the badge
+    // cache was populated (consumer submitted, then operator opens
+    // popup within 5 min) would be invisible. Refresh on every popup
+    // open trades ~300ms latency for always-fresh state.
+    payload = await chrome.runtime.sendMessage({ type: "getStatusForTab", forceRefresh: true });
   } catch (e) {
     return renderError(`Background worker error: ${e.message || e}`);
   }
@@ -99,18 +105,23 @@ function renderMatched(tab, response) {
   root.innerHTML = `
     ${renderHeader(tab, response)}
     <div class="banner matched">✓ Already published to ${escapeHtml(response.retailer_key)}</div>
+    ${matchedCommunityBanner(response)}
     <div class="section">
       <div class="section-label">Matched CID</div>
       <div class="cid-display">${escapeHtml(response.matched_cid || "—")}</div>
     </div>
     ${renderScraped(response)}
     <div class="actions">
+      ${response.community_proposal
+        ? `<button class="approve" id="resolve-cp">Approve consumer submission</button>`
+        : ""}
       <button class="secondary" id="re-review">Re-review</button>
       <button class="skip" id="close">Close</button>
     </div>
     <div class="footer"><a href="#" id="open-options">Settings</a></div>
   `;
   wireMatchedActions(tab, response);
+  wireResolveCommunityProposal(tab, response);
 }
 
 function renderSeen(tab, response) {
@@ -118,18 +129,92 @@ function renderSeen(tab, response) {
   root.innerHTML = `
     ${renderHeader(tab, response)}
     <div class="banner seen">Status: ${escapeHtml(label)}</div>
+    ${matchedCommunityBanner(response)}
     <div class="section">
       <div class="section-label">Previously matched to</div>
       <div class="cid-display">${escapeHtml(response.matched_cid || "—")}</div>
     </div>
     ${renderScraped(response)}
     <div class="actions">
+      ${response.community_proposal
+        ? `<button class="approve" id="resolve-cp">Approve consumer submission</button>`
+        : ""}
       <button class="secondary" id="re-review">Re-review</button>
       <button class="skip" id="close">Close</button>
     </div>
     <div class="footer"><a href="#" id="open-options">Settings</a></div>
   `;
   wireMatchedActions(tab, response);
+  wireResolveCommunityProposal(tab, response);
+}
+
+// Variant of communityProposalBanner for the matched/seen states.
+// Same visual look, but the copy + behavior differ: the URL is already
+// mapped, so the operator's job here is just to acknowledge the
+// consumer's submission and flip community_url_proposals.status to
+// 'approved' (or 'rejected'). No form to fill in — they can do it
+// in one click via the "Approve consumer submission" action button.
+function matchedCommunityBanner(response) {
+  const cp = response.community_proposal;
+  if (!cp) return "";
+  const age = humanizeAge(cp.created_at);
+  const others = cp.total_pending > 1
+    ? ` <span class="cp-more">+${cp.total_pending - 1} more</span>`
+    : "";
+  const productLine = [cp.proposed_brand, cp.proposed_line, cp.proposed_vitola]
+    .filter(Boolean).join(" ").trim() || "(no product info)";
+  const meta = [
+    cp.proposed_size,
+    cp.proposed_box_qty ? `Box ${cp.proposed_box_qty}` : "",
+    cp.proposed_wrapper,
+    typeof cp.confirmed_price === "number" ? `$${cp.confirmed_price.toFixed(2)}` : "",
+  ].filter(Boolean).join(" • ");
+  return `
+    <div class="community-proposal">
+      <div class="cp-header">
+        <span class="cp-badge">Consumer also submitted${others}</span>
+        ${age ? `<span class="cp-age">${escapeHtml(age)}</span>` : ""}
+      </div>
+      <div class="cp-product">${escapeHtml(productLine)}</div>
+      ${meta ? `<div class="cp-meta">${escapeHtml(meta)}</div>` : ""}
+      <div class="cp-hint">
+        URL is already mapped — just acknowledge their submission to
+        close the loop. They'll see the comparison card on next visit.
+      </div>
+    </div>
+  `;
+}
+
+function wireResolveCommunityProposal(tab, response) {
+  const btn = document.getElementById("resolve-cp");
+  if (!btn) return;
+  const cp = response.community_proposal;
+  if (!cp || !cp.proposal_id) return;
+  btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    btn.textContent = "Approving…";
+    try {
+      await apiFetch("/api/admin/resolve-community-proposal", {
+        method: "POST",
+        body: {
+          proposal_id: cp.proposal_id,
+          action: "approve_existing",
+          cid: response.matched_cid,
+        },
+      });
+      // Bust the cached url-status so a re-open of this URL doesn't
+      // still show the banner. The next /api/admin/url-status call
+      // will see status='approved' and omit community_proposal from
+      // the response.
+      chrome.runtime.sendMessage({ type: "invalidateCache", url: tab.url }).catch(() => {});
+      toast("Consumer submission approved");
+      setTimeout(() => window.close(), 600);
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = "Approve consumer submission";
+      toast(`Failed: ${e.message || e}`, "error");
+    }
+  });
 }
 
 function renderNoScraper(tab, response) {
