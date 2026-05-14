@@ -506,7 +506,7 @@ function renderResultRow(r, idx, cheapestDeliv) {
 
 // ── State: candidate (URL unknown — propose metadata) ─────────────────
 
-function renderCandidate(tab, response, scraped) {
+async function renderCandidate(tab, response, scraped) {
   const scrapedQty = (scraped && scraped.quantityType) || "unknown";
   const isBox = scrapedQty === "box" || scrapedQty === "unknown";
 
@@ -531,8 +531,50 @@ function renderCandidate(tab, response, scraped) {
     return;
   }
 
-  // Pre-fill all fields from the scraper. User can edit any of them.
-  const guesses = guessFromScrape(tab.url, scraped);
+  // Volatile fields (wrapper bucket guess, box quantity, price) are
+  // page-DOM-driven and don't benefit from catalog snapping — keep
+  // the local scrape for those.
+  const localGuess = guessFromScrape(tab.url, scraped);
+
+  // Snap brand / line / vitola to our master catalog. The old
+  // client-side prefill split the title into token slices, which on
+  // real pages produced garbage like brand="Arturo Fuente Cigars" or
+  // line="Hemingway Best" — the user had to delete chunks before the
+  // form was submittable. The server-side matcher (a) only suggests
+  // canonical catalog brands/lines/vitolas, (b) returns empty when no
+  // match exists (better an empty field than a wrong one), and (c)
+  // returns the catalog brand/line whitelists so the inputs can offer
+  // a <datalist> typeahead. On any failure we fall back to a blank
+  // form rather than re-introducing the noisy split — by design.
+  let prefill = { brand: "", line: "", vitola: "" };
+  let catalog = { brands: [], lines_by_brand: {}, vitolas_for_match: [] };
+  try {
+    const guessRes = await publicFetch("/api/public/guess-metadata", {
+      method: "POST",
+      body: {
+        url: tab.url || "",
+        title: scraped?.title || "",
+        jsonld_name: scraped?.jsonldName || "",
+        jsonld_brand: scraped?.jsonldBrand || "",
+        og_description: scraped?.ogDescription || "",
+      },
+    });
+    if (guessRes?.prefill) prefill = guessRes.prefill;
+    if (guessRes?.catalog) catalog = guessRes.catalog;
+  } catch (_) {
+    // Endpoint unreachable or 500 — fall through with blanks. The user
+    // can still type freely; the only thing we lose is autocomplete.
+  }
+
+  const brandOptions = (catalog.brands || [])
+    .map(b => `<option value="${escapeAttr(b)}">`).join("");
+  const initialLines = (prefill.brand && catalog.lines_by_brand)
+    ? (catalog.lines_by_brand[prefill.brand] || []) : [];
+  const lineOptions = initialLines
+    .map(l => `<option value="${escapeAttr(l)}">`).join("");
+  const vitolaOptions = (catalog.vitolas_for_match || [])
+    .map(v => `<option value="${escapeAttr(v)}">`).join("");
+
   root.innerHTML = `
     ${renderHeader(tab, response)}
     <div class="banner candidate">? Help us identify this cigar</div>
@@ -543,34 +585,37 @@ function renderCandidate(tab, response, scraped) {
       <div class="fields" id="cid-form">
         <div class="field">
           <label for="f-brand">Brand</label>
-          <input type="text" id="f-brand" value="${escapeAttr(guesses.brand)}" placeholder="e.g. Arturo Fuente" />
+          <input type="text" id="f-brand" list="brands-list" value="${escapeAttr(prefill.brand)}" placeholder="e.g. Arturo Fuente" autocomplete="off" />
+          <datalist id="brands-list">${brandOptions}</datalist>
         </div>
         <div class="field">
           <label for="f-line">Line</label>
-          <input type="text" id="f-line" value="${escapeAttr(guesses.line)}" placeholder="e.g. Hemingway" />
+          <input type="text" id="f-line" list="lines-list" value="${escapeAttr(prefill.line)}" placeholder="e.g. Hemingway" autocomplete="off" />
+          <datalist id="lines-list">${lineOptions}</datalist>
         </div>
         <div class="field">
           <label for="f-vitola">Vitola</label>
-          <input type="text" id="f-vitola" value="${escapeAttr(guesses.vitola)}" placeholder="e.g. Signature" />
+          <input type="text" id="f-vitola" list="vitolas-list" value="${escapeAttr(prefill.vitola)}" placeholder="e.g. Signature" autocomplete="off" />
+          <datalist id="vitolas-list">${vitolaOptions}</datalist>
         </div>
         <div class="field">
           <label for="f-wrapper">Wrapper <span class="hint-inline">(optional)</span></label>
           <select id="f-wrapper">
             <option value="">Not sure</option>
-            <option value="Natural / Connecticut" ${guesses.wrapper_bucket === "Natural / Connecticut" ? "selected" : ""}>Natural / Connecticut</option>
-            <option value="Habano" ${guesses.wrapper_bucket === "Habano" ? "selected" : ""}>Habano</option>
-            <option value="Sun Grown" ${guesses.wrapper_bucket === "Sun Grown" ? "selected" : ""}>Sun Grown</option>
-            <option value="Maduro" ${guesses.wrapper_bucket === "Maduro" ? "selected" : ""}>Maduro</option>
+            <option value="Natural / Connecticut" ${localGuess.wrapper_bucket === "Natural / Connecticut" ? "selected" : ""}>Natural / Connecticut</option>
+            <option value="Habano" ${localGuess.wrapper_bucket === "Habano" ? "selected" : ""}>Habano</option>
+            <option value="Sun Grown" ${localGuess.wrapper_bucket === "Sun Grown" ? "selected" : ""}>Sun Grown</option>
+            <option value="Maduro" ${localGuess.wrapper_bucket === "Maduro" ? "selected" : ""}>Maduro</option>
           </select>
         </div>
         <div class="field-row">
           <div class="field">
             <label for="f-box_qty">Box quantity</label>
-            <input type="number" id="f-box_qty" value="${escapeAttr(guesses.box_qty || "")}" placeholder="25" min="1" max="100" />
+            <input type="number" id="f-box_qty" value="${escapeAttr(localGuess.box_qty || "")}" placeholder="25" min="1" max="100" />
           </div>
           <div class="field">
             <label for="f-price">Price (USD)</label>
-            <input type="number" id="f-price" value="${escapeAttr(guesses.price || "")}" placeholder="340.00" step="0.01" min="0" />
+            <input type="number" id="f-price" value="${escapeAttr(localGuess.price || "")}" placeholder="340.00" step="0.01" min="0" />
           </div>
         </div>
       </div>
@@ -584,6 +629,34 @@ function renderCandidate(tab, response, scraped) {
       &nbsp;<a href="#" id="open-options">Settings</a>
     </div>
   `;
+
+  // When the user changes brand, swap the line typeahead to that
+  // brand's lines (catalog payload already includes lines_by_brand for
+  // every brand, so this is a free client-side update). Same idea
+  // applies to vitolas, but vitola lists are not preloaded for every
+  // (brand,line) — we'd need another fetch to repopulate, so we just
+  // clear the vitola list when the line changes and let the user type.
+  const brandInput = document.getElementById("f-brand");
+  const lineInput = document.getElementById("f-line");
+  const linesList = document.getElementById("lines-list");
+  const vitolasList = document.getElementById("vitolas-list");
+  if (brandInput && linesList) {
+    brandInput.addEventListener("change", () => {
+      const b = (brandInput.value || "").trim();
+      const ls = (catalog.lines_by_brand && catalog.lines_by_brand[b]) || [];
+      linesList.innerHTML = ls.map(l => `<option value="${escapeAttr(l)}">`).join("");
+      if (vitolasList) vitolasList.innerHTML = "";
+    });
+  }
+  if (lineInput && vitolasList) {
+    lineInput.addEventListener("change", () => {
+      // Conservative: blank the typeahead when line changes. The user
+      // can still type any vitola; we just don't keep stale options
+      // belonging to the previous line in the dropdown.
+      vitolasList.innerHTML = "";
+    });
+  }
+
   document.getElementById("submit").addEventListener("click", () => submitProposal(tab, response, scraped));
   document.getElementById("close").addEventListener("click", () => window.close());
   wireFooter();
@@ -893,6 +966,13 @@ function detectWrapperBucket(...texts) {
   return "";
 }
 
+// NOTE: As of the catalog-snap rollout, only the non-text fields here
+// (wrapper_bucket, box_qty, price) are actually surfaced to the user.
+// brand / line / vitola are still computed for back-compat and to keep
+// this function self-contained, but renderCandidate ignores them in
+// favor of the server-side /api/public/guess-metadata response which
+// snaps to canonical master_cigars values. Don't reintroduce these
+// values as the primary prefill — that's the bug we just fixed.
 function guessFromScrape(rawUrl, scraped) {
   const out = { brand: "", line: "", vitola: "", wrapper_bucket: "", box_qty: "", price: "" };
   if (!scraped) return out;

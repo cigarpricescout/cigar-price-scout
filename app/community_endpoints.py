@@ -900,6 +900,15 @@ _PUBLIC_STATUS_MAX_PER_DAY = 10_000
 _status_minute: Dict[str, Deque[float]] = defaultdict(deque)
 _status_day:    Dict[str, Deque[float]] = defaultdict(deque)
 
+# /api/public/guess-metadata is even cheaper than url-status (read-only,
+# cached in-memory) so we let it run a little hotter — covers the case
+# where a user is rapidly typing into brand/line fields and the form
+# refetches per-keystroke. Still capped to keep a runaway client honest.
+_PUBLIC_GUESS_MAX_PER_MIN = 120
+_PUBLIC_GUESS_MAX_PER_DAY = 20_000
+_guess_minute: Dict[str, Deque[float]] = defaultdict(deque)
+_guess_day:    Dict[str, Deque[float]] = defaultdict(deque)
+
 
 def _public_ip_key(request: Request) -> str:
     try:
@@ -1401,4 +1410,249 @@ async def delete_my_observations(body: DeleteObservationsBody):
         }
     except Exception as e:
         logger.exception("delete_my_observations failed: %s", e)
+        return JSONResponse({"error": "internal"}, status_code=500)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# POST /api/public/guess-metadata
+# ═══════════════════════════════════════════════════════════════════════
+#
+# Used by the consumer extension's "candidate" state — when a shopper is
+# on a product page we don't have a CID for, we ask them for brand /
+# line / vitola so an operator can map the URL to a master CID. The
+# extension scrapes the page's title / JSON-LD and pre-fills the form.
+#
+# The old client-side prefill split the title into "first 2 tokens =
+# brand, next 2 = line, rest = vitola", which produced "Arturo Fuente
+# Cigars" as brand and "Hemingway Best" as line on real pages — so the
+# user had to delete garbage before they could submit. This endpoint
+# snaps the scraped text to canonical brand / line / vitola values from
+# master_cigars.csv. If we can't find the brand in the catalog we leave
+# the field empty rather than guess — better an empty field than a
+# wrong one the user has to clean up.
+#
+# Also returns the catalog whitelists (brand list + lines per brand)
+# so the form can offer a <datalist> typeahead — a soft constraint, not
+# a hard one (legit new brands not yet in master can still be typed and
+# submitted; operator review picks them up).
+#
+# Read-only, idempotent, anonymous, cached. Rate limited per IP.
+# ═══════════════════════════════════════════════════════════════════════
+
+_catalog_match_cache: Dict[str, Any] = {"data": None, "timestamp": 0.0}
+_CATALOG_MATCH_TTL_S = 300  # piggybacks on load_master_index()'s own 5-min cache
+
+
+def _normalize_for_match(s: str) -> str:
+    """Lowercase, strip everything that isn't a letter/digit/space.
+
+    We compare a scraped product title against catalog names by looking
+    for whole-token substring matches after this normalization. Stripping
+    apostrophes / hyphens / parens means "Opus X (Forbidden X)" still
+    matches "opus x forbidden x" in the scraped title.
+    """
+    if not s:
+        return ""
+    out_chars = []
+    for ch in s.lower():
+        if ch.isalnum() or ch.isspace():
+            out_chars.append(ch)
+        else:
+            out_chars.append(" ")
+    # Collapse runs of whitespace to single spaces, pad with spaces on
+    # both ends so word-boundary substring checks work cleanly.
+    norm = " ".join("".join(out_chars).split())
+    return f" {norm} "
+
+
+def _get_catalog_match_index() -> Dict[str, Any]:
+    """Build (and cache) the brand / line / vitola lookup index.
+
+    Returns a dict with:
+      brands_sorted: list[str]
+          All catalog brands, sorted alphabetically — for the form's
+          <datalist>.
+      brand_match_pairs: list[tuple[str, str]]
+          (normalized_brand, canonical_brand) sorted by normalized
+          length desc. The matcher walks this list and picks the
+          first normalized brand that appears in the scraped text —
+          length-desc ordering means "Arturo Fuente" wins over
+          "Fuente" when both could match.
+      lines_by_brand: dict[brand, list[str]]
+          Lines for each brand, sorted alphabetically — for the form's
+          line <datalist> that updates when brand changes.
+      line_match_pairs: dict[brand, list[tuple[str, str]]]
+          Per-brand version of brand_match_pairs for line matching.
+      vitolas_by_brand_line: dict[(brand, line), list[str]]
+          Vitolas for each (brand, line) — both for matching the
+          scraped text AND for the vitola <datalist>.
+      vitola_match_pairs: dict[(brand, line), list[tuple[str, str]]]
+    """
+    now = time.time()
+    if (_catalog_match_cache.get("data") is not None
+            and (now - _catalog_match_cache.get("timestamp", 0.0)) < _CATALOG_MATCH_TTL_S):
+        return _catalog_match_cache["data"]
+
+    # Local import to avoid a circular dependency with app.main.
+    from app.main import load_master_index  # type: ignore
+
+    master = load_master_index()
+    brands: set[str] = set()
+    lines_by_brand: Dict[str, set[str]] = defaultdict(set)
+    vitolas_by_bl: Dict[tuple[str, str], set[str]] = defaultdict(set)
+
+    for row in master.values():
+        brand = (row.get("brand") or "").strip()
+        line = (row.get("line") or "").strip()
+        vitola = (row.get("vitola") or "").strip()
+        if not brand:
+            continue
+        brands.add(brand)
+        if line:
+            lines_by_brand[brand].add(line)
+            if vitola:
+                vitolas_by_bl[(brand, line)].add(vitola)
+
+    def _match_pairs(values) -> list:
+        # (normalized, canonical) sorted by normalized length desc so
+        # the longest viable match wins ("Arturo Fuente" beats "Fuente").
+        # Ties broken alphabetically for determinism.
+        return sorted(
+            [(_normalize_for_match(v).strip(), v) for v in values if v],
+            key=lambda p: (-len(p[0]), p[1]),
+        )
+
+    data = {
+        "brands_sorted": sorted(brands),
+        "brand_match_pairs": _match_pairs(brands),
+        "lines_by_brand": {b: sorted(ls) for b, ls in lines_by_brand.items()},
+        "line_match_pairs": {b: _match_pairs(ls) for b, ls in lines_by_brand.items()},
+        "vitolas_by_brand_line": {f"{b}|{l}": sorted(vs) for (b, l), vs in vitolas_by_bl.items()},
+        "vitola_match_pairs": {(b, l): _match_pairs(vs) for (b, l), vs in vitolas_by_bl.items()},
+    }
+    _catalog_match_cache.update({"data": data, "timestamp": now})
+    return data
+
+
+def _find_in_text(text_norm: str, match_pairs) -> Optional[str]:
+    """Walk `match_pairs` (already sorted by length desc) and return the
+    canonical form of the first whole-token match in `text_norm`.
+
+    `text_norm` is already wrapped in leading/trailing spaces by
+    _normalize_for_match, and each candidate's normalized form is
+    trimmed — so `" arturo fuente "` is in `" arturo fuente cigars
+    hemingway "` (substring match) but `" fuente "` would not match
+    `" arturoofuente "` because of the surrounding spaces. We
+    additionally require the candidate to be preceded/followed by a
+    space in the haystack to enforce a whole-token boundary.
+    """
+    if not text_norm:
+        return None
+    for norm, canon in match_pairs:
+        if not norm:
+            continue
+        needle = f" {norm} "
+        if needle in text_norm:
+            return canon
+    return None
+
+
+def _match_scraped_to_catalog(
+    title: str = "",
+    jsonld_name: str = "",
+    jsonld_brand: str = "",
+    og_description: str = "",
+) -> Dict[str, str]:
+    """Snap scraped product text to canonical brand/line/vitola from master.
+
+    Returns {brand, line, vitola}. Each value is either a canonical
+    catalog string or "" — never a scraped substring. We'd rather
+    show the user an empty field than a wrong guess they have to delete.
+    """
+    out = {"brand": "", "line": "", "vitola": ""}
+
+    haystack_parts = [title, jsonld_name, jsonld_brand, og_description]
+    text_norm = _normalize_for_match(" ".join(p for p in haystack_parts if p))
+    if not text_norm.strip():
+        return out
+
+    catalog = _get_catalog_match_index()
+
+    brand = _find_in_text(text_norm, catalog["brand_match_pairs"])
+    if not brand:
+        return out
+    out["brand"] = brand
+
+    line_pairs = catalog["line_match_pairs"].get(brand) or []
+    line = _find_in_text(text_norm, line_pairs)
+    if not line:
+        return out
+    out["line"] = line
+
+    vitola_pairs = catalog["vitola_match_pairs"].get((brand, line)) or []
+    vitola = _find_in_text(text_norm, vitola_pairs)
+    if vitola:
+        out["vitola"] = vitola
+
+    return out
+
+
+class GuessMetadataBody(BaseModel):
+    url: str = Field("", max_length=2048)
+    title: str = Field("", max_length=500)
+    jsonld_name: str = Field("", max_length=500)
+    jsonld_brand: str = Field("", max_length=200)
+    og_description: str = Field("", max_length=1000)
+
+
+@public_router.post("/guess-metadata")
+async def public_guess_metadata(request: Request, body: GuessMetadataBody):
+    """Snap a scraped product title to canonical catalog values.
+
+    See the long header comment above for the rationale. Returns:
+
+        {
+          "prefill": {"brand": "...", "line": "...", "vitola": "..."},
+          "catalog": {
+            "brands": [...],
+            "lines_by_brand": {...},
+            "vitolas_for_match": [...]  # only for the matched (brand,line)
+          },
+          "matched_via": "master_catalog" | "no_match"
+        }
+
+    Empty fields in `prefill` mean "the catalog didn't recognize that
+    part of the scraped text" — the form should leave the input empty
+    rather than fall back to the raw scrape.
+    """
+    ip = _public_ip_key(request)
+    if not _rate_limit(_guess_minute, ip, 60, _PUBLIC_GUESS_MAX_PER_MIN):
+        return JSONResponse({"error": "rate_limited", "scope": "per_minute"}, status_code=429)
+    if not _rate_limit(_guess_day, ip, 86_400, _PUBLIC_GUESS_MAX_PER_DAY):
+        return JSONResponse({"error": "rate_limited", "scope": "per_day"}, status_code=429)
+
+    try:
+        prefill = _match_scraped_to_catalog(
+            title=body.title or "",
+            jsonld_name=body.jsonld_name or "",
+            jsonld_brand=body.jsonld_brand or "",
+            og_description=body.og_description or "",
+        )
+        catalog = _get_catalog_match_index()
+        vitolas_for_match: list = []
+        if prefill["brand"] and prefill["line"]:
+            key = f"{prefill['brand']}|{prefill['line']}"
+            vitolas_for_match = catalog["vitolas_by_brand_line"].get(key) or []
+
+        return {
+            "prefill": prefill,
+            "catalog": {
+                "brands": catalog["brands_sorted"],
+                "lines_by_brand": catalog["lines_by_brand"],
+                "vitolas_for_match": vitolas_for_match,
+            },
+            "matched_via": "master_catalog" if prefill["brand"] else "no_match",
+        }
+    except Exception as e:
+        logger.exception("public_guess_metadata failed: %s", e)
         return JSONResponse({"error": "internal"}, status_code=500)
