@@ -107,6 +107,23 @@ body {
   padding: 1px 5px; border-radius: 3px;
   background: var(--gray-bg); color: var(--muted);
 }
+/* Always-visible stock signal. "in stock" is a positive cue so we
+   color it with the same accent as the cheapest-row highlight; "out
+   of stock" stays muted gray so the row reads as deprioritized at a
+   glance even when the .out-of-stock row opacity is removed. */
+.result-name .stock-badge.in-stock {
+  background: var(--green-bg);
+  color: var(--green);
+  font-weight: 600;
+  /* Hairline border keeps the pill defined when the row itself uses
+     --green-bg (the cheapest-row highlight), where a fill-only badge
+     would visually disappear into the row background. */
+  border: 1px solid rgba(22, 163, 74, 0.25);
+}
+.result-name .stock-badge.out {
+  background: var(--gray-bg);
+  color: var(--muted);
+}
 .result-name .auth-badge {
   margin-left: 4px; font-size: 10px;
   padding: 1px 5px; border-radius: 3px;

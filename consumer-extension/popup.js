@@ -476,7 +476,15 @@ function renderResultRow(r, idx, cheapestDeliv) {
   const cheapestClass = (r.delivered_cents === cheapestDeliv) ? "cheapest" : "";
   const oosClass = r.in_stock ? "" : "out-of-stock";
   const authBadge = r.authorized ? `<span class="auth-badge">authorized</span>` : "";
-  const oosBadge = r.in_stock ? "" : `<span class="stock-badge">out of stock</span>`;
+  // Always show a stock badge so users can spot at a glance which
+  // retailers actually have the cigar buyable right now — the common
+  // case is "looking at an out-of-stock listing, want to find an
+  // in-stock one elsewhere." When the user explicitly sees "in stock"
+  // on the alternatives, the OOS label on the page they came from
+  // becomes much more actionable.
+  const stockBadge = r.in_stock
+    ? `<span class="stock-badge in-stock">in stock</span>`
+    : `<span class="stock-badge out">out of stock</span>`;
   const shipTax = (r.shipping_cents + r.tax_cents) > 0
     ? `<span class="ship-tax">+${formatMoney(r.shipping_cents + r.tax_cents)} ship/tax</span>`
     : "";
@@ -493,7 +501,7 @@ function renderResultRow(r, idx, cheapestDeliv) {
       <div class="result-rank">${idx + 1}</div>
       <div class="result-name">
         ${escapeHtml(r.retailer_name)}
-        ${authBadge}${oosBadge}
+        ${authBadge}${stockBadge}
         ${observedStamp}
       </div>
       <div class="result-price">
