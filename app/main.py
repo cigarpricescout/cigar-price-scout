@@ -1483,17 +1483,27 @@ def load_master_wrapper_aliases():
             
             if wrapper and wrapper_alias and wrapper_alias != wrapper:
                 aliases_found += 1
-                # Create a composite key for more precise matching
-                key = f"{brand}|{line}|{wrapper}"
-                wrapper_aliases[key] = wrapper_alias
-                
-                # Also create a simple wrapper-only key as fallback
-                if wrapper not in wrapper_aliases:
-                    wrapper_aliases[wrapper] = wrapper_alias
-                
-                # Debug first few entries
+                # Brand-line scoped, BOTH directions. load_master_index
+                # picks `wrapper_alias or wrapper_canon` for product.wrapper,
+                # so the lookup might arrive with either the canon ("Maduro")
+                # or the alias ("Connecticut Broadleaf") in hand. Indexing
+                # both ways guarantees the right pair is found within the
+                # brand-line context.
+                canon_key = f"{brand}|{line}|{wrapper}"
+                alias_key = f"{brand}|{line}|{wrapper_alias}"
+                wrapper_aliases[canon_key] = wrapper_alias
+                wrapper_aliases[alias_key] = wrapper
+
+                # NOTE: deliberately NO global (unscoped) fallback. A generic
+                # canon like "Natural" maps to different specific aliases for
+                # different brands (Padron "Natural"->"Sun Grown" vs Punch
+                # Knuckle Buster "Natural"->"Nicaraguan Habano"), so an
+                # unscoped dict inevitably leaks one brand's mapping into
+                # another. Brand-line scoping is what makes the alias
+                # system honest.
+
                 if aliases_found <= 5:
-                    print(f"  Added alias: {wrapper} -> {wrapper_alias} (Brand: {brand}, Line: {line})")
+                    print(f"  Added alias: {wrapper} <-> {wrapper_alias} (Brand: {brand}, Line: {line})")
         
         conn.close()
         print(f"Processed {rows_processed} rows, found {aliases_found} wrapper aliases")
