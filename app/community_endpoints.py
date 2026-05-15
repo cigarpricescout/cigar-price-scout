@@ -519,6 +519,36 @@ async def observe(request: Request, body: ObserveBody):
     try:
         conn = _get_conn()
         cur = conn.cursor()
+
+        stock_to_write = body.in_stock
+        if (
+            stock_to_write is False
+            and cigar_id
+            and retailer_key
+            and source == "consumer"
+        ):
+            # Shopper may report in-stock via report-correction while the PDP
+            # scrape still reads OOS. A subsequent passive /observe must not
+            # overwrite that with another false from the same stale scrape.
+            try:
+                cur.execute(
+                    """
+                    SELECT 1 FROM observed_prices
+                     WHERE url = %s
+                       AND retailer_key = %s
+                       AND cigar_id = %s
+                       AND in_stock IS TRUE
+                       AND observer_source = %s
+                       AND observed_at > NOW() - INTERVAL '7 days'
+                     LIMIT 1
+                    """,
+                    (body.url, retailer_key, cigar_id, _CORRECTION_OBSERVER_SOURCE),
+                )
+                if cur.fetchone():
+                    stock_to_write = None
+            except Exception:
+                pass
+
         cur.execute("""
             INSERT INTO observed_prices
               (url, retailer_key, cigar_id, quantity_type, box_qty,
@@ -528,7 +558,7 @@ async def observe(request: Request, body: ObserveBody):
             RETURNING id
         """, (
             body.url, retailer_key, cigar_id, qty_type, body.box_qty,
-            price_cents, currency, body.in_stock, body.scraped_title,
+            price_cents, currency, stock_to_write, body.scraped_title,
             _safe_jsonb(body.jsonld), observer, source,
         ))
         row = cur.fetchone()
@@ -1102,12 +1132,17 @@ def _volatile_correction_auto_applies(
     return True
 
 
+# Tag for observed_prices rows written from report-correction (auto or queued).
+# Passive /observe must not immediately overwrite these with a scrape that
+# still says "out of stock" while the shopper explicitly reported in-stock.
+_CORRECTION_OBSERVER_SOURCE = "consumer_correction"
+
+
 def _append_correction_observation(
     cur,
     body: ReportCorrectionBody,
     retailer_key: str,
     observer: str,
-    source: str,
     proposed_price_cents: Optional[int],
     current_price_cents: Optional[int],
 ) -> bool:
@@ -1144,7 +1179,7 @@ def _append_correction_observation(
             instock,
             _trim(body.scraped_title),
             observer,
-            source,
+            _CORRECTION_OBSERVER_SOURCE,
         ),
     )
     return True
@@ -1306,7 +1341,7 @@ async def report_correction(request: Request, body: ReportCorrectionBody):
         cur = conn.cursor()
         if auto_apply:
             if _append_correction_observation(
-                cur, body, retailer_key, observer, source,
+                cur, body, retailer_key, observer,
                 proposed_price_cents, current_price_cents,
             ):
                 conn.commit()
@@ -1348,7 +1383,7 @@ async def report_correction(request: Request, body: ReportCorrectionBody):
         ))
         proposal_id = cur.fetchone()[0]
         _append_correction_observation(
-            cur, body, retailer_key, observer, source,
+            cur, body, retailer_key, observer,
             proposed_price_cents, current_price_cents,
         )
         conn.commit()
