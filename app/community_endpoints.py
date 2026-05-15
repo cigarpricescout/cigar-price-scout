@@ -1007,7 +1007,147 @@ async def confirm_candidate(request: Request, body: ConfirmCandidateBody):
 _REPORT_PRICE_MIN_CENTS = 500           # $5 — below this is almost certainly a typo
 _REPORT_PRICE_MAX_CENTS = 500_000       # $5,000 — most expensive boxes top out well below this
 _REPORT_PRICE_MAX_DEVIATION = 0.75      # ±75% of the price we were showing
+# Corrections that only nudge price/stock on the *same* SKU (CID tokens match)
+# apply immediately via observed_prices + merge — no operator queue.
+_AUTO_APPLY_PRICE_MAX_DEVIATION = 0.10  # ±10% vs the price we were showing
 _VALID_BOX_QTYS = {1, 5, 10, 15, 20, 24, 25, 50}
+
+
+def _cid_slug_key(s: Optional[str]) -> str:
+    """Collapse to lowercase alphanumerics for brand/line/vitola token compare."""
+    if not s:
+        return ""
+    return re.sub(r"[^a-z0-9]+", "", str(s).strip().lower())
+
+
+def _wrapper_bucket_matches_cid_code(bucket: Optional[str], cid_code: str) -> bool:
+    """True when consumer bucket is empty/unknown, or it allows the CID's code."""
+    if not bucket or not str(bucket).strip():
+        return True
+    try:
+        from app.wrapper_buckets import codes_for_bucket  # type: ignore
+
+        allowed = codes_for_bucket(bucket.strip())
+        if not allowed:
+            return True
+        c = (cid_code or "").strip().upper()
+        return c in {a.upper() for a in allowed}
+    except Exception:
+        return True
+
+
+def _volatile_correction_auto_applies(
+    body: ReportCorrectionBody,
+    proposed_price_cents: Optional[int],
+    current_price_cents: Optional[int],
+) -> bool:
+    """Same-SKU tweaks (stock and/or ≤10% price) trust the shopper — skip queue."""
+    try:
+        from app.cid_matcher import parse_cid  # type: ignore
+    except Exception:
+        return False
+
+    cid_raw = _trim(body.current_cid) or ""
+    parsed = parse_cid(cid_raw)
+    if not parsed:
+        return False
+
+    if body.proposed_box_qty is not None:
+        cbox = _cid_box_qty(cid_raw)
+        if cbox is not None and int(body.proposed_box_qty) != int(cbox):
+            return False
+
+    if _cid_slug_key(body.proposed_brand) != _cid_slug_key(parsed.get("brand") or ""):
+        return False
+    if _cid_slug_key(body.proposed_line) != _cid_slug_key(parsed.get("line") or ""):
+        return False
+    pv = _cid_slug_key(body.proposed_vitola or "")
+    if pv not in {
+        _cid_slug_key(parsed.get("vitola") or ""),
+        _cid_slug_key(parsed.get("vitola2") or ""),
+    }:
+        return False
+
+    if not _wrapper_bucket_matches_cid_code(
+        body.proposed_wrapper, parsed.get("wrapper_code") or "",
+    ):
+        return False
+
+    stock_changed = False
+    if body.proposed_in_stock is not None:
+        if body.current_in_stock is None:
+            stock_changed = True
+        else:
+            stock_changed = body.proposed_in_stock != body.current_in_stock
+
+    price_changed = False
+    if proposed_price_cents is not None and current_price_cents is not None:
+        if abs(proposed_price_cents - current_price_cents) > 5:
+            price_changed = True
+
+    if not stock_changed and not price_changed:
+        return False
+
+    if price_changed:
+        if not current_price_cents or current_price_cents <= 0:
+            return False
+        dev = abs((proposed_price_cents or 0) - current_price_cents) / current_price_cents
+        if dev > _AUTO_APPLY_PRICE_MAX_DEVIATION:
+            return False
+
+    obs_cents = proposed_price_cents or current_price_cents or 0
+    if obs_cents <= 0:
+        return False
+
+    return True
+
+
+def _append_correction_observation(
+    cur,
+    body: ReportCorrectionBody,
+    retailer_key: str,
+    observer: str,
+    source: str,
+    proposed_price_cents: Optional[int],
+    current_price_cents: Optional[int],
+) -> bool:
+    """Mirror correction into observed_prices for blocked-retailer merge."""
+    obs_cid = _trim(body.current_cid)
+    obs_cents = proposed_price_cents or current_price_cents or 0
+    instock = body.proposed_in_stock
+    if instock is None:
+        instock = body.current_in_stock
+    if instock is None:
+        instock = True
+    if not (obs_cid and obs_cents > 0):
+        return False
+    bq_obs = body.proposed_box_qty
+    if bq_obs is None:
+        bq_obs = _cid_box_qty(obs_cid)
+    qty_type = _coerce_quantity_type("box", bq_obs)
+    cur.execute(
+        """
+        INSERT INTO observed_prices
+          (url, retailer_key, cigar_id, quantity_type, box_qty,
+           price_cents, currency, in_stock, scraped_title, jsonld,
+           observer_id, observer_source)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,NULL::jsonb,%s,%s)
+        """,
+        (
+            body.url,
+            retailer_key,
+            obs_cid,
+            qty_type,
+            bq_obs,
+            obs_cents,
+            "USD",
+            instock,
+            _trim(body.scraped_title),
+            observer,
+            source,
+        ),
+    )
+    return True
 
 
 def _norm_for_compare(s: Optional[str]) -> str:
@@ -1036,9 +1176,12 @@ async def report_correction(request: Request, body: ReportCorrectionBody):
       4. proposed_box_qty must be in {1, 5, 10, 15, 20, 24, 25, 50}.
       5. proposed_brand/line/vitola, when supplied, must be ≤ 80 chars.
 
-    On success, inserts into community_url_proposals with is_correction=TRUE
-    so the operator-review UI can highlight it as a correction (vs. a
-    fresh proposal for an unmatched URL).
+    When the correction only adjusts **stock** and/or **price** on the same
+    SKU encoded in ``current_cid`` (brand/line/vitola tokens + wrapper bucket
+    match the CID) and any **price** move is within ±10% of ``current_price``,
+    we **skip** ``community_url_proposals`` and write ``observed_prices``
+    immediately (``status='applied_immediately'``) so /compare updates without
+    operator review. Larger price swings or metadata disagreements still queue.
     """
     observer = _observer_id(body.observer_id, request)
     if not _rate_limit(_prop_hour, observer, 3600, _PROPOSE_MAX_PER_HOUR):
@@ -1154,9 +1297,36 @@ async def report_correction(request: Request, body: ReportCorrectionBody):
             "proposal_id": None,
         }
 
+    auto_apply = _volatile_correction_auto_applies(
+        body, proposed_price_cents, current_price_cents,
+    )
+
     try:
         conn = _get_conn()
         cur = conn.cursor()
+        if auto_apply:
+            if _append_correction_observation(
+                cur, body, retailer_key, observer, source,
+                proposed_price_cents, current_price_cents,
+            ):
+                conn.commit()
+                conn.close()
+                try:
+                    from app.main import _product_cache  # type: ignore
+
+                    _product_cache["data"] = None
+                    _product_cache["timestamp"] = 0
+                except Exception:
+                    pass
+                return {
+                    "ok": True,
+                    "status": "applied_immediately",
+                    "proposal_id": None,
+                    "retailer_key": retailer_key,
+                    "is_correction": True,
+                }
+            conn.rollback()
+
         cur.execute("""
             INSERT INTO community_url_proposals
               (url, retailer_key, proposed_brand, proposed_line, proposed_vitola,
@@ -1177,38 +1347,10 @@ async def report_correction(request: Request, body: ReportCorrectionBody):
             _trim(body.scraped_title), observer, source,
         ))
         proposal_id = cur.fetchone()[0]
-        # Write a fresh observed_prices snapshot so blocked retailers pick up
-        # price/stock on the next load_all_products() merge (no passive /observe
-        # round-trip required).
-        obs_cid = _trim(body.current_cid)
-        obs_cents = proposed_price_cents or current_price_cents or 0
-        if obs_cid and obs_cents > 0 and body.proposed_in_stock is not None:
-            bq_obs = body.proposed_box_qty
-            if bq_obs is None:
-                bq_obs = _cid_box_qty(obs_cid)
-            qty_type = _coerce_quantity_type("box", bq_obs)
-            cur.execute(
-                """
-                INSERT INTO observed_prices
-                  (url, retailer_key, cigar_id, quantity_type, box_qty,
-                   price_cents, currency, in_stock, scraped_title, jsonld,
-                   observer_id, observer_source)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,NULL::jsonb,%s,%s)
-                """,
-                (
-                    body.url,
-                    retailer_key,
-                    obs_cid,
-                    qty_type,
-                    bq_obs,
-                    obs_cents,
-                    "USD",
-                    body.proposed_in_stock,
-                    _trim(body.scraped_title),
-                    observer,
-                    source,
-                ),
-            )
+        _append_correction_observation(
+            cur, body, retailer_key, observer, source,
+            proposed_price_cents, current_price_cents,
+        )
         conn.commit()
         conn.close()
         try:

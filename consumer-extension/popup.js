@@ -835,6 +835,14 @@ async function submitCorrection(tab, response, scraped, ctx) {
       renderCorrectionThanks(tab, response, "No changes detected — nothing was sent for review.");
       return;
     }
+    if (result && result.status === "applied_immediately") {
+      renderCorrectionThanks(
+        tab,
+        response,
+        "Thanks — we applied your price and stock update. Comparisons should reflect it on the next refresh.",
+      );
+      return;
+    }
     renderCorrectionThanks(tab, response, "Thanks — your correction is in our review queue.");
   } catch (e) {
     btn.disabled = false;
