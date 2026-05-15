@@ -53,7 +53,12 @@ jobs:
         env:
           ADMIN_SECRET_KEY: ${{ secrets.ADMIN_SECRET_KEY }}
           APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
-          # Optional digest email: SMTP_AUTOMATION_ENABLED=true + SMTP_* (same vars as pricing workflow)
+          SMTP_AUTOMATION_ENABLED: ${{ secrets.SMTP_AUTOMATION_ENABLED }}
+          SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_SENDER_EMAIL: ${{ secrets.SMTP_SENDER_EMAIL }}
+          SMTP_SENDER_PASSWORD: ${{ secrets.SMTP_SENDER_PASSWORD }}
+          SMTP_RECIPIENT_EMAIL: ${{ secrets.SMTP_RECIPIENT_EMAIL }}
           PYTHONUNBUFFERED: 1
 
       - name: Commit and push changes (if needed)
