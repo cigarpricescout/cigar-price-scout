@@ -587,13 +587,15 @@ def _lookup_community_proposal(url: str) -> Optional[Dict]:
         conn = _get_conn()
         cur = conn.cursor()
         cur.execute("""
-            SELECT id, proposed_brand, proposed_line, proposed_vitola,
-                   proposed_size, proposed_wrapper, proposed_box_qty,
-                   confirmed_price_cents, scraped_title, observer_source,
-                   created_at, retailer_key,
+            SELECT id, url, retailer_key, proposed_brand, proposed_line,
+                   proposed_vitola, proposed_size, proposed_wrapper,
+                   proposed_box_qty, scraped_title,
+                   confirmed_price_cents, proposed_in_stock,
+                   observer_source, created_at,
                    (SELECT COUNT(*) FROM community_url_proposals
                     WHERE url=%s AND status='pending') AS total_pending,
                    is_correction, current_cid, current_price_cents,
+                   current_in_stock,
                    COALESCE(needs_new_catalog_cid, FALSE) AS needs_new_catalog_cid
             FROM community_url_proposals
             WHERE url=%s AND status='pending'
@@ -604,36 +606,36 @@ def _lookup_community_proposal(url: str) -> Optional[Dict]:
         conn.close()
         if not row:
             return None
-        confirmed_price_cents = row[7]
-        current_price_cents = row[15]
+        confirmed_price_cents = row[10]
+        proposed_in_stock = row[11]
+        current_price_cents = row[17]
+        current_in_stock = row[18]
         return {
             "proposal_id": row[0],
-            "proposed_brand": row[1],
-            "proposed_line": row[2],
-            "proposed_vitola": row[3],
-            "proposed_size": row[4],
-            "proposed_wrapper": row[5],  # bucket name like "Maduro"
-            "proposed_box_qty": row[6],
+            "proposed_brand": row[3],
+            "proposed_line": row[4],
+            "proposed_vitola": row[5],
+            "proposed_size": row[6],
+            "proposed_wrapper": row[7],
+            "proposed_box_qty": row[8],
             "confirmed_price": (
                 round(confirmed_price_cents / 100.0, 2)
                 if confirmed_price_cents is not None else None
             ),
-            "scraped_title": row[8],
-            "observer_source": row[9],
-            "created_at": str(row[10]) if row[10] else None,
-            "retailer_key": row[11],
-            "total_pending": row[12] or 1,
-            # Correction context — when is_correction=true the operator
-            # popup shows a distinct "consumer disagrees" banner and
-            # surfaces what the consumer says is wrong vs. what we were
-            # showing them at the moment they reported it.
-            "is_correction": bool(row[13]),
-            "current_cid": row[14],
+            "proposed_in_stock": proposed_in_stock,
+            "scraped_title": row[9],
+            "observer_source": row[12],
+            "created_at": str(row[13]) if row[13] else None,
+            "retailer_key": row[2],
+            "total_pending": row[14] or 1,
+            "is_correction": bool(row[15]),
+            "current_cid": row[16],
             "current_price": (
                 round(current_price_cents / 100.0, 2)
                 if current_price_cents is not None else None
             ),
-            "needs_new_catalog_cid": bool(row[16]),
+            "current_in_stock": current_in_stock,
+            "needs_new_catalog_cid": bool(row[19]),
         }
     except Exception as e:
         logger.warning("lookup_community_proposal error: %s", e)
@@ -1855,7 +1857,8 @@ async def resolve_community_proposal(request: Request, body: ResolveProposalBody
         cur.execute("""
             SELECT id, url, retailer_key, proposed_brand, proposed_line,
                    proposed_vitola, proposed_size, proposed_wrapper,
-                   proposed_box_qty, scraped_title
+                   proposed_box_qty, scraped_title,
+                   confirmed_price_cents, proposed_in_stock, current_price_cents
               FROM community_url_proposals
              WHERE id = %s AND status = 'pending'
              FOR UPDATE
@@ -1868,7 +1871,8 @@ async def resolve_community_proposal(request: Request, body: ResolveProposalBody
                 status_code=404,
             )
         (pid, p_url, p_retailer, p_brand, p_line, p_vitola, p_size,
-         p_wrapper, p_box_qty, p_title) = prop
+         p_wrapper, p_box_qty, p_title, p_confirmed_cents, p_proposed_in_stock,
+         p_current_cents) = prop
 
         if action == "approve_new":
             conn.rollback()
@@ -1889,6 +1893,7 @@ async def resolve_community_proposal(request: Request, body: ResolveProposalBody
             "brand": p_brand, "line": p_line, "vitola": p_vitola,
             "size": p_size, "wrapper": p_wrapper, "box_qty": p_box_qty,
             "scraped_title": p_title,
+            "proposed_in_stock": p_proposed_in_stock,
         }
 
         resolved_cid: Optional[str] = None
@@ -1951,6 +1956,20 @@ async def resolve_community_proposal(request: Request, body: ResolveProposalBody
                 "size", "wrapper_code", "wrapper", "box_qty",
             )}
 
+            stage_cents = (
+                p_confirmed_cents
+                if p_confirmed_cents is not None
+                else p_current_cents
+            )
+            stage_price = (
+                round(stage_cents / 100.0, 2) if stage_cents is not None else None
+            )
+            stage_in_stock = (
+                p_proposed_in_stock
+                if p_proposed_in_stock is not None
+                else True
+            )
+
             # Stage into extension_staged_approvals so the existing
             # local publisher handles CSV writes uniformly.
             cur.execute("""
@@ -1972,6 +1991,8 @@ async def resolve_community_proposal(request: Request, body: ResolveProposalBody
                       wrapper=EXCLUDED.wrapper,
                       box_qty=EXCLUDED.box_qty,
                       title=EXCLUDED.title,
+                      price=EXCLUDED.price,
+                      in_stock=EXCLUDED.in_stock,
                       status=CASE
                         WHEN extension_staged_approvals.status='published' THEN 'published'
                         ELSE 'pending'
@@ -1983,7 +2004,7 @@ async def resolve_community_proposal(request: Request, body: ResolveProposalBody
                 parts_dict.get("vitola2") or parts_dict["vitola"],
                 parts_dict["size"], parts_dict["wrapper_code"],
                 parts_dict.get("wrapper"), int(parts_dict.get("box_qty") or 0),
-                p_title, None, None,
+                p_title, stage_price, stage_in_stock,
             ))
 
         elif action in ("reject", "duplicate"):
@@ -2008,6 +2029,15 @@ async def resolve_community_proposal(request: Request, body: ResolveProposalBody
 
         conn.commit()
         conn.close()
+
+        if action == "approve_existing" and resolved_cid:
+            try:
+                from app.main import _product_cache  # type: ignore
+
+                _product_cache["data"] = None
+                _product_cache["timestamp"] = 0
+            except Exception:
+                pass
 
         _log_review_decision(
             decision_type="community_proposal_" + action,

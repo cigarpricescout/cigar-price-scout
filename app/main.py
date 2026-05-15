@@ -1204,6 +1204,81 @@ def _load_staged_approval_overlay() -> list:
     return products
 
 
+def _merge_blocked_overlay_onto_csv_products(
+    all_products: list,
+    overlay_products: list,
+    *,
+    price_source: str,
+) -> set:
+    """Apply overlay price/stock onto existing CSV rows for blocked retailers.
+
+    Historically ``load_all_products`` only *appended* overlay rows when no
+    CSV row existed for ``(retailer_key, cigar_id)``. Blocked retailers almost
+    always already have a published CSV row, so consumer observations and
+    correction snapshots never changed ``in_stock`` / price on /compare.
+
+    Returns a set of ``(retailer_key, canonical_cigar_id)`` keys for overlay
+    rows that were merged into at least one CSV product (so the caller can
+    avoid appending duplicates).
+    """
+    if not overlay_products:
+        return set()
+    blocked = get_blocked_retailer_keys()
+    if not blocked:
+        return set()
+    try:
+        from app.cid_matcher import (  # type: ignore
+            canonicalize_url,
+            canonical_cigar_id_for_comparison,
+        )
+    except Exception:
+        return set()
+
+    merged_keys = set()
+    for op in overlay_products:
+        rk = getattr(op, "retailer_key", None) or ""
+        if rk not in blocked:
+            continue
+        ocid = canonical_cigar_id_for_comparison(getattr(op, "cigar_id", None) or "")
+        if not ocid:
+            continue
+        ou = canonicalize_url(getattr(op, "url", "") or "") if getattr(op, "url", None) else ""
+        candidates = [
+            p for p in all_products
+            if getattr(p, "retailer_key", None) == rk
+            and canonical_cigar_id_for_comparison(getattr(p, "cigar_id", None) or "") == ocid
+        ]
+        if not candidates:
+            continue
+        targets = []
+        if ou:
+            targets = [
+                p for p in candidates
+                if canonicalize_url(getattr(p, "url", "") or "") == ou
+            ]
+        if not targets and len(candidates) == 1:
+            targets = candidates
+        if not targets:
+            continue
+        opc = int(getattr(op, "price_cents", 0) or 0)
+        for p in targets:
+            if opc > 0:
+                p.price_cents = opc
+            p.in_stock = bool(getattr(op, "in_stock", True))
+            p.price_source = price_source
+            oat = getattr(op, "observed_at", None)
+            if oat:
+                p.observed_at = oat
+            ocnt = getattr(op, "observation_count", None)
+            if ocnt is not None:
+                p.observation_count = int(ocnt) or p.observation_count
+            ot = getattr(op, "title", None)
+            if ot:
+                p.title = ot
+        merged_keys.add((rk, ocid))
+    return merged_keys
+
+
 _RETAILER_LOOKUP_CACHE: Dict[str, Dict[str, str]] = {"by_name": {}, "by_host": {}}
 
 
@@ -1316,38 +1391,45 @@ def load_all_products():
         products = load_csv(retailer["csv"], retailer["key"], retailer["name"], master_index=master_index)
         all_products.extend(products)
 
-    # Overlay consumer observations on top of CSV data. For blocked retailers
-    # this is the ONLY price data; for non-blocked retailers we leave the
-    # CSV row alone (observed_overlay only emits blocked-retailer rows).
-    # Deduplicate by (retailer_key, cigar_id): CSV wins if both exist
-    # (defensive — shouldn't happen since blocked CSVs are empty today,
-    # but if an extractor comes online later it should take priority).
+    # Overlay consumer observations on top of CSV data for blocked retailers.
+    # Rows in ``observed_prices`` must *merge into* existing CSV Products when
+    # the same (retailer_key, cigar_id) already exists — otherwise stale CSV
+    # in_stock/price would never reflect extension observations or corrections.
     observed_products = _load_observed_overlay()
     if observed_products:
-        seen_csv = {
-            (p.retailer_key, p.cigar_id)
-            for p in all_products if p.cigar_id
-        }
+        merged_obs = _merge_blocked_overlay_onto_csv_products(
+            all_products, observed_products, price_source="observed",
+        )
+        try:
+            from app.cid_matcher import canonical_cigar_id_for_comparison  # type: ignore
+        except Exception:
+            canonical_cigar_id_for_comparison = lambda x: x or ""  # type: ignore
         for op in observed_products:
-            if (op.retailer_key, op.cigar_id) not in seen_csv:
+            key = (
+                op.retailer_key,
+                canonical_cigar_id_for_comparison(op.cigar_id or ""),
+            )
+            if key not in merged_obs:
                 all_products.append(op)
 
-    # Live-overlay pending operator approvals (blocked retailers only,
-    # since they're the only ones with a manually-entered price). This
-    # is the website-side companion to the extension's url_index
-    # overlay: when the operator approves via the popup, the new row
-    # appears on /compare on the very next request — no waiting for
-    # the local publisher script, git push, or Railway redeploy.
-    # Operator-approved beats observed beats CSV on collision: the
-    # operator just made an explicit decision, so trust it.
+    # Pending operator approvals: merge over CSV (and over observed fields)
+    # for blocked retailers so manual approvals and community resolutions
+    # refresh price/stock immediately on /compare.
     staged_approval_products = _load_staged_approval_overlay()
     if staged_approval_products:
-        seen_pairs = {
-            (p.retailer_key, p.cigar_id)
-            for p in all_products if p.cigar_id
-        }
+        merged_staged = _merge_blocked_overlay_onto_csv_products(
+            all_products, staged_approval_products, price_source="operator_approved",
+        )
+        try:
+            from app.cid_matcher import canonical_cigar_id_for_comparison  # type: ignore
+        except Exception:
+            canonical_cigar_id_for_comparison = lambda x: x or ""  # type: ignore
         for sp in staged_approval_products:
-            if (sp.retailer_key, sp.cigar_id) not in seen_pairs:
+            key = (
+                sp.retailer_key,
+                canonical_cigar_id_for_comparison(sp.cigar_id or ""),
+            )
+            if key not in merged_staged:
                 all_products.append(sp)
 
     community_products = _load_community_products()

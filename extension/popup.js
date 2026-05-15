@@ -186,6 +186,13 @@ function matchedCommunityBanner(response) {
     cp.proposed_wrapper,
     typeof cp.confirmed_price === "number" ? `$${cp.confirmed_price.toFixed(2)}` : "",
   ].filter(Boolean).join(" • ");
+  const stockLabel = (v) => {
+    if (v === true) return "In stock";
+    if (v === false) return "Out of stock";
+    return "—";
+  };
+  const showStockRow =
+    cp.current_in_stock != null || cp.proposed_in_stock != null;
   // Correction-flow variant: the consumer is reporting that the
   // existing CID/price is wrong. Surface what we were showing them
   // (current_cid, current_price) so the operator can make an
@@ -194,6 +201,8 @@ function matchedCommunityBanner(response) {
     const currentLine = cp.current_cid ? `<code>${escapeHtml(cp.current_cid)}</code>` : "(no CID on record)";
     const currentPrice = typeof cp.current_price === "number" ? `$${cp.current_price.toFixed(2)}` : "—";
     const proposedPrice = typeof cp.confirmed_price === "number" ? `$${cp.confirmed_price.toFixed(2)}` : "—";
+    const currentStock = stockLabel(cp.current_in_stock);
+    const proposedStock = stockLabel(cp.proposed_in_stock);
     return `
       <div class="community-proposal correction">
         <div class="cp-header">
@@ -203,11 +212,11 @@ function matchedCommunityBanner(response) {
         <div class="cp-diff">
           <div class="cp-diff-row">
             <div class="cp-diff-label">Currently showing</div>
-            <div class="cp-diff-current">${currentLine}<br><span class="cp-price">${currentPrice}</span></div>
+            <div class="cp-diff-current">${currentLine}<br><span class="cp-price">${currentPrice}</span>${showStockRow ? `<br><span class="cp-stock">${escapeHtml(currentStock)}</span>` : ""}</div>
           </div>
           <div class="cp-diff-row">
             <div class="cp-diff-label">Consumer says</div>
-            <div class="cp-diff-proposed">${escapeHtml(productLine)}<br><span class="cp-price">${proposedPrice}</span>${meta ? ` <span class="cp-meta-inline">${escapeHtml(meta)}</span>` : ""}</div>
+            <div class="cp-diff-proposed">${escapeHtml(productLine)}<br><span class="cp-price">${proposedPrice}</span>${meta ? ` <span class="cp-meta-inline">${escapeHtml(meta)}</span>` : ""}${showStockRow ? `<br><span class="cp-stock">${escapeHtml(proposedStock)}</span>` : ""}</div>
           </div>
         </div>
         <div class="cp-hint">
@@ -248,7 +257,7 @@ function wireResolveCommunityProposal(tab, response) {
         body: {
           proposal_id: cp.proposal_id,
           action: "approve_existing",
-          cid: response.matched_cid,
+          cid: (cp.is_correction && cp.current_cid) ? cp.current_cid : response.matched_cid,
         },
       });
       // Bust the cached url-status so a re-open of this URL doesn't

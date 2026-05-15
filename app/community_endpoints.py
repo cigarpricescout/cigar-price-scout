@@ -1177,8 +1177,47 @@ async def report_correction(request: Request, body: ReportCorrectionBody):
             _trim(body.scraped_title), observer, source,
         ))
         proposal_id = cur.fetchone()[0]
+        # Write a fresh observed_prices snapshot so blocked retailers pick up
+        # price/stock on the next load_all_products() merge (no passive /observe
+        # round-trip required).
+        obs_cid = _trim(body.current_cid)
+        obs_cents = proposed_price_cents or current_price_cents or 0
+        if obs_cid and obs_cents > 0 and body.proposed_in_stock is not None:
+            bq_obs = body.proposed_box_qty
+            if bq_obs is None:
+                bq_obs = _cid_box_qty(obs_cid)
+            qty_type = _coerce_quantity_type("box", bq_obs)
+            cur.execute(
+                """
+                INSERT INTO observed_prices
+                  (url, retailer_key, cigar_id, quantity_type, box_qty,
+                   price_cents, currency, in_stock, scraped_title, jsonld,
+                   observer_id, observer_source)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,NULL::jsonb,%s,%s)
+                """,
+                (
+                    body.url,
+                    retailer_key,
+                    obs_cid,
+                    qty_type,
+                    bq_obs,
+                    obs_cents,
+                    "USD",
+                    body.proposed_in_stock,
+                    _trim(body.scraped_title),
+                    observer,
+                    source,
+                ),
+            )
         conn.commit()
         conn.close()
+        try:
+            from app.main import _product_cache  # type: ignore
+
+            _product_cache["data"] = None
+            _product_cache["timestamp"] = 0
+        except Exception:
+            pass
 
         return {
             "ok": True,

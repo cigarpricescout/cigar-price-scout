@@ -322,6 +322,12 @@ body { padding: 0; }
 .community-proposal .cp-price {
   font-weight: 700;
 }
+.community-proposal .cp-stock {
+  font-size: 12px;
+  font-weight: 600;
+  color: #37474f;
+  margin-top: 2px;
+}
 .community-proposal .cp-meta-inline {
   font-weight: 400;
   color: #6d4c00;
