@@ -1229,6 +1229,36 @@ async def mark_retailer_queued(request: Request, body: IdsBody):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+def _prefer_master_cid_spelling(a: dict, b: dict) -> dict:
+    """Pick one master row when two ``cigar_id`` strings are the same canonical SKU."""
+    def sort_key(row: dict) -> Tuple[int, int, str]:
+        cid = (str(row.get("cigar_id") or "")).strip()
+        parts = cid.split("|")
+        dup_parent = 0
+        if len(parts) >= 2 and parts[1].strip().upper() == parts[0].strip().upper():
+            dup_parent = 1
+        return (dup_parent, len(cid), cid)
+
+    return a if sort_key(a) <= sort_key(b) else b
+
+
+def _dedupe_cid_search_rows(rows: List[dict]) -> List[dict]:
+    """One result per canonical cigar identity (master may list two pipe spellings)."""
+    by_canon: Dict[str, dict] = {}
+    for r in rows:
+        cid = (str(r.get("cigar_id") or "")).strip()
+        if not cid:
+            continue
+        canon = canonical_cigar_id_for_comparison(cid)
+        if not canon:
+            continue
+        if canon not in by_canon:
+            by_canon[canon] = r
+        else:
+            by_canon[canon] = _prefer_master_cid_spelling(by_canon[canon], r)
+    return sorted(by_canon.values(), key=lambda x: str(x.get("cigar_id") or ""))
+
+
 # ── GET /api/admin/cid-search (autocomplete for popup override) ───────
 
 @router.get("/cid-search")
@@ -1255,6 +1285,7 @@ async def cid_search(
                 rows.append(row)
                 if len(rows) >= limit:
                     break
+    rows = _dedupe_cid_search_rows(rows)
     return {"results": [
         {
             "cigar_id": r["cigar_id"],
