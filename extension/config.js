@@ -32,6 +32,36 @@ export async function setAdminKey(value) {
   await chrome.storage.local.set({ [ADMIN_KEY]: value || "" });
 }
 
+// Per-URL preferred CID when multiple master rows share one PDP (operator popup).
+const CID_PREF_PREFIX = "operatorCidPref:v1:";
+
+export function urlPickDedupeKey(rawUrl) {
+  try {
+    const u = new URL(rawUrl);
+    return `${u.protocol}//${u.host}${u.pathname}`;
+  } catch (_) {
+    return rawUrl;
+  }
+}
+
+export async function getPreferredCidForUrl(rawUrl) {
+  try {
+    const key = CID_PREF_PREFIX + urlPickDedupeKey(rawUrl);
+    const out = await chrome.storage.local.get(key);
+    return out[key] || "";
+  } catch (_) {
+    return "";
+  }
+}
+
+export async function setPreferredCidForUrl(rawUrl, cigarId) {
+  try {
+    const key = CID_PREF_PREFIX + urlPickDedupeKey(rawUrl);
+    if (!cigarId) await chrome.storage.local.remove(key);
+    else await chrome.storage.local.set({ [key]: cigarId });
+  } catch (_) {}
+}
+
 export async function apiFetch(path, { method = "GET", body, query } = {}) {
   const key = await getAdminKey();
   if (!key) {

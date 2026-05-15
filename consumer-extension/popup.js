@@ -1036,19 +1036,30 @@ function compareRowsForPopup(comparison, tabUrl, retailerKey) {
   const tabU = norm(tabUrl);
   const rowKey = (r) => `${r.retailer_key}|${norm(r.url)}`;
 
-  let sawThisPage = false;
-  const out = top.map((r, i) => {
+  const out = [];
+  const seenRetailers = new Set();
+
+  for (const r of top) {
+    const rk = r.retailer_key || "";
+    // One row per retailer in the popup — duplicate CSV rows caused twin listings.
+    if (rk && seenRetailers.has(rk)) continue;
+    if (rk) seenRetailers.add(rk);
+
     const thisPage = !!(
-      retailerKey && r.retailer_key === retailerKey
+      retailerKey && rk === retailerKey
       && (!tabU || !norm(r.url) || norm(r.url) === tabU)
     );
-    if (thisPage) sawThisPage = true;
-    return { row: r, index: i, thisPage };
-  });
-  if (focus && !sawThisPage) {
-    const dup = top.some((r) => rowKey(r) === rowKey(focus));
-    if (!dup) {
-      out.push({ row: focus, index: top.length, thisPage: true });
+    out.push({ row: r, index: out.length, thisPage });
+  }
+
+  if (focus) {
+    const fk = focus.retailer_key || "";
+    const existingIdx = out.findIndex((e) => e.row.retailer_key === fk);
+    if (existingIdx >= 0) {
+      // Prefer this_listing for the tab retailer (authoritative URL/price).
+      out[existingIdx] = { row: focus, index: existingIdx, thisPage: true };
+    } else if (!top.some((r) => rowKey(r) === rowKey(focus))) {
+      out.push({ row: focus, index: out.length, thisPage: true });
     }
   }
   return out;

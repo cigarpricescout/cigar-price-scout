@@ -9,7 +9,14 @@
 //   "+"   no scraper for this hostname (offer to queue)
 //   ""    unknown URL (not a retailer) or admin key missing
 
-import { apiFetch, getAdminKey, scrapeActiveTab, postObservation, withTimeout } from "./config.js";
+import {
+  apiFetch,
+  getAdminKey,
+  getPreferredCidForUrl,
+  scrapeActiveTab,
+  postObservation,
+  withTimeout,
+} from "./config.js";
 
 const CACHE = new Map(); // url -> { fetchedAt, response }
 const CACHE_TTL_MS = 5 * 60 * 1000;
@@ -163,12 +170,13 @@ async function refreshForTab(tab) {
     scraped = await withTimeout(scrapeActiveTab(tab.id), 12000, { title: "" });
   } catch (_) {}
 
+  const prefCid = await getPreferredCidForUrl(tab.url);
   let response;
   try {
+    const query = { url: tab.url, title: scraped.title || "" };
+    if (prefCid) query.cid = prefCid;
     response = await withTimeout(
-      apiFetch("/api/admin/url-status", {
-        query: { url: tab.url, title: scraped.title || "" },
-      }),
+      apiFetch("/api/admin/url-status", { query }),
       15000,
       null,
     );

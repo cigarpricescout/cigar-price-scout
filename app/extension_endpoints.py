@@ -531,13 +531,20 @@ async def url_status(
     # 2) Seen in staging? (approved / published / rejected / skipped)
     seen_status, seen_cid = _lookup_seen(url, retailer_key)
     if seen_status:
+        seen_matched = seen_cid
+        seen_options = None
+        live_for_seen = _cache_state["url_index"].get(url)
+        rk_fs, cids_fs = url_index_entry_cids(live_for_seen)
+        if rk_fs == retailer_key and len(cids_fs) > 1:
+            seen_matched = _pick_matched_cid(cids_fs, (cid or "").strip() or seen_cid)
+            seen_options = _cigar_pick_options(cids_fs)
         return {
             "state": "seen",
             "retailer_key": retailer_key,
             "hostname": hostname,
             "url": url,
-            "matched_cid": seen_cid,
-            "cigar_options": None,
+            "matched_cid": seen_matched,
+            "cigar_options": seen_options,
             "seen_status": seen_status,
             "extractor_status": extractor_status,
             "candidates": _candidates_for(url, title),

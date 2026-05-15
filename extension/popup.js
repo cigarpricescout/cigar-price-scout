@@ -2,7 +2,7 @@
 // one of 5 states, and dispatches user actions (approve / skip / queue new
 // retailer) to the backend.
 
-import { apiFetch, getAdminKey } from "./config.js";
+import { apiFetch, getAdminKey, setPreferredCidForUrl } from "./config.js";
 
 const root = document.getElementById("root");
 
@@ -118,21 +118,89 @@ function renderHeader(tab, response) {
   `;
 }
 
+
+function renderMappedCigarsSection(response) {
+  const options = response.cigar_options || [];
+  const singleCid = response.matched_cid || "";
+  if (!singleCid && !options.length) return "";
+
+  const picker = options.length > 1
+    ? `
+      <div class="field" style="margin-top:8px">
+        <label for="cid-pick" style="font-size:12px;font-weight:600">Active mapping</label>
+        <select id="cid-pick" style="width:100%;margin-top:4px;padding:6px 8px;font-size:12px;border-radius:4px;border:1px solid #d1d5db">
+          ${options.map((o) => `
+            <option value="${escapeAttr(o.cigar_id)}" ${o.cigar_id === singleCid ? "selected" : ""}>${escapeHtml(o.label)}</option>
+          `).join("")}
+        </select>
+      </div>`
+    : "";
+
+  const listBlock = options.length > 1
+    ? `
+      <div class="mapped-cigar-list">
+        ${options.map((o) => `
+          <div class="mapped-cigar-row">
+            <div class="mapped-cigar-text">
+              <div class="mapped-cigar-label">${escapeHtml(o.label)}</div>
+              <code class="mapped-cigar-cid">${escapeHtml(o.cigar_id)}</code>
+            </div>
+            <button type="button" class="secondary edit-cid-btn" data-cid="${escapeAttr(o.cigar_id)}">Edit</button>
+          </div>
+        `).join("")}
+      </div>`
+    : `<div class="cid-display">${escapeHtml(singleCid || "\u2014")}</div>`;
+
+  return `
+    <div class="section">
+      <div class="section-label">Mapped cigar${options.length > 1 ? "s on this URL" : ""}</div>
+      ${picker}
+      ${listBlock}
+      ${options.length > 1
+        ? `<div class="hint-inline" style="margin-top:8px;font-size:11px;color:#6b7280">Each mapping is a separate master SKU on this page. Edit one without removing the others.</div>`
+        : ""}
+    </div>`;
+}
+
+
+function selectedMappedCid(response) {
+  const sel = document.getElementById("cid-pick");
+  if (sel && sel.value) return sel.value.trim();
+  return (response.matched_cid || "").trim();
+}
+
+function buildCandidateEntryForCid(cid) {
+  return { cigar_id: cid, confidence: "HIGH", score: 1.0, details: {} };
+}
+
+function openCandidateForEdit(tab, response, editCid, { force = false } = {}) {
+  const cid = (editCid || "").trim();
+  if (!cid) return;
+  renderCandidate(tab, {
+    ...response,
+    state: "candidate",
+    matched_cid: cid,
+    candidates: [buildCandidateEntryForCid(cid)],
+    _force: force,
+    _editCid: cid,
+  });
+}
+
 function renderMatched(tab, response) {
   root.innerHTML = `
     ${renderHeader(tab, response)}
     <div class="banner matched">✓ Already published to ${escapeHtml(response.retailer_key)}</div>
     ${matchedCommunityBanner(response)}
-    <div class="section">
-      <div class="section-label">Matched CID</div>
-      <div class="cid-display">${escapeHtml(response.matched_cid || "—")}</div>
-    </div>
+    ${renderMappedCigarsSection(response)}
     ${renderScraped(response)}
     <div class="actions">
       ${response.community_proposal
         ? `<button class="approve" id="resolve-cp">Approve consumer submission</button>`
         : ""}
-      <button class="secondary" id="re-review">Re-review</button>
+      <button class="secondary" id="re-review">Re-review selected</button>
+      ${(response.cigar_options && response.cigar_options.length > 1)
+        ? `<button type="button" class="secondary" id="add-mapping">Add another mapping</button>`
+        : ""}
       <button class="skip" id="close">Close</button>
     </div>
     <div class="footer"><a href="#" id="open-options">Settings</a></div>
@@ -147,16 +215,13 @@ function renderSeen(tab, response) {
     ${renderHeader(tab, response)}
     <div class="banner seen">Status: ${escapeHtml(label)}</div>
     ${matchedCommunityBanner(response)}
-    <div class="section">
-      <div class="section-label">Previously matched to</div>
-      <div class="cid-display">${escapeHtml(response.matched_cid || "—")}</div>
-    </div>
+    ${renderMappedCigarsSection(response)}
     ${renderScraped(response)}
     <div class="actions">
       ${response.community_proposal
         ? `<button class="approve" id="resolve-cp">Approve consumer submission</button>`
         : ""}
-      <button class="secondary" id="re-review">Re-review</button>
+      <button class="secondary" id="re-review">Re-review selected</button>
       <button class="skip" id="close">Close</button>
     </div>
     <div class="footer"><a href="#" id="open-options">Settings</a></div>
@@ -664,22 +729,44 @@ function renderScraped(response) {
 function wireMatchedActions(tab, response) {
   document.getElementById("close").addEventListener("click", () => window.close());
   document.getElementById("open-options").addEventListener("click", openOptions);
+
+  const multi = response.cigar_options && response.cigar_options.length > 1;
+  const cidPick = document.getElementById("cid-pick");
+  if (cidPick) {
+    cidPick.addEventListener("change", async () => {
+      await setPreferredCidForUrl(tab.url, cidPick.value);
+      chrome.runtime.sendMessage({ type: "invalidateCache", url: tab.url });
+      const payload = await chrome.runtime.sendMessage({ type: "getStatusForTab", forceRefresh: true });
+      if (payload && payload.response && payload.tab) {
+        if (payload.response.state === "matched") renderMatched(payload.tab, payload.response);
+        else if (payload.response.state === "seen") renderSeen(payload.tab, payload.response);
+      }
+    });
+  }
+
+  document.querySelectorAll(".edit-cid-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const cid = btn.getAttribute("data-cid") || "";
+      openCandidateForEdit(tab, response, cid, { force: false });
+    });
+  });
+
+  const addMap = document.getElementById("add-mapping");
+  if (addMap) {
+    addMap.addEventListener("click", () => {
+      renderCandidate(tab, {
+        ...response,
+        state: "candidate",
+        candidates: response.candidates || [],
+        _force: false,
+        _editCid: null,
+      });
+    });
+  }
+
   document.getElementById("re-review").addEventListener("click", () => {
-    // Convert this URL to the candidate view, forcing supersession on approve.
-    const synthetic = {
-      ...response,
-      state: "candidate",
-      candidates: response.candidates && response.candidates.length
-        ? response.candidates
-        : (response.matched_cid ? [{
-            cigar_id: response.matched_cid,
-            confidence: "HIGH",
-            score: 1.0,
-            details: {},
-          }] : []),
-      _force: true,
-    };
-    renderCandidate(tab, synthetic);
+    const cid = selectedMappedCid(response);
+    openCandidateForEdit(tab, response, cid, { force: !multi });
   });
 }
 
@@ -721,7 +808,7 @@ function clearLockedMasterCid() {
 }
 
 function wireCandidateActions(tab, response) {
-  lockedMasterCid = null;
+  lockedMasterCid = (response._editCid || "").trim() || null;
   updateMasterLockUi();
 
   const refreshSimilar = debounce(() => {
