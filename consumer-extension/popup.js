@@ -75,6 +75,7 @@ function defaultCatalogShape() {
     buckets_by_brand_line_vitola: {},
     buckets_by_brand_line: {},
     vitolas_by_brand_line_bucket: {},
+    wrapper_catalog_rows_by_blv: {},
     all_bucket_names: [...FALLBACK_WRAPPER_BUCKETS],
   };
 }
@@ -105,42 +106,179 @@ function mergeCatalog(raw) {
     buckets_by_brand_line_vitola: raw.buckets_by_brand_line_vitola || d.buckets_by_brand_line_vitola,
     buckets_by_brand_line: raw.buckets_by_brand_line || d.buckets_by_brand_line,
     vitolas_by_brand_line_bucket: raw.vitolas_by_brand_line_bucket || d.vitolas_by_brand_line_bucket,
+    wrapper_catalog_rows_by_blv: raw.wrapper_catalog_rows_by_blv || d.wrapper_catalog_rows_by_blv,
     all_bucket_names: normalizeAllBucketNames(raw.all_bucket_names) || d.all_bucket_names,
   };
 }
 
-/** Wrapper choices after brand+line (order: brand → line → wrapper → vitola → box). */
-function mountWrapperSelectForBrandLine(catalog, selEl, brand, line, preferredBucket) {
-  if (!selEl) return;
-  const bl = catalogBlKey(brand, line);
-  const fromMasterRaw = (catalog.buckets_by_brand_line && catalog.buckets_by_brand_line[bl]) || [];
-  const allRaw = (catalog.all_bucket_names && catalog.all_bucket_names.length)
+function genericWrapperBucketsForSelect(catalog) {
+  const raw = (catalog.all_bucket_names && catalog.all_bucket_names.length)
     ? catalog.all_bucket_names
     : FALLBACK_WRAPPER_BUCKETS;
-  const rawBuckets = fromMasterRaw.length ? fromMasterRaw : allRaw;
   const seen = new Set();
-  const buckets = [];
-  for (const bkt of rawBuckets) {
+  const out = [];
+  for (const bkt of raw) {
     const label = normalizeLegacyWrapperBucket(String(bkt).trim()) || String(bkt).trim();
     if (label && !seen.has(label)) {
       seen.add(label);
-      buckets.push(label);
+      out.push(label);
     }
   }
-  const prev = (selEl.value || "").trim();
+  return out.length ? out : [...FALLBACK_WRAPPER_BUCKETS];
+}
+
+/** Encoded <option> values so catalog-specific labels stay unique per row. */
+function wrapperSelectEncodeGeneric(bucket) {
+  return `WG|${encodeURIComponent(normalizeLegacyWrapperBucket(bucket) || bucket)}`;
+}
+
+function wrapperSelectEncodeCatalog(bucket, label) {
+  return `WC|${encodeURIComponent(normalizeLegacyWrapperBucket(bucket) || bucket)}|${encodeURIComponent(label)}`;
+}
+
+/** @returns {{ bucket: string, label?: string, kind: string }} */
+function parseWrapperSelectValue(raw) {
+  if (!raw || raw === "__manual__") return { bucket: "", kind: "empty" };
+  if (raw.startsWith("WG|")) {
+    const b = decodeURIComponent(raw.slice(3));
+    return { bucket: normalizeLegacyWrapperBucket(b) || b, kind: "generic" };
+  }
+  if (raw.startsWith("WC|")) {
+    const rest = raw.slice(3);
+    const i = rest.indexOf("|");
+    if (i === -1) {
+      const b = decodeURIComponent(rest);
+      return { bucket: normalizeLegacyWrapperBucket(b) || b, kind: "catalog", label: "" };
+    }
+    const b = decodeURIComponent(rest.slice(0, i));
+    const lab = decodeURIComponent(rest.slice(i + 1));
+    return {
+      bucket: normalizeLegacyWrapperBucket(b) || b,
+      label: lab,
+      kind: "catalog",
+    };
+  }
+  return { bucket: normalizeLegacyWrapperBucket(String(raw).trim()) || String(raw).trim(), kind: "legacy" };
+}
+
+function catalogWrapperRowsForBlv(catalog, brand, line, vitola) {
+  const k = catalogBlvKey(brand, line, vitola);
+  return (catalog.wrapper_catalog_rows_by_blv && catalog.wrapper_catalog_rows_by_blv[k]) || [];
+}
+
+/** Catalog rows to show as extra options (label distinct from bucket name). */
+function catalogWrapperRowsDistinctFromBucket(catalog, brand, line, vitola) {
+  return catalogWrapperRowsForBlv(catalog, brand, line, vitola).filter((r) => {
+    const lab = (r.label || "").trim().toLowerCase();
+    const bkt = (r.bucket || "").trim().toLowerCase();
+    return lab && lab !== bkt;
+  });
+}
+
+function labelFragsForScrapeMatch(label) {
+  const t = String(label || "").trim().toLowerCase();
+  if (!t) return [];
+  const out = [t];
+  const p = t.indexOf("(");
+  if (p > 0) {
+    const head = t.slice(0, p).trim();
+    if (head) out.push(head);
+  }
+  const m = t.match(/\(([^)]+)\)/);
+  if (m && m[1]) {
+    const inner = m[1].trim().toLowerCase();
+    if (inner) out.push(inner);
+  }
+  return [...new Set(out)];
+}
+
+function bestCatalogWrapperRowFromScrape(rows, haystack) {
+  const h = String(haystack || "").toLowerCase();
+  if (!h || !rows || !rows.length) return null;
+  let bestRow = null;
+  let bestScore = 0;
+  for (const r of rows) {
+    for (const frag of labelFragsForScrapeMatch(r.label)) {
+      if (frag.length >= 3 && h.includes(frag)) {
+        if (frag.length > bestScore) {
+          bestScore = frag.length;
+          bestRow = r;
+        }
+      }
+    }
+  }
+  return bestRow;
+}
+
+function optionExists(selEl, value) {
+  return !!(value && selEl && [...selEl.options].some((o) => o.value === value));
+}
+
+/**
+ * Wrapper choices after brand+line+vitola: always the four generic buckets,
+ * plus master-catalog display strings for this vitola when they differ from
+ * the bucket name alone (e.g. Dominican Rosado → Maduro).
+ */
+function mountWrapperSelectForBrandLineVitola(catalog, selEl, brand, line, vitola, prefs) {
+  if (!selEl) return;
+  const prevRaw = (prefs && prefs.prevRaw) ? String(prefs.prevRaw).trim() : "";
+  const preferredPlain = (prefs && prefs.preferredPlainBucket) ? String(prefs.preferredPlainBucket).trim() : "";
+  const scrapeHaystack = (prefs && prefs.scrapeHaystack) ? String(prefs.scrapeHaystack) : "";
+
+  const generics = genericWrapperBucketsForSelect(catalog);
+  const extras = catalogWrapperRowsDistinctFromBucket(catalog, brand, line, vitola);
+  const allRows = catalogWrapperRowsForBlv(catalog, brand, line, vitola);
+
   let html = '<option value="">Not sure</option>';
   html += `<option value="__manual__">${escapeHtml("Other / not in catalog")}</option>`;
-  for (const bkt of buckets) {
-    html += `<option value="${escapeAttr(bkt)}">${escapeHtml(bkt)}</option>`;
+
+  html += `<optgroup label="${escapeAttr("Wrapper category")}">`;
+  for (const bkt of generics) {
+    const enc = wrapperSelectEncodeGeneric(bkt);
+    html += `<option value="${escapeAttr(enc)}">${escapeHtml(bkt)}</option>`;
   }
+  html += "</optgroup>";
+
+  if (extras.length) {
+    html += `<optgroup label="${escapeAttr("Our catalog (this vitola)")}">`;
+    for (const r of extras) {
+      const enc = wrapperSelectEncodeCatalog(r.bucket, r.label);
+      const lineLabel = `${r.label} — ${r.bucket}`;
+      html += `<option value="${escapeAttr(enc)}">${escapeHtml(lineLabel)}</option>`;
+    }
+    html += "</optgroup>";
+  }
+
   selEl.innerHTML = html;
-  const pick = (v) => v && [...selEl.options].some(o => o.value === v);
-  const prevResolved = (prev === "Natural / Connecticut" && pick(NATURAL_LIGHT_WRAPPER_BUCKET))
-    ? NATURAL_LIGHT_WRAPPER_BUCKET
-    : prev;
-  const pref = normalizeLegacyWrapperBucket(preferredBucket);
-  if (pick(prevResolved)) selEl.value = prevResolved;
-  else if (pick(pref)) selEl.value = pref;
+
+  if (optionExists(selEl, prevRaw)) {
+    selEl.value = prevRaw;
+    return;
+  }
+  const scrapeHit = bestCatalogWrapperRowFromScrape(allRows, scrapeHaystack);
+  if (scrapeHit) {
+    const lab = (scrapeHit.label || "").trim().toLowerCase();
+    const bkt = (scrapeHit.bucket || "").trim().toLowerCase();
+    let want;
+    if (lab && lab !== bkt) {
+      want = wrapperSelectEncodeCatalog(scrapeHit.bucket, scrapeHit.label);
+    } else {
+      want = wrapperSelectEncodeGeneric(scrapeHit.bucket);
+    }
+    if (optionExists(selEl, want)) {
+      selEl.value = want;
+      return;
+    }
+  }
+  const prefNorm = normalizeLegacyWrapperBucket(preferredPlain) || preferredPlain;
+  if (prefNorm) {
+    const wg = wrapperSelectEncodeGeneric(prefNorm);
+    if (optionExists(selEl, wg)) {
+      selEl.value = wg;
+      return;
+    }
+  }
+  selEl.value = "";
 }
 
 function vitolaOptionsFor(catalog, brand, line, wrapperBucket) {
@@ -159,13 +297,13 @@ function vitolaOptionsFor(catalog, brand, line, wrapperBucket) {
   return allSorted;
 }
 
-/** Vitola choices after brand+line+wrapper. */
-function mountVitolaSelect(catalog, selEl, brand, line, wrapperBucket, preferredVitola) {
+/** Vitola choices after brand+line (all vitolas for that line; wrapper is chosen next). */
+function mountVitolaSelect(catalog, selEl, brand, line, preferredVitola) {
   if (!selEl) return;
   const manualEl = document.getElementById("f-vitola-manual");
   const prevSel = (selEl.value || "").trim();
   const prevManual = manualEl ? (manualEl.value || "").trim() : "";
-  const opts = vitolaOptionsFor(catalog, brand, line, wrapperBucket);
+  const opts = vitolaOptionsFor(catalog, brand, line, "");
   let html = '<option value="">Choose vitola…</option>';
   for (const v of opts) {
     html += `<option value="${escapeAttr(v)}">${escapeHtml(v)}</option>`;
@@ -1013,8 +1151,9 @@ async function renderCandidate(tab, response, scraped, opts = null) {
   // canonical catalog brands/lines/vitolas, (b) returns empty when no
   // match exists (better an empty field than a wrong one), and (c)
   // returns the catalog whitelists so the form can offer full <select>
-  // lists (Chrome popup datalists are flaky). Wrapper and vitola use
-  // master-driven <select>s (brand → line → wrapper → vitola → box).
+  // lists (Chrome popup datalists are flaky). Vitola is chosen before
+  // wrapper so the wrapper step can list catalog-specific labels for
+  // that vitola (e.g. Dominican Rosado) alongside the four buckets.
   let prefill = { brand: "", line: "", vitola: "" };
   let catalog = defaultCatalogShape();
   try {
@@ -1064,13 +1203,13 @@ async function renderCandidate(tab, response, scraped, opts = null) {
         <div class="field" id="f-brand-mount"></div>
         <div class="field" id="f-line-mount"></div>
         <div class="field">
-          <label for="f-wrapper">Wrapper <span class="hint-inline">(catalog)</span></label>
-          <select id="f-wrapper"></select>
-        </div>
-        <div class="field">
           <label for="f-vitola">Vitola</label>
           <select id="f-vitola"></select>
           <input type="text" id="f-vitola-manual" maxlength="80" placeholder="Type vitola if not in list…" autocomplete="off" style="display:none;margin-top:6px" />
+        </div>
+        <div class="field">
+          <label for="f-wrapper">Wrapper <span class="hint-inline">(category + catalog names)</span></label>
+          <select id="f-wrapper"></select>
         </div>
         <div class="field-row">
           <div class="field" id="box-qty-field"></div>
@@ -1093,8 +1232,7 @@ async function renderCandidate(tab, response, scraped, opts = null) {
     </div>
   `;
 
-  // Master-driven cascade: brand → line → wrapper → vitola → box (matches
-  // cigarpricescout.com field order and master_cigars.csv).
+  // Master-driven cascade: brand → line → vitola → wrapper → box.
   const brandMount = document.getElementById("f-brand-mount");
   const lineMount = document.getElementById("f-line-mount");
   const wrapperSelect = document.getElementById("f-wrapper");
@@ -1115,15 +1253,27 @@ async function renderCandidate(tab, response, scraped, opts = null) {
   function runCatalogCascade() {
     const b = readCandidateBrand();
     const l = readCandidateLine();
-    const wBefore = (wrapperSelect.value || "").trim();
-    mountWrapperSelectForBrandLine(
-      catalog, wrapperSelect, b, l,
-      wBefore || localGuess.wrapper_bucket,
-    );
-    const w = (wrapperSelect.value || "").trim();
-    const vitPref = readCandidateVitola() || (initialValues.vitola || "").trim();
-    mountVitolaSelect(catalog, vitolaSelect, b, l, w, vitPref);
+    const wrapperPrev = (wrapperSelect.value || "").trim();
+    const parsedWrapperPrev = parseWrapperSelectValue(wrapperPrev);
+    const vitPref =
+      readCandidateVitola() ||
+      (initialValues.vitola || "").trim();
+    mountVitolaSelect(catalog, vitolaSelect, b, l, vitPref);
     const v = readCandidateVitola();
+    const scrapeHaystack = [
+      scraped?.title,
+      scraped?.jsonldName,
+      scraped?.ogDescription,
+      (scraped?.jsonldRaw && scraped.jsonldRaw.description) || "",
+    ].filter(Boolean).join(" ").trim();
+    mountWrapperSelectForBrandLineVitola(catalog, wrapperSelect, b, l, v, {
+      prevRaw: wrapperPrev,
+      preferredPlainBucket:
+        parsedWrapperPrev.bucket ||
+        (initialValues.wrapper || "").trim() ||
+        localGuess.wrapper_bucket,
+      scrapeHaystack,
+    });
     mountBoxQtyForCatalog(boxQtyMount, catalog, b, l, v, readBoxPreference());
   }
 
@@ -1219,8 +1369,9 @@ async function submitProposal(tab, response, scraped) {
   const brand = readCandidateBrand();
   const line = readCandidateLine();
   let vitola = readCandidateVitola();
-  let wrapperBucket = get("f-wrapper");
-  if (wrapperBucket === "__manual__") wrapperBucket = "";
+  const wrapperRaw = get("f-wrapper");
+  let wrapperBucket = parseWrapperSelectValue(wrapperRaw).bucket;
+  if (wrapperRaw === "__manual__") wrapperBucket = "";
   const boxQtyRaw = get("f-box_qty");
   const priceRaw = get("f-price");
 
@@ -1671,12 +1822,9 @@ function detectWrapperBucket(...texts) {
 }
 
 // NOTE: As of the catalog-snap rollout, only the non-text fields here
-// (wrapper_bucket, box_qty, price) are actually surfaced to the user.
-// brand / line / vitola are still computed for back-compat and to keep
-// this function self-contained, but renderCandidate ignores them in
-// favor of the server-side /api/public/guess-metadata response which
-// snaps to canonical master_cigars values. Don't reintroduce these
-// values as the primary prefill — that's the bug we just fixed.
+// (wrapper_bucket, box_qty, price) are actually surfaced to the user
+// before /guess-metadata; renderCandidate then snaps brand/line/vitola
+// and orders vitola before wrapper so wrapper can list catalog labels.
 function guessFromScrape(rawUrl, scraped) {
   const out = { brand: "", line: "", vitola: "", wrapper_bucket: "", box_qty: "", price: "" };
   if (!scraped) return out;

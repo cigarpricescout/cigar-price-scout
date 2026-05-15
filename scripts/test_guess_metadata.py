@@ -154,6 +154,19 @@ ok = "Gordo" in vb
 print(f'  [{"PASS" if ok else "FAIL"}] vitolas_by_brand_line_bucket Sun Grown includes Gordo (got {vb})')
 results.append(ok)
 
+print('\n[J] Per-vitola catalog wrapper labels (consumer extension)')
+opus_key = "Arturo Fuente|Opus X|PerfecXion No. 4"
+rows = idx.get("wrapper_catalog_rows_by_blv", {}).get(opus_key) or []
+lab0 = (rows[0].get("label") or "") if rows else ""
+ok = (
+    isinstance(rows, list) and len(rows) >= 1
+    and rows[0].get("bucket") == "Maduro"
+    and "Dominican Rosado" in lab0
+    and "code" in rows[0]
+)
+print(f'  [{"PASS" if ok else "FAIL"}] {opus_key} has wrapper_catalog row(s) with bucket+code (got {rows})')
+results.append(ok)
+
 print()
 print('=' * 78)
 total = len(results)

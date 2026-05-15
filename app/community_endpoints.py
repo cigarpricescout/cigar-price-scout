@@ -2219,11 +2219,17 @@ def _get_catalog_match_index() -> Dict[str, Any]:
       vitola_match_pairs: dict[(brand, line), list[tuple[str, str]]]
       buckets_by_brand_line: dict["brand|line", list[str]]
           Distinct wrapper buckets that appear on any vitola for that
-          brand+line (wrapper is chosen before vitola in the consumer UI).
+          brand+line (legacy cascade; vitola-first UI prefers
+          ``wrapper_catalog_rows_by_blv``).
       vitolas_by_brand_line_bucket: dict["brand|line|bucket", list[str]]
           Vitolas for that brand+line whose CID maps to that consumer
           bucket. ``__UNBUCKETED__`` holds vitolas with no mapped bucket
           (shown only when wrapper is "Not sure").
+      wrapper_catalog_rows_by_blv: dict["brand|line|vitola", list[dict]]
+          Per-vitola rows from master: ``label`` (display string),
+          ``bucket`` (consumer bucket), ``code`` (CID wrapper_code).
+          Lets the extension show catalog-accurate wrapper names (e.g.
+          Dominican Rosado) alongside the four generic buckets.
       boxes_by_brand_line_vitola: dict["brand|line|vitola", list[int]]
           Distinct box counts from master for that vitola (consumer form).
       buckets_by_brand_line_vitola: dict["brand|line|vitola", list[str]]
@@ -2238,7 +2244,7 @@ def _get_catalog_match_index() -> Dict[str, Any]:
         return _catalog_match_cache["data"]
 
     # Local import to avoid a circular dependency with app.main.
-    from app.main import load_master_index  # type: ignore
+    from app.main import load_master_index, _format_wrapper_display  # type: ignore
 
     master = load_master_index()
     brands: set[str] = set()
@@ -2250,6 +2256,8 @@ def _get_catalog_match_index() -> Dict[str, Any]:
 
     boxes_by_blv: Dict[str, set] = defaultdict(set)
     codes_by_blv: Dict[str, set[str]] = defaultdict(set)
+    # blv_key -> dedupe_key (display lower) -> {label, bucket, code}
+    wrapper_rows_acc: Dict[str, Dict[str, Dict[str, str]]] = defaultdict(dict)
 
     for cid, row in master.items():
         brand = (row.get("brand") or "").strip()
@@ -2266,8 +2274,26 @@ def _get_catalog_match_index() -> Dict[str, Any]:
             blv_key = f"{brand}|{line}|{vitola}"
             parts = parse_cid(cid) if cid else None
             wc = (parts or {}).get("wrapper_code") or ""
-            if wc:
-                codes_by_blv[blv_key].add(str(wc).strip().upper())
+            wc_u = str(wc).strip().upper() if wc else ""
+            if wc_u:
+                codes_by_blv[blv_key].add(wc_u)
+                bkt = bucket_for_code(wc_u)
+                if bkt:
+                    wa = (row.get("wrapper_alias") or "").strip()
+                    wcanon = (row.get("wrapper_canon") or "").strip()
+                    disp = (_format_wrapper_display(wa, wcanon) or "").strip()
+                    if not disp:
+                        disp = (row.get("wrapper") or "").strip()
+                    if not disp:
+                        disp = bkt
+                    dedupe_k = disp.lower()
+                    prev = wrapper_rows_acc[blv_key].get(dedupe_k)
+                    if not prev or (wc_u and len(wc_u) > len(prev.get("code") or "")):
+                        wrapper_rows_acc[blv_key][dedupe_k] = {
+                            "label": disp,
+                            "bucket": bkt,
+                            "code": wc_u,
+                        }
             try:
                 bq_raw = row.get("box_qty")
                 bqi = int(bq_raw) if bq_raw not in (None, "", 0, "0") else 0
@@ -2334,6 +2360,11 @@ def _get_catalog_match_index() -> Dict[str, Any]:
         },
         "vitolas_by_brand_line_bucket": {
             k: sorted(vs) for k, vs in vitolas_by_brand_line_bucket.items() if vs
+        },
+        "wrapper_catalog_rows_by_blv": {
+            k: sorted(rows.values(), key=lambda r: (r["label"].lower(), r["bucket"]))
+            for k, rows in wrapper_rows_acc.items()
+            if rows
         },
         "all_bucket_names": bucket_names(),
     }
@@ -2429,6 +2460,7 @@ async def public_guess_metadata(request: Request, body: GuessMetadataBody):
             "buckets_by_brand_line_vitola": {...},
             "buckets_by_brand_line": {...},
             "vitolas_by_brand_line_bucket": {...},
+            "wrapper_catalog_rows_by_blv": {...},
             "all_bucket_names": [...],
           },
           "matched_via": "master_catalog" | "no_match"
@@ -2468,6 +2500,7 @@ async def public_guess_metadata(request: Request, body: GuessMetadataBody):
                 "buckets_by_brand_line_vitola": catalog["buckets_by_brand_line_vitola"],
                 "buckets_by_brand_line": catalog["buckets_by_brand_line"],
                 "vitolas_by_brand_line_bucket": catalog["vitolas_by_brand_line_bucket"],
+                "wrapper_catalog_rows_by_blv": catalog["wrapper_catalog_rows_by_blv"],
                 "all_bucket_names": catalog["all_bucket_names"],
             },
             "matched_via": "master_catalog" if prefill["brand"] else "no_match",
