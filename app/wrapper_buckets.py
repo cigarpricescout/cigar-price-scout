@@ -22,14 +22,24 @@ from __future__ import annotations
 
 from typing import Dict, Optional, Set
 
+# Public label for the light-wrappers cluster (incl. Cameroon, which is
+# extremely common on Arturo Fuente lines such as Hemingway). Older builds
+# used the shorter name — see _LEGACY_BUCKET_ALIASES.
+NATURAL_LIGHT_WRAPPER_BUCKET = "Natural / Connecticut / Cameroon"
+
 # Order matters — UI surfaces iterate this dict and the order is what the
 # consumer sees in the <select>. "Not sure" is implied as the empty/None case;
 # we don't store it as a real bucket.
 WRAPPER_BUCKETS: Dict[str, Set[str]] = {
-    "Natural / Connecticut": {"NAT", "CT", "CAM", "CL"},
-    "Habano":                {"HAB", "CORO", "CON"},
-    "Sun Grown":             {"SUN", "ECU", "NIC"},
-    "Maduro":                {"MAD", "MEX", "MD", "DOM"},
+    NATURAL_LIGHT_WRAPPER_BUCKET: {"NAT", "CT", "CAM", "CL"},
+    "Habano":                     {"HAB", "CORO", "CON"},
+    "Sun Grown":                  {"SUN", "ECU", "NIC"},
+    "Maduro":                     {"MAD", "MEX", "MD", "DOM"},
+}
+
+# Older submissions / CSV notes may still carry the pre-Cameroon label.
+_LEGACY_BUCKET_ALIASES: Dict[str, str] = {
+    "Natural / Connecticut": NATURAL_LIGHT_WRAPPER_BUCKET,
 }
 
 # Inverse index, built once at import time. Not exposed; consumers should
@@ -57,10 +67,10 @@ SCRAPE_KEYWORDS = [
     ("broadleaf",           "Maduro"),
     ("habano",              "Habano"),
     ("corojo",              "Habano"),
-    ("connecticut",         "Natural / Connecticut"),
-    ("cameroon",            "Natural / Connecticut"),
-    ("claro",               "Natural / Connecticut"),
-    ("natural",             "Natural / Connecticut"),
+    ("connecticut",         NATURAL_LIGHT_WRAPPER_BUCKET),
+    ("cameroon",            NATURAL_LIGHT_WRAPPER_BUCKET),
+    ("claro",               NATURAL_LIGHT_WRAPPER_BUCKET),
+    ("natural",             NATURAL_LIGHT_WRAPPER_BUCKET),
 ]
 
 
@@ -77,7 +87,9 @@ def codes_for_bucket(bucket: Optional[str]) -> Set[str]:
     """
     if not bucket:
         return set()
-    return set(WRAPPER_BUCKETS.get(bucket, set()))
+    b = (bucket or "").strip()
+    b = _LEGACY_BUCKET_ALIASES.get(b, b)
+    return set(WRAPPER_BUCKETS.get(b, set()))
 
 
 def bucket_for_code(code: Optional[str]) -> Optional[str]:

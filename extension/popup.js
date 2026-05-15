@@ -16,8 +16,11 @@ const WRAPPER_CODES = [
 // operator approves a consumer-proposed URL the bucket round-trips
 // cleanly without code translation. Must stay in sync with
 // app/wrapper_buckets.py — the Python module is the source of truth.
+// app/wrapper_buckets.NATURAL_LIGHT_WRAPPER_BUCKET — keep operator UI in sync.
+const NATURAL_LIGHT_WRAPPER_BUCKET = "Natural / Connecticut / Cameroon";
+
 const WRAPPER_BUCKETS = {
-  "Natural / Connecticut": ["NAT", "CT", "CAM", "CL"],
+  [NATURAL_LIGHT_WRAPPER_BUCKET]: ["NAT", "CT", "CAM", "CL"],
   "Habano":                ["HAB", "CORO", "CON"],
   "Sun Grown":             ["SUN", "ECU", "NIC"],
   "Maduro":                ["MAD", "MEX", "MD", "DOM"],
@@ -28,7 +31,7 @@ const WRAPPER_BUCKETS = {
 // specific code (e.g. brand-new CID). The default is the most common
 // code in each bucket, so a "best guess" is at least sensible.
 const BUCKET_DEFAULT_CODE = {
-  "Natural / Connecticut": "NAT",
+  [NATURAL_LIGHT_WRAPPER_BUCKET]: "NAT",
   "Habano":                "HAB",
   "Sun Grown":             "SUN",
   "Maduro":                "MAD",
@@ -556,6 +559,7 @@ function wrapperField(value) {
 // brand-new CIDs.
 function resolveBucketToCode(bucket, response) {
   if (!bucket) return "";
+  if (bucket === "Natural / Connecticut") bucket = NATURAL_LIGHT_WRAPPER_BUCKET;
   const allowed = WRAPPER_BUCKETS[bucket] || [];
   if (!allowed.length) return "";
   const cands = (response && response.candidates) || [];

@@ -1410,7 +1410,13 @@ async def public_url_status(
         logger.warning("public_url_status seen lookup failed: %s", e)
 
     if matched_cid:
-        comparison = _build_comparison_for_cid(matched_cid, zip=zip, limit=3)
+        comparison = _build_comparison_for_cid(
+            matched_cid,
+            zip=zip,
+            limit=3,
+            focus_retailer_key=retailer_key,
+            focus_url=url,
+        )
         return {
             "state": "matched",
             "url": url,
@@ -1569,6 +1575,8 @@ def _build_comparison_for_cid(
     cid: str,
     zip: str = "",
     limit: int = 3,
+    focus_retailer_key: Optional[str] = None,
+    focus_url: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """Top-N cheapest retailers for one canonical ``cigar_id``.
 
@@ -1576,6 +1584,11 @@ def _build_comparison_for_cid(
     uses the same shipping/tax helpers. **Rows are included only when**
     ``canonical_cigar_id_for_comparison(product.cigar_id)`` equals the
     canonical CID for the URL — no looser brand/line/vitola matching here.
+
+    When ``focus_retailer_key`` / ``focus_url`` are set (the consumer popup
+    passes the active tab), the response includes ``this_listing``: our row
+    for that retailer (URL match when possible) even if it is not among
+    the top-N cheapest rows.
     """
     try:
         from app.main import (  # type: ignore
@@ -1656,14 +1669,14 @@ def _build_comparison_for_cid(
             return sparse
 
         retailer_lookup = {r["key"]: r for r in RETAILERS}
-        results = []
-        for p in matches:
+
+        def row_from_product(p) -> Dict[str, Any]:
             base = p.price_cents or 0
             ship = estimate_shipping_cents(base, p.retailer_key, state) or 0
             tax = estimate_tax_cents(base + ship, p.retailer_key, state) or 0
             delivered = base + ship + tax
             r_info = retailer_lookup.get(p.retailer_key, {})
-            results.append({
+            return {
                 "retailer_key": p.retailer_key,
                 "retailer_name": r_info.get("name") or p.retailer_key,
                 "authorized": bool(r_info.get("authorized", False)),
@@ -1673,15 +1686,35 @@ def _build_comparison_for_cid(
                 "delivered_cents": delivered,
                 "in_stock": bool(p.in_stock),
                 "url": p.url,
-                # Sprint 3 provenance. The popup uses these to render a
-                # "Last observed YYYY-MM-DD" stamp on anti-bot rows so
-                # users know the price is consumer-contributed, not live.
                 "price_source": getattr(p, "price_source", "csv"),
                 "observed_at": getattr(p, "observed_at", None),
                 "observation_count": getattr(p, "observation_count", 0),
-            })
+                "community_id": getattr(p, "community_id", None),
+            }
+
+        results = [row_from_product(p) for p in matches]
         # Sort: in-stock first, then cheapest delivered.
         results.sort(key=lambda r: (not r["in_stock"], r["delivered_cents"]))
+
+        this_listing: Optional[Dict[str, Any]] = None
+        fk = (focus_retailer_key or "").strip()
+        if fk:
+            fu = canonicalize_url(focus_url) if focus_url else ""
+            cand_products = [
+                p for p in matches
+                if p.retailer_key == fk
+                and (not fu or canonicalize_url(p.url or "") == fu)
+            ]
+            if not cand_products:
+                cand_products = [p for p in matches if p.retailer_key == fk]
+            if cand_products:
+                scored = [
+                    (row_from_product(p), (not bool(p.in_stock), p.price_cents or 0))
+                    for p in cand_products
+                ]
+                scored.sort(key=lambda t: t[1])
+                this_listing = scored[0][0]
+
         first = next((p for p in matches if (p.cigar_id or "") == canon_cid), matches[0])
         return {
             "cigar_id": canon_cid,
@@ -1700,6 +1733,7 @@ def _build_comparison_for_cid(
             "state": state,
             "results": results[:limit],
             "total_retailers": len(distinct_retailers),
+            "this_listing": this_listing,
         }
     except Exception as e:
         logger.exception("_build_comparison_for_cid failed: %s", e)

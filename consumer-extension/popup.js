@@ -37,7 +37,17 @@ function buildCigarLandingUrl(brand, line) {
   return `https://cigarpricescout.com/cigars/${brandSlug}/${lineSlug}`;
 }
 
-const FALLBACK_WRAPPER_BUCKETS = ["Natural / Connecticut", "Habano", "Sun Grown", "Maduro"];
+// Must match app/wrapper_buckets.NATURAL_LIGHT_WRAPPER_BUCKET
+const NATURAL_LIGHT_WRAPPER_BUCKET = "Natural / Connecticut / Cameroon";
+
+function normalizeLegacyWrapperBucket(w) {
+  if (w == null || typeof w !== "string") return w;
+  const t = w.trim();
+  if (t === "Natural / Connecticut") return NATURAL_LIGHT_WRAPPER_BUCKET;
+  return w;
+}
+
+const FALLBACK_WRAPPER_BUCKETS = [NATURAL_LIGHT_WRAPPER_BUCKET, "Habano", "Sun Grown", "Maduro"];
 
 function debounce(fn, ms) {
   let t;
@@ -69,6 +79,20 @@ function defaultCatalogShape() {
   };
 }
 
+function normalizeAllBucketNames(arr) {
+  if (!arr || !Array.isArray(arr) || !arr.length) return null;
+  const seen = new Set();
+  const out = [];
+  for (const raw of arr) {
+    const label = normalizeLegacyWrapperBucket(String(raw).trim()) || String(raw).trim();
+    if (label && !seen.has(label)) {
+      seen.add(label);
+      out.push(label);
+    }
+  }
+  return out.length ? out : null;
+}
+
 function mergeCatalog(raw) {
   const d = defaultCatalogShape();
   if (!raw || typeof raw !== "object") return d;
@@ -81,9 +105,7 @@ function mergeCatalog(raw) {
     buckets_by_brand_line_vitola: raw.buckets_by_brand_line_vitola || d.buckets_by_brand_line_vitola,
     buckets_by_brand_line: raw.buckets_by_brand_line || d.buckets_by_brand_line,
     vitolas_by_brand_line_bucket: raw.vitolas_by_brand_line_bucket || d.vitolas_by_brand_line_bucket,
-    all_bucket_names: (raw.all_bucket_names && raw.all_bucket_names.length)
-      ? raw.all_bucket_names
-      : d.all_bucket_names,
+    all_bucket_names: normalizeAllBucketNames(raw.all_bucket_names) || d.all_bucket_names,
   };
 }
 
@@ -91,11 +113,20 @@ function mergeCatalog(raw) {
 function mountWrapperSelectForBrandLine(catalog, selEl, brand, line, preferredBucket) {
   if (!selEl) return;
   const bl = catalogBlKey(brand, line);
-  const fromMaster = (catalog.buckets_by_brand_line && catalog.buckets_by_brand_line[bl]) || [];
-  const all = (catalog.all_bucket_names && catalog.all_bucket_names.length)
+  const fromMasterRaw = (catalog.buckets_by_brand_line && catalog.buckets_by_brand_line[bl]) || [];
+  const allRaw = (catalog.all_bucket_names && catalog.all_bucket_names.length)
     ? catalog.all_bucket_names
     : FALLBACK_WRAPPER_BUCKETS;
-  const buckets = fromMaster.length ? fromMaster : all;
+  const rawBuckets = fromMasterRaw.length ? fromMasterRaw : allRaw;
+  const seen = new Set();
+  const buckets = [];
+  for (const bkt of rawBuckets) {
+    const label = normalizeLegacyWrapperBucket(String(bkt).trim()) || String(bkt).trim();
+    if (label && !seen.has(label)) {
+      seen.add(label);
+      buckets.push(label);
+    }
+  }
   const prev = (selEl.value || "").trim();
   let html = '<option value="">Not sure</option>';
   html += `<option value="__manual__">${escapeHtml("Other / not in catalog")}</option>`;
@@ -104,17 +135,26 @@ function mountWrapperSelectForBrandLine(catalog, selEl, brand, line, preferredBu
   }
   selEl.innerHTML = html;
   const pick = (v) => v && [...selEl.options].some(o => o.value === v);
-  if (pick(prev)) selEl.value = prev;
-  else if (pick(preferredBucket)) selEl.value = preferredBucket;
+  const prevResolved = (prev === "Natural / Connecticut" && pick(NATURAL_LIGHT_WRAPPER_BUCKET))
+    ? NATURAL_LIGHT_WRAPPER_BUCKET
+    : prev;
+  const pref = normalizeLegacyWrapperBucket(preferredBucket);
+  if (pick(prevResolved)) selEl.value = prevResolved;
+  else if (pick(pref)) selEl.value = pref;
 }
 
 function vitolaOptionsFor(catalog, brand, line, wrapperBucket) {
   const bl = catalogBlKey(brand, line);
   const allSorted = ((catalog.vitolas_by_brand_line && catalog.vitolas_by_brand_line[bl]) || []).slice().sort();
-  const wb = (wrapperBucket || "").trim();
+  let wb = (wrapperBucket || "").trim();
+  wb = normalizeLegacyWrapperBucket(wb) || wb;
   if (!wb || wb === "__manual__") return allSorted;
   const k = `${bl}|${wb}`;
-  const sub = (catalog.vitolas_by_brand_line_bucket && catalog.vitolas_by_brand_line_bucket[k]) || [];
+  let sub = (catalog.vitolas_by_brand_line_bucket && catalog.vitolas_by_brand_line_bucket[k]) || [];
+  if (!sub.length && wb === NATURAL_LIGHT_WRAPPER_BUCKET) {
+    const legacyKey = `${bl}|Natural / Connecticut`;
+    sub = (catalog.vitolas_by_brand_line_bucket && catalog.vitolas_by_brand_line_bucket[legacyKey]) || [];
+  }
   if (sub.length) return [...sub].sort();
   return allSorted;
 }
@@ -122,50 +162,161 @@ function vitolaOptionsFor(catalog, brand, line, wrapperBucket) {
 /** Vitola choices after brand+line+wrapper. */
 function mountVitolaSelect(catalog, selEl, brand, line, wrapperBucket, preferredVitola) {
   if (!selEl) return;
+  const manualEl = document.getElementById("f-vitola-manual");
+  const prevSel = (selEl.value || "").trim();
+  const prevManual = manualEl ? (manualEl.value || "").trim() : "";
   const opts = vitolaOptionsFor(catalog, brand, line, wrapperBucket);
-  const prev = (selEl.value || "").trim();
   let html = '<option value="">Choose vitola…</option>';
   for (const v of opts) {
     html += `<option value="${escapeAttr(v)}">${escapeHtml(v)}</option>`;
   }
+  html += `<option value="__manual__">${escapeHtml("Other / type vitola…")}</option>`;
   selEl.innerHTML = html;
-  const pick = (x) => x && [...selEl.options].some(o => o.value === x);
-  if (pick(prev)) selEl.value = prev;
-  else if (pick(preferredVitola)) selEl.value = preferredVitola;
+  const pick = (x) => x && [...selEl.options].some((o) => o.value === x);
+  const pref = (preferredVitola || "").trim();
+  const prefInList = pref && opts.includes(pref);
+  if (pick(prevSel) && prevSel !== "__manual__") {
+    selEl.value = prevSel;
+    if (manualEl) {
+      manualEl.style.display = "none";
+      manualEl.value = "";
+    }
+  } else if (prevSel === "__manual__") {
+    selEl.value = "__manual__";
+    if (manualEl) {
+      manualEl.value = prevManual || pref;
+      manualEl.style.display = "block";
+    }
+  } else if (prefInList) {
+    selEl.value = pref;
+    if (manualEl) {
+      manualEl.style.display = "none";
+      manualEl.value = "";
+    }
+  } else if (pref) {
+    selEl.value = "__manual__";
+    if (manualEl) {
+      manualEl.value = pref;
+      manualEl.style.display = "block";
+    }
+  } else if (manualEl) {
+    manualEl.style.display = "none";
+    manualEl.value = "";
+  }
 }
 
-/** Box control: single master count → locked input; several → select; none → free number. */
+/** Box control: always editable; catalog counts are datalist suggestions only. */
 function mountBoxQtyForCatalog(mountEl, catalog, brand, line, vitola, preferredVal) {
   if (!mountEl) return;
   const k = catalogBlvKey(brand, line, vitola);
-  const boxList = (catalog.boxes_by_brand_line_vitola && catalog.boxes_by_brand_line_vitola[k]) || [];
+  const boxList = ((catalog.boxes_by_brand_line_vitola && catalog.boxes_by_brand_line_vitola[k]) || [])
+    .slice()
+    .sort((a, b) => a - b);
   const pv = preferredVal != null && String(preferredVal).trim() !== "" ? String(preferredVal).trim() : "";
-  if (boxList.length === 1) {
-    const only = boxList[0];
-    mountEl.innerHTML = `
-      <label for="f-box_qty">Box quantity</label>
-      <input type="number" id="f-box_qty" class="catalog-locked" readonly
-             value="${escapeAttr(only)}"
-             title="From master catalog for this vitola." />
-    `;
-    return;
-  }
-  if (boxList.length > 1) {
-    const opts = boxList.map(b => `
-        <option value="${b}" ${String(b) === pv ? "selected" : ""}>${b}</option>
-      `).join("");
-    mountEl.innerHTML = `
-      <label for="f-box_qty">Box quantity</label>
-      <select id="f-box_qty">${opts}</select>
-    `;
-    return;
-  }
+  const dl = boxList.length
+    ? `<datalist id="box-qty-suggestions">${boxList.map((n) => `<option value="${escapeAttr(String(n))}"></option>`).join("")}</datalist>`
+    : "";
+  const listAttr = boxList.length ? ' list="box-qty-suggestions"' : "";
   mountEl.innerHTML = `
     <label for="f-box_qty">Box quantity</label>
-    <input type="number" id="f-box_qty" value="${escapeAttr(pv)}"
-           placeholder="25" min="1" max="100" />
-    <div class="hint-inline">Choose brand, line, wrapper &amp; vitola from the catalog, or type a box count for a new SKU.</div>
+    <input type="number" id="f-box_qty"${listAttr} value="${escapeAttr(pv)}"
+           placeholder="e.g. 20 or 25" min="1" max="100" step="1" autocomplete="off" />
+    ${dl}
+    <div class="hint-inline">Suggestions from our catalog — type any count if the page differs.</div>
   `;
+}
+
+/** Brand: native select of all catalog brands, plus Other + text field. */
+function mountBrandSelect(mountEl, catalog, initialBrand) {
+  if (!mountEl) return;
+  const brands = [...(catalog.brands || [])].sort((a, b) => a.localeCompare(b));
+  const tri = (initialBrand || "").trim();
+  const inList = tri && brands.includes(tri);
+  let html = `<label for="f-brand-sel">Brand</label>`;
+  html += `<select id="f-brand-sel">`;
+  html += `<option value="">Choose brand…</option>`;
+  for (const b of brands) {
+    html += `<option value="${escapeAttr(b)}">${escapeHtml(b)}</option>`;
+  }
+  html += `<option value="__manual__">${escapeHtml("Other / not in catalog…")}</option></select>`;
+  html += `<input type="text" id="f-brand-txt" maxlength="80" placeholder="Type brand name…" autocomplete="off" style="display:none;margin-top:6px" />`;
+  mountEl.innerHTML = html;
+  const sel = document.getElementById("f-brand-sel");
+  const txt = document.getElementById("f-brand-txt");
+  if (!sel || !txt) return;
+  if (!tri) {
+    sel.value = "";
+    txt.value = "";
+    txt.style.display = "none";
+  } else if (inList) {
+    sel.value = tri;
+    txt.value = "";
+    txt.style.display = "none";
+  } else {
+    sel.value = "__manual__";
+    txt.value = tri;
+    txt.style.display = "block";
+  }
+}
+
+/** Line: native select of lines for the chosen brand, or free text if brand is Other. */
+function mountLineFieldFromBrand(mountEl, catalog, lineInitial) {
+  if (!mountEl) return;
+  const readBrandState = () => {
+    const sel = document.getElementById("f-brand-sel");
+    if (!sel) return { kind: "empty" };
+    if (!sel.value) return { kind: "empty" };
+    if (sel.value === "__manual__") {
+      return { kind: "manual", text: (document.getElementById("f-brand-txt")?.value || "").trim() };
+    }
+    return { kind: "catalog", brand: sel.value.trim() };
+  };
+  const preserve = (lineInitial != null ? String(lineInitial) : "").trim();
+  const st = readBrandState();
+  if (st.kind === "empty") {
+    mountEl.innerHTML = `<label>Line</label><select id="f-line-sel" disabled><option value="">Select brand first…</option></select>`;
+    return;
+  }
+  if (st.kind === "manual") {
+    mountEl.innerHTML = `<label for="f-line-free">Line</label><input type="text" id="f-line-free" maxlength="80" value="${escapeAttr(preserve)}" placeholder="e.g. Hemingway" autocomplete="off" />`;
+    return;
+  }
+  const lines = (catalog.lines_by_brand && catalog.lines_by_brand[st.brand]) || [];
+  const sorted = [...lines].sort((a, b) => a.localeCompare(b));
+  const inList = preserve && sorted.includes(preserve);
+  let html = `<label for="f-line-sel">Line</label>`;
+  html += `<select id="f-line-sel">`;
+  html += `<option value="">Choose line…</option>`;
+  for (const l of sorted) {
+    html += `<option value="${escapeAttr(l)}"${l === preserve && inList ? " selected" : ""}>${escapeHtml(l)}</option>`;
+  }
+  html += `<option value="__manual__"${!inList && preserve ? " selected" : ""}>Other / not in catalog…</option></select>`;
+  html += `<input type="text" id="f-line-txt" maxlength="80" placeholder="Type line name…" autocomplete="off" style="display:${!inList && preserve ? "block" : "none"};margin-top:6px" value="${escapeAttr(!inList ? preserve : "")}" />`;
+  mountEl.innerHTML = html;
+}
+
+function readCandidateBrand() {
+  const sel = document.getElementById("f-brand-sel");
+  if (!sel) return "";
+  if (sel.value === "__manual__") return (document.getElementById("f-brand-txt")?.value || "").trim();
+  return (sel.value || "").trim();
+}
+
+function readCandidateLine() {
+  const free = document.getElementById("f-line-free");
+  if (free) return (free.value || "").trim();
+  const sel = document.getElementById("f-line-sel");
+  const txt = document.getElementById("f-line-txt");
+  if (!sel || sel.disabled) return "";
+  if (sel.value === "__manual__") return (txt?.value || "").trim();
+  return (sel.value || "").trim();
+}
+
+function readCandidateVitola() {
+  const sel = document.getElementById("f-vitola");
+  if (!sel) return "";
+  if (sel.value === "__manual__") return (document.getElementById("f-vitola-manual")?.value || "").trim();
+  return (sel.value || "").trim();
 }
 
 // ── Bootstrap ──────────────────────────────────────────────────────────
@@ -401,11 +552,13 @@ function renderMatched(tab, response, scraped) {
   const cheapest = comparison.results[0];
   const cheapestDeliv = cheapest.delivered_cents;
   const currentPageRetailer = response.retailer_key;
-  const currentRow = comparison.results.find(r => r.retailer_key === currentPageRetailer);
+  const currentRow = comparison.this_listing
+    || comparison.results.find((r) => r.retailer_key === currentPageRetailer);
   const savingsCents = (currentRow && currentRow.delivered_cents > cheapestDeliv)
     ? currentRow.delivered_cents - cheapestDeliv
     : 0;
 
+  const displayRows = compareRowsForPopup(comparison, tab.url, currentPageRetailer);
   const pickRow = (response.cigar_options && response.cigar_options.length > 1)
     ? `
       <div class="field cigar-picker" style="margin-bottom:12px">
@@ -426,9 +579,14 @@ function renderMatched(tab, response, scraped) {
       <div class="cigar-meta">
         ${escapeHtml(comparison.wrapper || "")} · ${escapeHtml(comparison.vitola || "")} · ${escapeHtml(comparison.size || "")} · Box of ${comparison.box_qty || "?"}
       </div>
+      <div class="hint-below" style="margin:-2px 0 8px;font-size:11px;color:#6b7280">
+        “This page” is our stored price &amp; stock for the tab you have open — compare it to the retailers above.
+      </div>
       ${pickRow}
       <div class="results">
-        ${comparison.results.map((r, i) => renderResultRow(r, i, cheapestDeliv)).join("")}
+        ${displayRows.map(({ row, index, thisPage }) =>
+          renderResultRow(row, index, cheapestDeliv, { thisPage }),
+        ).join("")}
       </div>
       ${savingsCents > 0 ? `
         <div class="savings">
@@ -486,7 +644,8 @@ function renderMatched(tab, response, scraped) {
 function renderCorrection(tab, response, scraped) {
   const comparison = response.comparison || {};
   const currentRetailerKey = response.retailer_key;
-  const currentRow = (comparison.results || []).find(r => r.retailer_key === currentRetailerKey);
+  const currentRow = comparison.this_listing
+    || (comparison.results || []).find((r) => r.retailer_key === currentRetailerKey);
   // Sale price = delivered minus shipping/tax. This matches what the
   // user sees on the retailer's page, which is what we want them to
   // verify/correct (NOT the delivered total, which would confuse the
@@ -498,9 +657,9 @@ function renderCorrection(tab, response, scraped) {
 
   // Pick the wrapper bucket that best matches the comparison's wrapper.
   // Falls back to "Not sure" so the user can pick something explicit.
-  const wrapperGuess = comparison.wrapper
-    ? bucketFromWrapperString(comparison.wrapper)
-    : "";
+  const wrapperGuess = normalizeLegacyWrapperBucket(
+    comparison.wrapper ? bucketFromWrapperString(comparison.wrapper) : "",
+  );
 
   root.innerHTML = `
     ${renderHeader(tab, response)}
@@ -528,7 +687,7 @@ function renderCorrection(tab, response, scraped) {
           <label for="c-wrapper">Wrapper</label>
           <select id="c-wrapper">
             <option value="">Not sure</option>
-            <option value="Natural / Connecticut" ${wrapperGuess === "Natural / Connecticut" ? "selected" : ""}>Natural / Connecticut</option>
+            <option value="${escapeAttr(NATURAL_LIGHT_WRAPPER_BUCKET)}" ${wrapperGuess === NATURAL_LIGHT_WRAPPER_BUCKET ? "selected" : ""}>${escapeHtml(NATURAL_LIGHT_WRAPPER_BUCKET)}</option>
             <option value="Habano" ${wrapperGuess === "Habano" ? "selected" : ""}>Habano</option>
             <option value="Sun Grown" ${wrapperGuess === "Sun Grown" ? "selected" : ""}>Sun Grown</option>
             <option value="Maduro" ${wrapperGuess === "Maduro" ? "selected" : ""}>Maduro</option>
@@ -580,7 +739,7 @@ function bucketFromWrapperString(s) {
   if (w.includes("sun grown") || w.includes("sungrown")) return "Sun Grown";
   if (w.includes("maduro") || w.includes("oscuro") || w.includes("san andr") || w.includes("broadleaf")) return "Maduro";
   if (w.includes("habano") || w.includes("corojo")) return "Habano";
-  if (w.includes("connecticut") || w.includes("cameroon") || w.includes("natural") || w.includes("claro")) return "Natural / Connecticut";
+  if (w.includes("connecticut") || w.includes("cameroon") || w.includes("natural") || w.includes("claro")) return NATURAL_LIGHT_WRAPPER_BUCKET;
   return "";
 }
 
@@ -708,9 +867,47 @@ function renderCorrectionThanks(tab, response, message) {
   wireFooter();
 }
 
-function renderResultRow(r, idx, cheapestDeliv) {
+/** Build popup rows: top-N comparison plus CPS row for this URL when missing. */
+function compareRowsForPopup(comparison, tabUrl, retailerKey) {
+  const top = (comparison.results || []).slice();
+  const focus = comparison.this_listing;
+  const norm = (u) => String(u || "").split("?")[0].trim().toLowerCase();
+  const tabU = norm(tabUrl);
+  const rowKey = (r) => `${r.retailer_key}|${norm(r.url)}`;
+
+  let sawThisPage = false;
+  const out = top.map((r, i) => {
+    const thisPage = !!(
+      retailerKey && r.retailer_key === retailerKey
+      && (!tabU || !norm(r.url) || norm(r.url) === tabU)
+    );
+    if (thisPage) sawThisPage = true;
+    return { row: r, index: i, thisPage };
+  });
+  if (focus && !sawThisPage) {
+    const dup = top.some((r) => rowKey(r) === rowKey(focus));
+    if (!dup) {
+      out.push({ row: focus, index: top.length, thisPage: true });
+    }
+  }
+  return out;
+}
+
+function thisPagePriceHighlight(row, cheapestDeliv) {
+  if (row.in_stock && row.delivered_cents <= cheapestDeliv) return "good";
+  return "bad";
+}
+
+function renderResultRow(r, idx, cheapestDeliv, opts = {}) {
+  const { thisPage = false } = opts;
   const cheapestClass = (r.delivered_cents === cheapestDeliv) ? "cheapest" : "";
   const oosClass = r.in_stock ? "" : "out-of-stock";
+  const thisPageClass = thisPage
+    ? `this-page this-page-${thisPagePriceHighlight(r, cheapestDeliv)}`
+    : "";
+  const thisPageLabel = thisPage
+    ? `<span class="this-page-badge" title="Cigar Price Scout data for the page you are on">This page</span>`
+    : "";
   const authBadge = r.authorized ? `<span class="auth-badge">authorized</span>` : "";
   // Always show a stock badge so users can spot at a glance which
   // retailers actually have the cigar buyable right now — the common
@@ -733,10 +930,11 @@ function renderResultRow(r, idx, cheapestDeliv) {
     ? `<span class="observed-badge" title="Crowd-sourced from shoppers">📊 Last seen ${formatDateAbs(r.observed_at)}</span>`
     : "";
   return `
-    <a href="${escapeAttr(r.url || '#')}" target="_blank" rel="noopener" class="result-row ${cheapestClass} ${oosClass}">
+    <a href="${escapeAttr(r.url || '#')}" target="_blank" rel="noopener" class="result-row ${cheapestClass} ${oosClass} ${thisPageClass}">
       <div class="result-rank">${idx + 1}</div>
       <div class="result-name">
         ${escapeHtml(r.retailer_name)}
+        ${thisPageLabel}
         ${authBadge}${stockBadge}
         ${observedStamp}
       </div>
@@ -791,8 +989,8 @@ async function renderCandidate(tab, response, scraped, opts = null) {
   // form was submittable. The server-side matcher (a) only suggests
   // canonical catalog brands/lines/vitolas, (b) returns empty when no
   // match exists (better an empty field than a wrong one), and (c)
-  // returns the catalog brand/line whitelists so the inputs can offer
-  // a <datalist> typeahead on brand/line. Wrapper and vitola use
+  // returns the catalog whitelists so the form can offer full <select>
+  // lists (Chrome popup datalists are flaky). Wrapper and vitola use
   // master-driven <select>s (brand → line → wrapper → vitola → box).
   let prefill = { brand: "", line: "", vitola: "" };
   let catalog = defaultCatalogShape();
@@ -830,12 +1028,6 @@ async function renderCandidate(tab, response, scraped, opts = null) {
                : localGuess.price,
   };
 
-  const brandOptions = (catalog.brands || [])
-    .map(b => `<option value="${escapeAttr(b)}">`).join("");
-  const initialLines = (initialValues.brand && catalog.lines_by_brand)
-    ? (catalog.lines_by_brand[initialValues.brand] || []) : [];
-  const lineOptions = initialLines
-    .map(l => `<option value="${escapeAttr(l)}">`).join("");
 
   root.innerHTML = `
     ${renderHeader(tab, response)}
@@ -846,16 +1038,8 @@ async function renderCandidate(tab, response, scraped, opts = null) {
         Detected on page: <b>${escapeHtml(scraped?.title || scraped?.jsonldName || tab.title || "(no title)")}</b>
       </div>
       <div class="fields" id="cid-form">
-        <div class="field">
-          <label for="f-brand">Brand</label>
-          <input type="text" id="f-brand" list="brands-list" value="${escapeAttr(initialValues.brand)}" placeholder="e.g. Arturo Fuente" autocomplete="off" />
-          <datalist id="brands-list">${brandOptions}</datalist>
-        </div>
-        <div class="field">
-          <label for="f-line">Line</label>
-          <input type="text" id="f-line" list="lines-list" value="${escapeAttr(initialValues.line)}" placeholder="e.g. Hemingway" autocomplete="off" />
-          <datalist id="lines-list">${lineOptions}</datalist>
-        </div>
+        <div class="field" id="f-brand-mount"></div>
+        <div class="field" id="f-line-mount"></div>
         <div class="field">
           <label for="f-wrapper">Wrapper <span class="hint-inline">(catalog)</span></label>
           <select id="f-wrapper"></select>
@@ -863,6 +1047,7 @@ async function renderCandidate(tab, response, scraped, opts = null) {
         <div class="field">
           <label for="f-vitola">Vitola</label>
           <select id="f-vitola"></select>
+          <input type="text" id="f-vitola-manual" maxlength="80" placeholder="Type vitola if not in list…" autocomplete="off" style="display:none;margin-top:6px" />
         </div>
         <div class="field-row">
           <div class="field" id="box-qty-field"></div>
@@ -887,86 +1072,107 @@ async function renderCandidate(tab, response, scraped, opts = null) {
 
   // Master-driven cascade: brand → line → wrapper → vitola → box (matches
   // cigarpricescout.com field order and master_cigars.csv).
-  const brandInput = document.getElementById("f-brand");
-  const lineInput = document.getElementById("f-line");
-  const linesList = document.getElementById("lines-list");
+  const brandMount = document.getElementById("f-brand-mount");
+  const lineMount = document.getElementById("f-line-mount");
   const wrapperSelect = document.getElementById("f-wrapper");
   const vitolaSelect = document.getElementById("f-vitola");
   const boxQtyMount = document.getElementById("box-qty-field");
 
-  let lastBrand = (initialValues.brand || "").trim();
-  let lastLine = (initialValues.line || "").trim();
+  mountBrandSelect(brandMount, catalog, initialValues.brand);
+  mountLineFieldFromBrand(lineMount, catalog, initialValues.line);
 
-  function refreshLineDatalist() {
-    const b = (brandInput.value || "").trim();
-    const ls = (catalog.lines_by_brand && catalog.lines_by_brand[b]) || [];
-    linesList.innerHTML = ls.map(l => `<option value="${escapeAttr(l)}">`).join("");
-  }
+  let lastBrandSelValue = (document.getElementById("f-brand-sel") || {}).value || "";
 
   function readBoxPreference() {
     const el = document.getElementById("f-box_qty");
     if (!el) return initialValues.box_qty;
-    if (el.tagName === "SELECT") return el.value;
     return (el.value || "").trim() || initialValues.box_qty;
   }
 
   function runCatalogCascade() {
-    const b = (brandInput.value || "").trim();
-    const l = (lineInput.value || "").trim();
+    const b = readCandidateBrand();
+    const l = readCandidateLine();
     const wBefore = (wrapperSelect.value || "").trim();
     mountWrapperSelectForBrandLine(
       catalog, wrapperSelect, b, l,
       wBefore || localGuess.wrapper_bucket,
     );
     const w = (wrapperSelect.value || "").trim();
-    const vitPref = (vitolaSelect.value || "").trim() || (initialValues.vitola || "").trim();
+    const vitPref = readCandidateVitola() || (initialValues.vitola || "").trim();
     mountVitolaSelect(catalog, vitolaSelect, b, l, w, vitPref);
-    const v = (vitolaSelect.value || "").trim();
+    const v = readCandidateVitola();
     mountBoxQtyForCatalog(boxQtyMount, catalog, b, l, v, readBoxPreference());
   }
 
-  refreshLineDatalist();
+  function wireLineFieldHandlers() {
+    const lineSel = document.getElementById("f-line-sel");
+    if (lineSel && !lineSel.disabled) {
+      lineSel.addEventListener("change", () => {
+        const lineTxt = document.getElementById("f-line-txt");
+        if (lineTxt) {
+          lineTxt.style.display = lineSel.value === "__manual__" ? "block" : "none";
+          if (lineSel.value !== "__manual__") lineTxt.value = "";
+        }
+        runCatalogCascade();
+      });
+    }
+    const lineFree = document.getElementById("f-line-free");
+    if (lineFree) {
+      lineFree.addEventListener("input", debounce(runCatalogCascade, 250));
+      lineFree.addEventListener("blur", runCatalogCascade);
+    }
+    const lineTxt = document.getElementById("f-line-txt");
+    if (lineTxt) {
+      lineTxt.addEventListener("input", debounce(runCatalogCascade, 200));
+      lineTxt.addEventListener("blur", runCatalogCascade);
+    }
+  }
+
+  function wireBrandHandlers() {
+    const sel = document.getElementById("f-brand-sel");
+    const txt = document.getElementById("f-brand-txt");
+    if (sel) {
+      sel.addEventListener("change", () => {
+        if (txt) {
+          txt.style.display = sel.value === "__manual__" ? "block" : "none";
+          if (sel.value !== "__manual__") txt.value = "";
+        }
+        const sv = sel.value;
+        if (sv !== lastBrandSelValue) {
+          lastBrandSelValue = sv;
+          mountLineFieldFromBrand(lineMount, catalog, "");
+          wireLineFieldHandlers();
+        }
+        runCatalogCascade();
+      });
+    }
+    if (txt) {
+      txt.addEventListener("input", debounce(runCatalogCascade, 300));
+      txt.addEventListener("blur", runCatalogCascade);
+    }
+  }
+
+  wireBrandHandlers();
+  wireLineFieldHandlers();
   runCatalogCascade();
 
-  const onBrandCommit = () => {
-    const b = (brandInput.value || "").trim();
-    if (b !== lastBrand) {
-      lastBrand = b;
-      lineInput.value = "";
-      vitolaSelect.value = "";
-      lastLine = "";
-    }
-    refreshLineDatalist();
-    runCatalogCascade();
-  };
-
-  const onLineCommit = () => {
-    const l = (lineInput.value || "").trim();
-    if (l !== lastLine) {
-      lastLine = l;
-      vitolaSelect.value = "";
-    }
-    runCatalogCascade();
-  };
-
-  if (brandInput) {
-    brandInput.addEventListener("change", onBrandCommit);
-    brandInput.addEventListener("blur", onBrandCommit);
-    brandInput.addEventListener("input", debounce(() => {
-      refreshLineDatalist();
-    }, 200));
-  }
-  if (lineInput) {
-    lineInput.addEventListener("change", onLineCommit);
-    lineInput.addEventListener("blur", onLineCommit);
-    lineInput.addEventListener("input", debounce(runCatalogCascade, 250));
-  }
   if (vitolaSelect) {
     vitolaSelect.addEventListener("change", runCatalogCascade);
     vitolaSelect.addEventListener("blur", runCatalogCascade);
   }
+  const vitolaManual = document.getElementById("f-vitola-manual");
+  if (vitolaManual) {
+    vitolaManual.addEventListener("input", debounce(runCatalogCascade, 200));
+    vitolaManual.addEventListener("blur", runCatalogCascade);
+  }
   if (wrapperSelect) {
     wrapperSelect.addEventListener("change", runCatalogCascade);
+  }
+
+  if (boxQtyMount) {
+    boxQtyMount.addEventListener("input", debounce((ev) => {
+      if (ev.target && ev.target.id === "f-box_qty") runCatalogCascade();
+    }, 200));
   }
 
   document.getElementById("submit").addEventListener("click", () => submitProposal(tab, response, scraped));
@@ -987,15 +1193,12 @@ async function submitProposal(tab, response, scraped) {
   btn.textContent = "Checking…";
 
   const get = (id) => (document.getElementById(id).value || "").trim();
-  const brand = get("f-brand");
-  const line = get("f-line");
-  const vitola = get("f-vitola");
+  const brand = readCandidateBrand();
+  const line = readCandidateLine();
+  let vitola = readCandidateVitola();
   let wrapperBucket = get("f-wrapper");
   if (wrapperBucket === "__manual__") wrapperBucket = "";
-  const boxEl = document.getElementById("f-box_qty");
-  const boxQtyRaw = boxEl && boxEl.tagName === "SELECT"
-    ? String(boxEl.value || "").trim()
-    : get("f-box_qty");
+  const boxQtyRaw = get("f-box_qty");
   const priceRaw = get("f-price");
 
   if (!brand || !line || !vitola || !boxQtyRaw) {
@@ -1006,6 +1209,12 @@ async function submitProposal(tab, response, scraped) {
   }
 
   const box_qty = parseInt(boxQtyRaw, 10);
+  if (!Number.isFinite(box_qty) || box_qty < 1 || box_qty > 100) {
+    btn.disabled = false;
+    btn.textContent = "Submit";
+    toast("Enter a valid box quantity between 1 and 100.");
+    return;
+  }
   const confirmed_price = priceRaw ? parseFloat(priceRaw) : null;
   const formMeta = {
     brand, line, vitola,
@@ -1254,11 +1463,13 @@ function renderProvisionalComparison(tab, response, scraped, proposeRes) {
   const cheapest = comparison.results[0];
   const cheapestDeliv = cheapest.delivered_cents;
   const currentPageRetailer = response.retailer_key;
-  const currentRow = comparison.results.find(r => r.retailer_key === currentPageRetailer);
+  const currentRow = comparison.this_listing
+    || comparison.results.find((r) => r.retailer_key === currentPageRetailer);
   const savingsCents = (currentRow && currentRow.delivered_cents > cheapestDeliv)
     ? currentRow.delivered_cents - cheapestDeliv
     : 0;
   const conf = (proposeRes.match && proposeRes.match.confidence) || "HIGH";
+  const displayRows = compareRowsForPopup(comparison, tab.url, currentPageRetailer);
 
   root.innerHTML = `
     ${renderHeader(tab, response)}
@@ -1275,7 +1486,9 @@ function renderProvisionalComparison(tab, response, scraped, proposeRes) {
         ${escapeHtml(comparison.wrapper || "")} · ${escapeHtml(comparison.vitola || "")} · ${escapeHtml(comparison.size || "")} · Box of ${comparison.box_qty || "?"}
       </div>
       <div class="results">
-        ${comparison.results.map((r, i) => renderResultRow(r, i, cheapestDeliv)).join("")}
+        ${displayRows.map(({ row, index, thisPage }) =>
+          renderResultRow(row, index, cheapestDeliv, { thisPage }),
+        ).join("")}
       </div>
       ${savingsCents > 0 ? `
         <div class="savings">
@@ -1419,10 +1632,10 @@ const WRAPPER_BUCKET_KEYWORDS = [
   ["broadleaf",          "Maduro"],
   ["habano",             "Habano"],
   ["corojo",             "Habano"],
-  ["connecticut",        "Natural / Connecticut"],
-  ["cameroon",           "Natural / Connecticut"],
-  ["claro",              "Natural / Connecticut"],
-  ["natural",            "Natural / Connecticut"],
+  ["connecticut",        NATURAL_LIGHT_WRAPPER_BUCKET],
+  ["cameroon",           NATURAL_LIGHT_WRAPPER_BUCKET],
+  ["claro",              NATURAL_LIGHT_WRAPPER_BUCKET],
+  ["natural",            NATURAL_LIGHT_WRAPPER_BUCKET],
 ];
 
 function detectWrapperBucket(...texts) {
