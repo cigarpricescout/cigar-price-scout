@@ -208,6 +208,14 @@ def init_community_tables() -> None:
                 ADD COLUMN IF NOT EXISTS current_price_cents INTEGER
         """)
         cur.execute("""
+            ALTER TABLE community_url_proposals
+                ADD COLUMN IF NOT EXISTS current_in_stock BOOLEAN
+        """)
+        cur.execute("""
+            ALTER TABLE community_url_proposals
+                ADD COLUMN IF NOT EXISTS proposed_in_stock BOOLEAN
+        """)
+        cur.execute("""
             CREATE INDEX IF NOT EXISTS community_url_proposals_status_created_at_idx
                 ON community_url_proposals (status, created_at DESC)
         """)
@@ -354,6 +362,9 @@ class ReportCorrectionBody(BaseModel):
     # The corrected sale price the consumer claims is on the page right now.
     # Same "no coupons" rule as current_price. Validated server-side.
     proposed_price: Optional[float] = None
+    # Stock: what we showed vs what the shopper says (Report incorrect form).
+    current_in_stock: Optional[bool] = None
+    proposed_in_stock: Optional[bool] = None
     scraped_title: Optional[str] = Field(None, max_length=500)
     observer_source: Optional[str] = "consumer"
 
@@ -1016,9 +1027,10 @@ async def report_correction(request: Request, body: ReportCorrectionBody):
 
       1. Rate-limit per observer (reuses propose-metadata bucket — same user
          shouldn't be machine-gunning either flow).
-      2. At least one proposed field must differ from current. If everything
-         matches, return 200 with status='no_changes_detected' and DO NOT
-         insert. (The popup renders this as "Thanks — no changes detected".)
+      2. At least one proposed field (including in-stock vs out-of-stock)
+         must differ from current. If everything matches, return 200 with
+         status='no_changes_detected' and DO NOT insert. (The popup renders
+         this as "Thanks — no changes detected".)
       3. proposed_price must be in [$5, $5000] AND within ±75% of
          current_price (when current_price is provided).
       4. proposed_box_qty must be in {1, 5, 10, 15, 20, 24, 25, 50}.
@@ -1116,6 +1128,11 @@ async def report_correction(request: Request, body: ReportCorrectionBody):
         current_box = _cid_box_qty(body.current_cid or "") if body.current_cid else None
         if current_box is not None and body.proposed_box_qty != current_box:
             nothing_changed = False
+    stock_unchanged = True
+    if body.current_in_stock is not None or body.proposed_in_stock is not None:
+        stock_unchanged = body.proposed_in_stock == body.current_in_stock
+        if not stock_unchanged:
+            nothing_changed = False
     # Brand/line/vitola/wrapper: if the popup sent a value, it's the
     # consumer's "after" — we compare to whatever the popup submitted as
     # the current values would be (we don't have them server-side without
@@ -1130,7 +1147,7 @@ async def report_correction(request: Request, body: ReportCorrectionBody):
             body.proposed_vitola, body.proposed_wrapper,
         )
     )
-    if nothing_changed and not text_fields_sent:
+    if nothing_changed and not text_fields_sent and stock_unchanged:
         return {
             "ok": True,
             "status": "no_changes_detected",
@@ -1145,9 +1162,10 @@ async def report_correction(request: Request, body: ReportCorrectionBody):
               (url, retailer_key, proposed_brand, proposed_line, proposed_vitola,
                proposed_wrapper, proposed_box_qty,
                confirmed_price_cents, current_cid, current_price_cents,
+               current_in_stock, proposed_in_stock,
                is_correction,
                scraped_title, observer_id, observer_source, status)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,TRUE,%s,%s,%s,'pending')
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,TRUE,%s,%s,%s,'pending')
             RETURNING id
         """, (
             body.url, retailer_key,
@@ -1155,6 +1173,7 @@ async def report_correction(request: Request, body: ReportCorrectionBody):
             _trim(body.proposed_vitola), _trim(body.proposed_wrapper),
             body.proposed_box_qty, proposed_price_cents,
             _trim(body.current_cid), current_price_cents,
+            body.current_in_stock, body.proposed_in_stock,
             _trim(body.scraped_title), observer, source,
         ))
         proposal_id = cur.fetchone()[0]

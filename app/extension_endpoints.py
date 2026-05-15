@@ -1760,6 +1760,7 @@ async def community_proposals(
                    created_at, reviewed_at,
                    confirmed_price_cents,
                    is_correction, current_cid, current_price_cents,
+                   current_in_stock, proposed_in_stock,
                    COALESCE(needs_new_catalog_cid, FALSE) AS needs_new_catalog_cid
               FROM community_url_proposals
              WHERE status = %s

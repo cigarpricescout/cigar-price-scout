@@ -270,6 +270,8 @@ function proposalToMatchCard(p) {
     _is_correction: !!p.is_correction,
     _current_cid: p.current_cid || '',
     _current_price: p.current_price_cents != null ? p.current_price_cents / 100 : null,
+    _current_in_stock: p.current_in_stock,
+    _proposed_in_stock: p.proposed_in_stock,
   };
 }
 
@@ -418,6 +420,8 @@ function renderCorrectionDiff(m) {
   const priceWarn = (priceDiff != null && m._current_price > 0 && (priceDiff / m._current_price) > 0.4)
     ? ' style="color:#c62828;font-weight:600"'
     : '';
+  const showStockRow = m._current_in_stock != null || m._proposed_in_stock != null;
+  const stockLabel = (v) => (v == null ? '—' : (v ? 'In stock' : 'Out of stock'));
 
   return `
     <hr class="divider">
@@ -442,6 +446,12 @@ function renderCorrectionDiff(m) {
           <td class="diff-current">${currentPrice}</td>
           <td class="diff-proposed"${priceWarn}>${proposedPrice}</td>
         </tr>
+        ${showStockRow ? `
+        <tr>
+          <td class="diff-label">Stock</td>
+          <td class="diff-current">${stockLabel(m._current_in_stock)}</td>
+          <td class="diff-proposed">${stockLabel(m._proposed_in_stock)}</td>
+        </tr>` : ''}
         <tr>
           <td class="diff-label">Wrapper</td>
           <td class="diff-current">—</td>

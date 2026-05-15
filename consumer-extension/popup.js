@@ -646,6 +646,9 @@ function renderCorrection(tab, response, scraped) {
   const currentRetailerKey = response.retailer_key;
   const currentRow = comparison.this_listing
     || (comparison.results || []).find((r) => r.retailer_key === currentRetailerKey);
+  const currentInStock = currentRow && typeof currentRow.in_stock === "boolean"
+    ? currentRow.in_stock
+    : true;
   // Sale price = delivered minus shipping/tax. This matches what the
   // user sees on the retailer's page, which is what we want them to
   // verify/correct (NOT the delivered total, which would confuse the
@@ -704,6 +707,12 @@ function renderCorrection(tab, response, scraped) {
             <div class="hint-below">Enter the price shown on the page before any coupon code. Coupons are tracked separately.</div>
           </div>
         </div>
+        <div class="field field-checkbox-row">
+          <label class="checkbox-label" for="c-in-stock">
+            <input type="checkbox" id="c-in-stock" ${currentInStock ? "checked" : ""} />
+            <span>In stock on this page (uncheck if out of stock)</span>
+          </label>
+        </div>
       </div>
     </div>
     <div class="actions">
@@ -717,6 +726,7 @@ function renderCorrection(tab, response, scraped) {
   document.getElementById("submit-correction").addEventListener("click", () => {
     submitCorrection(tab, response, scraped, {
       currentSaleCents,
+      currentInStock,
       currentBrand: comparison.brand || "",
       currentLine: comparison.line || "",
       currentVitola: comparison.vitola || "",
@@ -765,6 +775,9 @@ async function submitCorrection(tab, response, scraped, ctx) {
 
   const proposedBoxQty = boxQtyRaw ? parseInt(boxQtyRaw, 10) : null;
   const proposedPrice = priceRaw ? parseFloat(priceRaw) : null;
+  const inStockEl = document.getElementById("c-in-stock");
+  const proposed_in_stock = inStockEl ? !!inStockEl.checked : true;
+  const current_in_stock = ctx.currentInStock !== undefined ? !!ctx.currentInStock : true;
 
   // Client-side guards mirror the server-side ones (loose band) so the
   // user gets immediate feedback without a round-trip. Server still
@@ -804,6 +817,8 @@ async function submitCorrection(tab, response, scraped, ctx) {
         url: tab.url,
         current_cid: response.matched_cid || null,
         current_price: ctx.currentSaleCents != null ? ctx.currentSaleCents / 100 : null,
+        current_in_stock,
+        proposed_in_stock,
         proposed_brand: brand,
         proposed_line: line,
         proposed_vitola: vitola,
