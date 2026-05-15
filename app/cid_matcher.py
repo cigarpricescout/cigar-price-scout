@@ -10,6 +10,7 @@ Public surface:
     parse_cid(cid)                       -> dict | None
     build_cid(parts)                     -> str
     canonical_cigar_id_for_comparison(cid) -> str
+    dedupe_cid_list_preserve_order(cids) -> list[str]
     slug_from_url(url)                   -> str
     programmatic_score(cid_parts, url, title=None) -> (score, details)
     load_master_cigars(csv_path)         -> list[dict]
@@ -233,6 +234,30 @@ def canonical_cigar_id_for_comparison(cid: Optional[str]) -> str:
         "box_qty_str": p["box_qty_str"],
     }
     return build_cid(parts)
+
+
+def dedupe_cid_list_preserve_order(cids: List[str]) -> List[str]:
+    """Return one raw ``cigar_id`` per canonical identity.
+
+    Retailer CSVs sometimes carry the same logical SKU under two spellings
+    (e.g. ``COHIBA||LINE|…`` vs ``COHIBA|COHIBA|LINE|…``). They compare as one
+    cigar but would otherwise produce duplicate extension dropdown rows with
+    slightly different labels.
+    """
+    if not cids:
+        return []
+    seen: set[str] = set()
+    out: List[str] = []
+    for c in sorted(cids):
+        if not isinstance(c, str) or not c.strip():
+            continue
+        c = c.strip()
+        key = canonical_cigar_id_for_comparison(c) or c
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(c)
+    return out
 
 
 def slug_from_url(url: str) -> str:
@@ -740,6 +765,10 @@ def merge_cid_into_url_index(
     rk, cids = index[url]
     if rk != retailer_key:
         return
+    canon_new = canonical_cigar_id_for_comparison(cid)
+    for existing in cids:
+        if canonical_cigar_id_for_comparison(existing) == canon_new:
+            return
     if cid not in cids:
         cids.append(cid)
 
@@ -760,7 +789,8 @@ def url_index_entry_cids(
         return None, []
     tail = entry[1] if len(entry) > 1 else None
     if isinstance(tail, list):
-        return rk, [c for c in tail if isinstance(c, str) and c]
+        raw = [c for c in tail if isinstance(c, str) and c]
+        return rk, dedupe_cid_list_preserve_order(raw)
     if isinstance(tail, str) and tail:
         return rk, [tail]
     return rk, []

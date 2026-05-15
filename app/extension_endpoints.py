@@ -50,6 +50,7 @@ from app.cid_matcher import (
     build_retailer_registry,
     canonical_cigar_id_for_comparison,
     canonicalize_url,
+    dedupe_cid_list_preserve_order,
     find_top_candidates,
     hostname_to_retailer_key,
     load_master_cigars,
@@ -394,7 +395,7 @@ def _cigar_pick_options(cids: List[str]) -> List[Dict[str, str]]:
     """Human labels for a multi-CID URL picker (operator + consumer UIs)."""
     master = _cache_state.get("master_by_cid") or {}
     out: List[Dict[str, str]] = []
-    for cid in sorted(cids):
+    for cid in dedupe_cid_list_preserve_order(list(cids)):
         row = master.get(cid)
         if row:
             head = " ".join(

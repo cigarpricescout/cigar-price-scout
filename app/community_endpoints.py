@@ -53,6 +53,7 @@ from pydantic import BaseModel, Field
 from app.cid_matcher import (
     canonical_cigar_id_for_comparison,
     canonicalize_url,
+    dedupe_cid_list_preserve_order,
     merge_cid_into_url_index,
     url_index_entry_cids,
 )
@@ -1346,7 +1347,7 @@ async def public_url_status(
             matched_cid = _pick_matched_cid(cids_live, (cid or "").strip() or None)
             if len(cids_live) > 1:
                 cigar_options = []
-                for c in sorted(cids_live):
+                for c in dedupe_cid_list_preserve_order(cids_live):
                     disp = _build_candidate_display_label(c)
                     lab = disp["label"] if disp else c
                     cigar_options.append({"cigar_id": c, "label": lab})
