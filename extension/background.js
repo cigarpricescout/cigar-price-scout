@@ -9,7 +9,7 @@
 //   "+"   no scraper for this hostname (offer to queue)
 //   ""    unknown URL (not a retailer) or admin key missing
 
-import { apiFetch, getAdminKey, scrapeActiveTab, postObservation } from "./config.js";
+import { apiFetch, getAdminKey, scrapeActiveTab, postObservation, withTimeout } from "./config.js";
 
 const CACHE = new Map(); // url -> { fetchedAt, response }
 const CACHE_TTL_MS = 5 * 60 * 1000;
@@ -104,11 +104,15 @@ async function ensureVocab(force = false) {
   if (!force && VOCAB && (Date.now() - VOCAB_FETCHED_AT) < VOCAB_TTL_MS) {
     return VOCAB;
   }
+  const adminKey = await getAdminKey();
+  if (!adminKey) return null;
   try {
-    VOCAB = await apiFetch("/api/admin/master-vocab");
-    VOCAB_FETCHED_AT = Date.now();
-  } catch (e) {
-    if (e.code === "NO_ADMIN_KEY") return null;
+    const next = await withTimeout(apiFetch("/api/admin/master-vocab"), 15000, null);
+    if (next) {
+      VOCAB = next;
+      VOCAB_FETCHED_AT = Date.now();
+    }
+  } catch (_) {
     // Keep any stale value if we have one.
   }
   return VOCAB;
@@ -156,14 +160,21 @@ async function refreshForTab(tab) {
 
   let scraped = { title: "" };
   try {
-    scraped = await scrapeActiveTab(tab.id);
+    scraped = await withTimeout(scrapeActiveTab(tab.id), 12000, { title: "" });
   } catch (_) {}
 
   let response;
   try {
-    response = await apiFetch("/api/admin/url-status", {
-      query: { url: tab.url, title: scraped.title || "" },
-    });
+    response = await withTimeout(
+      apiFetch("/api/admin/url-status", {
+        query: { url: tab.url, title: scraped.title || "" },
+      }),
+      15000,
+      null,
+    );
+    if (!response) {
+      response = { state: "error", error: "Request timed out" };
+    }
   } catch (e) {
     if (e.code === "NO_ADMIN_KEY") {
       await setBadgeForTab(tab.id, null);
@@ -224,20 +235,32 @@ chrome.tabs.onActivated.addListener(async ({ tabId }) => {
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg && msg.type === "getStatusForTab") {
     (async () => {
-      const tab = msg.tabId
-        ? await chrome.tabs.get(msg.tabId).catch(() => null)
-        : (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
-      if (!tab) return sendResponse({ error: "no active tab" });
-      if (msg.forceRefresh) CACHE.delete(tab.url);
-      const [resp, vocab] = await Promise.all([
-        refreshForTab(tab),
-        ensureVocab(),
-      ]);
-      sendResponse({
-        tab: { id: tab.id, url: tab.url, title: tab.title },
-        response: resp,
-        vocab,
-      });
+      try {
+        const tab = msg.tabId
+          ? await chrome.tabs.get(msg.tabId).catch(() => null)
+          : (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
+        if (!tab) {
+          sendResponse({ error: "no active tab" });
+          return;
+        }
+        if (msg.forceRefresh) CACHE.delete(tab.url);
+        const [resp, vocab] = await Promise.all([
+          refreshForTab(tab),
+          ensureVocab(),
+        ]);
+        sendResponse({
+          tab: { id: tab.id, url: tab.url, title: tab.title },
+          response: resp,
+          vocab,
+        });
+      } catch (e) {
+        sendResponse({
+          error: String((e && e.message) || e),
+          tab: null,
+          response: null,
+          vocab: null,
+        });
+      }
     })();
     return true; // async response
   }

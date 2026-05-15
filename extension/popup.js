@@ -47,46 +47,60 @@ function bucketForCode(code) {
 // <datalist> dropdowns on the brand/line/vitola/size/box_qty fields.
 let VOCAB_ROWS = [];
 
+// When the operator picks a row from "Similar CIDs" or URL-based candidates,
+// we lock approval to that exact `cigar_id` from master (POST `cid` only).
+// Any edit to identity fields clears the lock so `cid_parts` + buildCidString
+// apply again (new SKU path).
+let lockedMasterCid = null;
+
+// Latest `/cid-search` rows for the click handler on `#similar-cids`
+// (replaced on each debounced refresh).
+let lastSimilarResults = [];
+
 // ── Bootstrapping ─────────────────────────────────────────────────────
 
 (async function init() {
-  const adminKey = await getAdminKey();
-  if (!adminKey) {
-    renderNoAdminKey();
-    return;
-  }
-
-  let payload;
   try {
-    // forceRefresh: the background-worker badge cache has a 5-min TTL,
-    // so without this the popup can serve stale data — most painfully,
-    // a community_proposal that landed in Postgres AFTER the badge
-    // cache was populated (consumer submitted, then operator opens
-    // popup within 5 min) would be invisible. Refresh on every popup
-    // open trades ~300ms latency for always-fresh state.
-    payload = await chrome.runtime.sendMessage({ type: "getStatusForTab", forceRefresh: true });
+    const adminKey = await getAdminKey();
+    if (!adminKey) {
+      renderNoAdminKey();
+      return;
+    }
+
+    let payload;
+    try {
+      // forceRefresh: the background-worker badge cache has a 5-min TTL,
+      // so without this the popup can serve stale data — most painfully,
+      // a community_proposal that landed in Postgres AFTER the badge
+      // cache was populated (consumer submitted, then operator opens
+      // popup within 5 min) would be invisible. Refresh on every popup
+      // open trades ~300ms latency for always-fresh state.
+      payload = await chrome.runtime.sendMessage({ type: "getStatusForTab", forceRefresh: true });
+    } catch (e) {
+      return renderError(`Background worker error: ${e.message || e}`);
+    }
+    if (!payload || payload.error) {
+      return renderError(payload && payload.error || "No active tab.");
+    }
+
+    const { tab, response, vocab } = payload;
+    if (!response) {
+      return renderError("Could not reach the backend. Check your admin key / network.");
+    }
+    if (response.state === "error") {
+      return renderError(response.error || "Unknown backend error.");
+    }
+    VOCAB_ROWS = (vocab && vocab.rows) || [];
+
+    switch (response.state) {
+      case "matched":    return renderMatched(tab, response);
+      case "seen":       return renderSeen(tab, response);
+      case "candidate":  return renderCandidate(tab, response);
+      case "no_scraper": return renderNoScraper(tab, response);
+      default:           return renderError(`Unexpected state: ${response.state}`);
+    }
   } catch (e) {
-    return renderError(`Background worker error: ${e.message || e}`);
-  }
-  if (!payload || payload.error) {
-    return renderError(payload && payload.error || "No active tab.");
-  }
-
-  const { tab, response, vocab } = payload;
-  if (!response) {
-    return renderError("Could not reach the backend. Check your admin key / network.");
-  }
-  if (response.state === "error") {
-    return renderError(response.error || "Unknown backend error.");
-  }
-  VOCAB_ROWS = (vocab && vocab.rows) || [];
-
-  switch (response.state) {
-    case "matched":    return renderMatched(tab, response);
-    case "seen":       return renderSeen(tab, response);
-    case "candidate":  return renderCandidate(tab, response);
-    case "no_scraper": return renderNoScraper(tab, response);
-    default:           return renderError(`Unexpected state: ${response.state}`);
+    renderError(String((e && e.message) || e));
   }
 })();
 
@@ -291,6 +305,20 @@ function renderCandidate(tab, response) {
   const parts = proposalParts
     || (top ? partsFromCandidate(top) : suggestPartsFromUrl(tab.url, response.scraped_title));
 
+  // Consumer proposals omit parent_brand. When the matcher already has a
+  // high-signal cigar_id for the same brand+line, inherit its encoded parent
+  // slot so we don't mint COHIBA|COHIBA when master is COHIBA|| — while still
+  // preserving ARTUROFUENTE|ARTUROFUENTE|HEMINGWAY|… when that is canonical.
+  if (proposalParts && top && top.cigar_id) {
+    const canon = splitCid(top.cigar_id);
+    if (
+      cidPart(proposalParts.brand) === cidPart(canon.brand)
+      && cidPart(proposalParts.line) === cidPart(canon.line)
+    ) {
+      parts.parent_brand = canon.parent_brand != null ? canon.parent_brand : "";
+    }
+  }
+
   // Gap 4 + Gap 1 bridge: when a consumer proposal pre-filled the form
   // it stored the wrapper as a friendly BUCKET name (e.g. "Maduro"),
   // not a canonical code. Resolve bucket → wrapper_code using the
@@ -311,14 +339,23 @@ function renderCandidate(tab, response) {
     <div class="section">
       ${communityProposalBanner(response)}
       <div class="section-label">
-        Proposed CID
+        Catalog draft
         ${top ? `<span class="confidence ${top.confidence}">${top.confidence} ${(top.score*100|0)}%</span>` : ""}
       </div>
-      <div class="cid-display" id="cid-preview">${escapeHtml(buildCidString(parts))}</div>
+      <div id="catalog-draft-summary" class="catalog-draft-summary">
+        ${escapeHtml(humanDraftSummaryFromParts(parts) || "Add brand, line, vitola…")}
+      </div>
+      <details class="cand-tech" style="margin-bottom:8px">
+        <summary>Pipe CID (advanced)</summary>
+        <div class="cid-display" id="cid-preview">${escapeHtml(buildCidString(parts))}</div>
+      </details>
+      <div id="master-lock-hint" class="banner seen" style="display:none;font-size:11px;margin-top:8px;line-height:1.4"></div>
       ${top ? renderMatchChips(top.details) : ""}
       ${renderScraped(response)}
 
       <div class="fields" id="cid-fields">
+        <input type="hidden" id="f-parent_brand" name="parent_brand"
+               value="${escapeAttr(parts.parent_brand ?? "")}" />
         ${field("brand",         "Brand",         parts.brand,         "text")}
         ${field("line",          "Line",          parts.line,          "text")}
         ${field("vitola",        "Vitola",        parts.vitola,        "text")}
@@ -333,26 +370,35 @@ function renderCandidate(tab, response) {
       <div id="dup-warning" style="display:none"></div>
 
       <div class="section-label" style="margin-top:10px">
-        Similar CIDs in master
+        Similar catalog rows
         <span style="font-weight:normal;color:#888;text-transform:none;letter-spacing:0">
           — updates as you type
         </span>
       </div>
       <div class="candidates" id="similar-cids">
         <div class="empty-similar" style="font-size:11px;color:#888;padding:6px 0">
-          Fill Brand and Line to see existing CIDs in this family.
+          Fill Brand and Line to search the master catalog.
         </div>
       </div>
 
       ${alts.length ? `
-        <div class="section-label" style="margin-top:10px">URL-based candidates</div>
+        <div class="section-label" style="margin-top:10px">URL-based catalog candidates</div>
         <div class="candidates" id="alt-candidates">
-          ${alts.map((c, i) => `
+          ${alts.map((c, i) => {
+            const primary = escapeHtml(masterCatalogSummaryRow(c) || "Catalog row");
+            const cid = escapeHtml(c.cigar_id || "");
+            return `
             <div class="cand" data-idx="${i + 1}">
-              <div class="cand-cid">${escapeHtml(c.cigar_id)}</div>
+              <div class="col-left">
+                <div class="cand-primary">${primary}</div>
+                <details class="cand-tech">
+                  <summary>Pipe CID</summary>
+                  <span class="cand-cid">${cid}</span>
+                </details>
+              </div>
               <span class="confidence ${c.confidence}">${c.confidence} ${(c.score*100|0)}%</span>
-            </div>
-          `).join("")}
+            </div>`;
+          }).join("")}
         </div>
       ` : ""}
     </div>
@@ -363,7 +409,7 @@ function renderCandidate(tab, response) {
     </div>
     <div class="footer">
       <a href="#" id="open-options">Settings</a> ·
-      Edit any field to override the proposed CID
+      Map this URL to an existing master cigar_id only (see banner above)
     </div>
   `;
 
@@ -522,7 +568,9 @@ function resolveBucketToCode(bucket, response) {
 
 // Called once after renderCandidate paints the form. Wires bucket
 // changes → hidden wrapper_code updates → CID-preview refresh.
-function wireWrapperBucket(response) {
+// `onUserOverride` runs when the operator changes wrapper UI — clears a
+// locked master CID so approval is not sent against a stale selection.
+function wireWrapperBucket(response, onUserOverride) {
   const bucketEl  = document.getElementById("f-wrapper_bucket");
   const codeEl    = document.getElementById("f-wrapper_code");
   const resolved  = document.getElementById("wrapper-resolved");
@@ -537,20 +585,28 @@ function wireWrapperBucket(response) {
       const codeNode = resolved.querySelector("code");
       if (codeNode) codeNode.textContent = v;
     }
-    if (preview) preview.textContent = buildCidString(readFields());
+    if (preview) {
+      refreshCidPreviewBlock();
+      refreshCatalogDraftSummary();
+    }
   };
 
   bucketEl.addEventListener("change", () => {
     const code = resolveBucketToCode(bucketEl.value, response);
     codeEl.value = code;
-    refreshResolved();
+    if (onUserOverride) onUserOverride();
+    else refreshResolved();
   });
 
-  codeEl.addEventListener("change", refreshResolved);
+  codeEl.addEventListener("change", () => {
+    if (onUserOverride) onUserOverride();
+    else refreshResolved();
+  });
 
   if (toggle) {
     toggle.addEventListener("click", (e) => {
       e.preventDefault();
+      if (onUserOverride) onUserOverride();
       const showingSpecific = codeEl.style.display !== "none";
       if (showingSpecific) {
         codeEl.style.display = "none";
@@ -562,6 +618,7 @@ function wireWrapperBucket(response) {
         bucketEl.style.display = "none";
         toggle.textContent = "Use friendly bucket";
       }
+      refreshResolved();
     });
   }
 }
@@ -613,38 +670,97 @@ function wireMatchedActions(tab, response) {
   });
 }
 
-function wireCandidateActions(tab, response) {
-  // Gap 4: wire the friendly bucket picker → wrapper_code resolution.
-  wireWrapperBucket(response);
+function updateMasterLockUi() {
+  const hint = document.getElementById("master-lock-hint");
+  if (hint) {
+    hint.style.display = "block";
+    if (lockedMasterCid) {
+      hint.className = "banner seen";
+      hint.textContent =
+        "This URL will be saved against the selected master row. " +
+        "Expand \"Pipe CID (advanced)\" to verify the full key. " +
+        "Edit a field above only if you need to search again — that clears this selection.";
+    } else {
+      hint.className = "banner no_scraper";
+      hint.textContent =
+        "Pick a master row from Similar catalog rows or URL-based candidates (or use the top match). " +
+        "Approve is disabled until a master key is selected — new CIDs cannot be created from this popup.";
+    }
+  }
+  refreshCidPreviewBlock();
+  refreshCatalogDraftSummary();
+  syncApproveEnabled();
+}
 
-  // Live-update the CID preview, the datalist dropdowns (context-aware
-  // suggestions from master), AND the similar-CIDs panel as the user edits.
-  const fields = document.querySelectorAll("#cid-fields input, #cid-fields select");
-  const preview = document.getElementById("cid-preview");
+function syncApproveEnabled() {
+  const btn = document.getElementById("approve");
+  if (btn) btn.disabled = !lockedMasterCid;
+}
+
+function setLockedMasterCid(cid) {
+  lockedMasterCid = (cid || "").trim() || null;
+  updateMasterLockUi();
+}
+
+function clearLockedMasterCid() {
+  lockedMasterCid = null;
+  updateMasterLockUi();
+}
+
+function wireCandidateActions(tab, response) {
+  lockedMasterCid = null;
+  updateMasterLockUi();
+
   const refreshSimilar = debounce(() => {
     updateSimilarCids(readFields());
   }, 300);
-  fields.forEach(f => f.addEventListener("input", () => {
-    const parts = readFields();
-    preview.textContent = buildCidString(parts);
-    rebuildDatalists(parts);
-    refreshSimilar();
-  }));
 
-  // Click alt candidate (URL-based) → populate the form with its parts.
+  const onFormEdit = () => {
+    clearLockedMasterCid();
+    refreshCidPreviewBlock();
+    refreshCatalogDraftSummary();
+    rebuildDatalists(readFields());
+    refreshSimilar();
+  };
+
+  wireWrapperBucket(response, onFormEdit);
+
+  const fields = document.querySelectorAll("#cid-fields input, #cid-fields select");
+  fields.forEach(f => {
+    f.addEventListener("input", onFormEdit);
+    f.addEventListener("change", onFormEdit);
+  });
+
+  const similarHost = document.getElementById("similar-cids");
+  if (similarHost) {
+    similarHost.addEventListener("click", (e) => {
+      if (e.target.closest("details")) return;
+      const el = e.target.closest(".cand.similar");
+      if (!el) return;
+      const idx = parseInt(el.getAttribute("data-idx"), 10);
+      const cand = lastSimilarResults[idx];
+      if (!cand || !cand.cigar_id) return;
+      applyFields(partsFromCandidate(cand));
+      setLockedMasterCid(cand.cigar_id);
+      rebuildDatalists(readFields());
+      refreshSimilar();
+    });
+  }
+
+  // Click alt candidate (URL-based) → populate the form + lock exact master CID.
   const alts = document.getElementById("alt-candidates");
   if (alts) {
-    alts.querySelectorAll(".cand").forEach(el => {
-      el.addEventListener("click", () => {
-        const idx = parseInt(el.getAttribute("data-idx"), 10);
-        const cand = (response.candidates || [])[idx];
-        if (!cand) return;
-        applyFields(partsFromCandidate(cand));
-        const parts = readFields();
-        preview.textContent = buildCidString(parts);
-        rebuildDatalists(parts);
-        refreshSimilar();
-      });
+    alts.addEventListener("click", (e) => {
+      if (e.target.closest("details")) return;
+      const el = e.target.closest(".cand");
+      if (!el) return;
+      const idx = parseInt(el.getAttribute("data-idx"), 10);
+      const cand = (response.candidates || [])[idx];
+      if (!cand || !cand.cigar_id) return;
+      applyFields(partsFromCandidate(cand));
+      setLockedMasterCid(cand.cigar_id);
+      rebuildDatalists(readFields());
+      refreshSimilar();
     });
   }
 
@@ -652,9 +768,15 @@ function wireCandidateActions(tab, response) {
   document.getElementById("skip").addEventListener("click", () => skipUrl(tab.url));
   document.getElementById("open-options").addEventListener("click", openOptions);
 
-  // Populate dropdowns + run an initial similar-CIDs search.
   rebuildDatalists(readFields());
   refreshSimilar();
+
+  const top = (response.candidates && response.candidates[0]) || null;
+  if (top && top.cigar_id) {
+    setLockedMasterCid(top.cigar_id);
+  } else {
+    updateMasterLockUi();
+  }
 }
 
 // ── Context-aware datalists (master-driven dropdowns) ─────────────────
@@ -759,9 +881,10 @@ async function updateSimilarCids(parts) {
   if (!q) {
     container.innerHTML = `
       <div class="empty-similar" style="font-size:11px;color:#888;padding:6px 0">
-        Fill Brand and Line to see existing CIDs in this family.
+        Fill Brand and Line to search the master catalog.
       </div>`;
     if (warning) { warning.style.display = "none"; warning.innerHTML = ""; }
+    lastSimilarResults = [];
     return;
   }
 
@@ -771,10 +894,11 @@ async function updateSimilarCids(parts) {
     results = data.results || [];
   } catch (e) {
     container.innerHTML = `<div style="font-size:11px;color:#c62828;padding:6px 0">Search failed: ${escapeHtml(e.message || String(e))}</div>`;
+    lastSimilarResults = [];
     return;
   }
 
-  const currentCid = buildCidString(parts);
+  const currentCid = lockedMasterCid || buildCidString(parts);
   const dup = results.find(r => r.cigar_id === currentCid);
 
   // Size-variant near-dup: same brand|line|vitola|wrapper|box, only size
@@ -817,41 +941,31 @@ async function updateSimilarCids(parts) {
   if (!results.length) {
     container.innerHTML = `
       <div class="empty-similar" style="font-size:11px;color:#888;padding:6px 0">
-        No existing CIDs matched "${escapeHtml(q)}". This will be a new CID.
+        No catalog rows matched "${escapeHtml(q)}". Try different tokens or adjust fields.
       </div>`;
+    lastSimilarResults = [];
     return;
   }
 
+  lastSimilarResults = results;
+
   container.innerHTML = results.map((r, i) => {
     const isDup = r.cigar_id === currentCid;
-    const meta = [
-      r.brand, r.line, r.vitola,
-      r.size ? `${r.size}` : "",
-      r.wrapper ? `${r.wrapper}` : "",
-      r.box_qty ? `box ${r.box_qty}` : "",
-    ].filter(Boolean).join(" · ");
+    const primary = escapeHtml(masterCatalogSummaryRow(r) || "Catalog row");
+    const cid = escapeHtml(r.cigar_id || "");
     return `
       <div class="cand similar" data-idx="${i}" ${isDup ? 'style="outline:2px solid #c62828"' : ""}>
-        <div style="flex:1;min-width:0">
-          <div class="cand-cid">${escapeHtml(r.cigar_id)}</div>
-          <div style="font-size:10px;color:#666;margin-top:2px">${escapeHtml(meta)}</div>
+        <div class="col-left">
+          <div class="cand-primary">${primary}</div>
+          <details class="cand-tech">
+            <summary>Pipe CID</summary>
+            <span class="cand-cid">${cid}</span>
+          </details>
         </div>
         ${isDup ? '<span class="confidence" style="background:#ffebee;color:#c62828">EXISTS</span>' : ""}
       </div>
     `;
   }).join("");
-
-  container.querySelectorAll(".cand").forEach(el => {
-    el.addEventListener("click", () => {
-      const idx = parseInt(el.getAttribute("data-idx"), 10);
-      const cand = results[idx];
-      if (!cand) return;
-      applyFields(partsFromCandidate(cand));
-      document.getElementById("cid-preview").textContent = buildCidString(readFields());
-      // After populating, re-check duplicates against the new state.
-      updateSimilarCids(readFields());
-    });
-  });
 }
 
 function readFields() {
@@ -863,7 +977,7 @@ function readFields() {
   const trim = v => (v || "").trim();
   return {
     brand:        trim(get("brand")),
-    parent_brand: trim(get("parent_brand")) || trim(get("brand")),
+    parent_brand: trim(get("parent_brand")),
     line:         trim(get("line")),
     vitola:       trim(get("vitola")),
     vitola2:      trim(get("vitola2")) || trim(get("vitola")),
@@ -908,19 +1022,8 @@ function applyFields(parts) {
 }
 
 async function approve(tab, response) {
-  const parts = readFields();
-  const errors = validateParts(parts);
-  if (errors.length) return toast(errors[0], "error");
-
-  // Capture what the matcher initially proposed (top candidate) so the
-  // review_decisions log can compare it to what the operator ended up
-  // approving. This is training-data spine for the future AI reviewer.
   const top = (response.candidates && response.candidates[0]) || null;
 
-  // Price + in-stock: prefer the operator's manual entry when the retailer
-  // is blocked/dormant (the fields are rendered by manualPricingBlock).
-  // For active retailers the fields aren't shown, so fall back to the
-  // silent scrape capture — the daily extractor will overwrite anyway.
   let priceValue, inStockValue;
   const priceEl = document.getElementById("f-price");
   const stockEl = document.getElementById("f-in_stock");
@@ -941,48 +1044,52 @@ async function approve(tab, response) {
     inStockValue = (response._scraped && response._scraped.inStock) ?? null;
   }
 
-  const body = {
-    url: tab.url,
-    retailer_key: response.retailer_key,
-    cid_parts: parts,
-    title: response.scraped_title || (response._scraped && response._scraped.title) || "",
-    price: priceValue,
-    in_stock: inStockValue,
-    create_if_missing: true,
-    force: !!response._force,
-    confidence: "EXTENSION",
-    reason: "Approved via Chrome extension",
-    proposed_cid: top ? top.cigar_id : null,
-    proposed_score: top ? top.score : null,
-    proposed_confidence: top ? top.confidence : null,
-    // When a consumer proposal triggered this approval, pass its id so the
-    // backend can flip community_url_proposals.status='approved' in the
-    // same transaction — closing the contribution loop end-to-end.
-    community_proposal_id:
-      (response.community_proposal && response.community_proposal.proposal_id) || null,
-  };
-  const btn = document.getElementById("approve");
-  btn.disabled = true;
-  btn.textContent = "Approving…";
-  try {
-    const res = await apiFetch("/api/admin/stage-approval", { method: "POST", body });
-    chrome.runtime.sendMessage({ type: "invalidateCache", url: tab.url }).catch(() => {});
-    // Surface the proposal-resolution count when present so the operator
-    // confirms the consumer's submission actually got closed out.
-    let msg = res.mode === "new_cid" ? "Approved (new CID staged)" : "Approved";
-    const resolved = res.resolved_consumer_proposals || 0;
-    if (resolved > 0) {
-      msg += resolved === 1
-        ? " · 1 consumer proposal resolved"
-        : ` · ${resolved} consumer proposals resolved`;
+  if (lockedMasterCid) {
+    const body = {
+      url: tab.url,
+      retailer_key: response.retailer_key,
+      cid: lockedMasterCid,
+      title: response.scraped_title || (response._scraped && response._scraped.title) || "",
+      price: priceValue,
+      in_stock: inStockValue,
+      create_if_missing: false,
+      force: !!response._force,
+      confidence: "EXTENSION",
+      reason: "Approved via Chrome extension (exact master CID)",
+      proposed_cid: top ? top.cigar_id : null,
+      proposed_score: top ? top.score : null,
+      proposed_confidence: top ? top.confidence : null,
+      community_proposal_id:
+        (response.community_proposal && response.community_proposal.proposal_id) || null,
+    };
+    const btn = document.getElementById("approve");
+    btn.disabled = true;
+    btn.textContent = "Approving…";
+    try {
+      const res = await apiFetch("/api/admin/stage-approval", { method: "POST", body });
+      chrome.runtime.sendMessage({ type: "invalidateCache", url: tab.url }).catch(() => {});
+      let msg = "Approved";
+      const resolved = res.resolved_consumer_proposals || 0;
+      if (resolved > 0) {
+        msg += resolved === 1
+          ? " · 1 consumer proposal resolved"
+          : ` · ${resolved} consumer proposals resolved`;
+      }
+      toast(msg);
+      setTimeout(() => window.close(), 600);
+    } catch (e) {
+      toast(`Approve failed: ${e.message || e}`, "error");
+      btn.disabled = false;
+      btn.textContent = "Approve";
     }
-    toast(msg);
-    setTimeout(() => window.close(), 600);
-  } catch (e) {
-    toast(`Approve failed: ${e.message || e}`, "error");
-    btn.disabled = false;
-    btn.textContent = "Approve";
+    return;
   }
+
+  toast(
+    "Select a master cigar from Similar CIDs or URL candidates first. "
+    + "New CIDs are not created from this popup — add the SKU to master_cigars via your catalog workflow, then map this URL.",
+    "error",
+  );
 }
 
 async function skipUrl(url) {
@@ -1023,9 +1130,12 @@ function cidSize(s) {
 
 function buildCidString(p) {
   const box = p.box_qty ? `BOX${parseInt(p.box_qty, 10)}` : "";
+  const pb = p.parent_brand;
+  const parentSeg =
+    pb != null && String(pb).trim() !== "" ? cidPart(pb) : "";
   return [
     cidPart(p.brand),
-    cidPart(p.parent_brand) || cidPart(p.brand),
+    parentSeg,
     cidPart(p.line),
     cidPart(p.vitola),
     cidPart(p.vitola2) || cidPart(p.vitola),
@@ -1036,7 +1146,17 @@ function buildCidString(p) {
 }
 
 function splitCid(cid) {
-  const parts = (cid || "").split("|");
+  let parts = (cid || "").split("|");
+  // Tolerate legacy / hand-edited CIDs where BOX qty was split: ...|CAM|BOX|25
+  if (
+    parts.length >= 9
+    && String(parts[parts.length - 2] || "").toUpperCase() === "BOX"
+    && /^\d+$/.test(String(parts[parts.length - 1] || "").trim())
+  ) {
+    parts = parts.slice(0, parts.length - 2).concat(
+      "BOX" + String(parts[parts.length - 1]).trim(),
+    );
+  }
   while (parts.length < 8) parts.push("");
   const boxNum = (parts[7].match(/\d+/) || [""])[0];
   return {
@@ -1057,9 +1177,19 @@ function splitCid(cid) {
 // for fields the master doesn't expose directly.
 function partsFromCandidate(cand) {
   const canonical = splitCid(cand.cigar_id);
+  // Preserve empty parent (`BRAND||LINE` in master). `||` in JS would skip
+  // a legitimate empty canonical.parent_brand — only fall back to brand
+  // when the candidate omits parent entirely (undefined/null).
+  let parent = cand.parent_brand;
+  if (parent === undefined || parent === null) {
+    parent = canonical.parent_brand;
+  }
+  if (parent === undefined || parent === null) {
+    parent = "";
+  }
   return {
     brand:        cand.brand        || canonical.brand,
-    parent_brand: cand.parent_brand || canonical.parent_brand || cand.brand || canonical.brand,
+    parent_brand: parent,
     line:         cand.line         || canonical.line,
     vitola:       cand.vitola       || canonical.vitola,
     vitola2:      cand.vitola2      || cand.vitola || canonical.vitola2,
@@ -1088,7 +1218,10 @@ function partsFromCommunityProposal(cp) {
   if (!cp) return null;
   return {
     brand:        cp.proposed_brand  || "",
-    parent_brand: cp.proposed_brand  || "",
+    // Consumers do not propose a distinct parent company; the CID slot is
+    // filled from the matcher's top cigar_id when brand+line align (see
+    // renderCandidate), otherwise left blank (master uses `BRAND||LINE` often).
+    parent_brand: "",
     line:         cp.proposed_line   || "",
     vitola:       cp.proposed_vitola || "",
     vitola2:      cp.proposed_vitola || "",
@@ -1125,6 +1258,9 @@ function communityProposalBanner(response) {
   const others = cp.total_pending > 1
     ? ` <span class="cp-more">+${cp.total_pending - 1} more</span>`
     : "";
+  const novel = cp.needs_new_catalog_cid
+    ? `<div class="cp-novel">This submission uses a <strong>brand or line we do not have in master yet</strong>. Add the full <code>master_cigars.csv</code> row and new pipe CID first, refresh the catalog cache, then lock that CID below and approve — the consumer’s box qty / price will publish on the staged retailer row.</div>`
+    : "";
   const productLine = [cp.proposed_brand, cp.proposed_line, cp.proposed_vitola]
     .filter(Boolean).join(" ").trim() || "(no product info)";
   const meta = [
@@ -1139,10 +1275,11 @@ function communityProposalBanner(response) {
         <span class="cp-badge">Consumer proposal${others}</span>
         ${age ? `<span class="cp-age">${escapeHtml(age)}</span>` : ""}
       </div>
+      ${novel}
       <div class="cp-product">${escapeHtml(productLine)}</div>
       ${meta ? `<div class="cp-meta">${escapeHtml(meta)}</div>` : ""}
       <div class="cp-hint">
-        Form pre-filled below. Edit any field, then Approve — the proposal
+        Form pre-filled below. Pick an existing master CID (or add one to master first if the note above applies), then Approve — the proposal
         will be marked resolved and the consumer will see the comparison
         card on their next visit.
       </div>
@@ -1184,3 +1321,56 @@ function escapeHtml(s) {
   ));
 }
 function escapeAttr(s) { return escapeHtml(s); }
+
+function joinDisplayParts(parts) {
+  return parts.filter(Boolean).join(" · ");
+}
+
+function humanDraftSummaryFromParts(parts) {
+  if (!parts || typeof parts !== "object") return "";
+  const brand = String(parts.brand || "").trim();
+  const line = String(parts.line || "").trim();
+  const vitola = String(parts.vitola || "").trim();
+  const size = String(parts.size || "").trim();
+  const wcode = String(parts.wrapper_code || "").trim();
+  const bw =
+    parts.box_qty != null && String(parts.box_qty).trim() !== ""
+      ? `Box ${String(parts.box_qty).trim()}`
+      : "";
+  const brandLine = [brand, line].filter(Boolean).join(" ");
+  return joinDisplayParts([brandLine || brand || line, vitola, size, wcode, bw]);
+}
+
+function masterCatalogSummaryRow(row) {
+  if (!row || typeof row !== "object") return "";
+  const brand = String(row.brand || "").trim();
+  const line = String(row.line || "").trim();
+  const vitola = String(row.vitola || "").trim();
+  const size = String(row.size || "").trim();
+  const wrapper = String(row.wrapper || "").trim();
+  const wcode = String(row.wrapper_code || "").trim();
+  const wrapperSeg = wrapper || wcode;
+  const bw = row.box_qty != null && row.box_qty !== ""
+    ? `Box ${row.box_qty}`
+    : "";
+  const brandLine = [brand, line].filter(Boolean).join(" ");
+  const fromCols = joinDisplayParts([
+    brandLine || brand || line, vitola, size, wrapperSeg, bw,
+  ]);
+  if (fromCols) return fromCols;
+  if (row.cigar_id) return humanDraftSummaryFromParts(partsFromCandidate(row));
+  return "";
+}
+
+function refreshCatalogDraftSummary() {
+  const el = document.getElementById("catalog-draft-summary");
+  if (!el) return;
+  const text = humanDraftSummaryFromParts(readFields());
+  el.textContent = text || "Add brand, line, vitola…";
+}
+
+function refreshCidPreviewBlock() {
+  const preview = document.getElementById("cid-preview");
+  if (!preview) return;
+  preview.textContent = lockedMasterCid || buildCidString(readFields());
+}

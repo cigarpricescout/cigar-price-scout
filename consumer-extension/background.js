@@ -26,6 +26,7 @@ import {
   getZip,
   getObserverId,
   getPreferredCidForUrl,
+  withTimeout,
 } from "./config.js";
 
 // ── First-run consent flow ─────────────────────────────────────────────
@@ -174,8 +175,8 @@ async function refreshForTab(tab) {
   let response, scraped;
   try {
     const [s, sc] = await Promise.all([
-      fetchUrlStatus(tab.url, zip, prefCid).catch(() => null),
-      scrapeActiveTab(tab.id).catch(() => null),
+      withTimeout(fetchUrlStatus(tab.url, zip, prefCid), 15000, null),
+      withTimeout(scrapeActiveTab(tab.id), 12000, null),
     ]);
     response = s;
     scraped = sc;
@@ -367,21 +368,40 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg || !msg.type) return false;
   if (msg.type === "getStatusForTab") {
     (async () => {
-      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-      const tab = tabs[0];
-      if (!tab) { sendResponse({ tab: null, response: null, scraped: null }); return; }
-      const cached = STATUS_CACHE.get(tab.url);
-      if (cached && (Date.now() - cached.fetchedAt) < STATUS_TTL_MS) {
-        sendResponse({ tab, response: cached.response, scraped: cached.scraped });
-        return;
+      let payload = {
+        tab: null,
+        response: { state: "error", error: "Could not load tab status." },
+        scraped: null,
+      };
+      try {
+        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+        const tab = tabs[0];
+        if (!tab) {
+          payload = { tab: null, response: null, scraped: null };
+        } else {
+          const cached = STATUS_CACHE.get(tab.url);
+          if (cached && (Date.now() - cached.fetchedAt) < STATUS_TTL_MS) {
+            payload = { tab, response: cached.response, scraped: cached.scraped };
+          } else {
+            const response = await refreshForTab(tab);
+            const fresh = STATUS_CACHE.get(tab.url);
+            payload = {
+              tab,
+              response,
+              scraped: fresh ? fresh.scraped : null,
+            };
+          }
+        }
+      } catch (e) {
+        payload = {
+          tab: null,
+          response: { state: "error", error: String(e) },
+          scraped: null,
+        };
       }
-      const response = await refreshForTab(tab);
-      const fresh = STATUS_CACHE.get(tab.url);
-      sendResponse({
-        tab,
-        response,
-        scraped: fresh ? fresh.scraped : null,
-      });
+      try {
+        sendResponse(payload);
+      } catch (_) {}
     })();
     return true; // async
   }

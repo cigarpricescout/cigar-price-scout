@@ -3,6 +3,24 @@
 
 export const API_BASE = "https://cigarpricescout.com";
 
+/** Settle with `fallback` if `promise` rejects or does not resolve within `ms`. */
+export function withTimeout(promise, ms, fallback) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(value);
+    };
+    const timer = setTimeout(() => finish(fallback), ms);
+    Promise.resolve(promise).then(
+      (v) => finish(v),
+      () => finish(fallback),
+    );
+  });
+}
+
 const ADMIN_KEY = "adminKey";
 
 export async function getAdminKey() {

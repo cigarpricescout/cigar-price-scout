@@ -168,6 +168,12 @@ body {
 .field .hint-inline {
   font-weight: 400; font-size: 10px; color: var(--muted); margin-left: 4px;
 }
+.field input.catalog-locked,
+.field select.catalog-locked {
+  background: var(--gray-bg);
+  color: var(--muted);
+  cursor: default;
+}
 .field .hint-below {
   font-size: 10px; color: var(--muted); margin-top: 4px; line-height: 1.35;
 }
@@ -185,6 +191,22 @@ body {
   margin-bottom: 8px;
 }
 .scraper-chip b { color: var(--text); }
+
+/* "Is this the cigar?" candidate card */
+.candidate-card {
+  margin: 10px 0 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 4px;
+  background: #fff;
+}
+.candidate-label {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text);
+}
 
 /* Actions */
 .actions {

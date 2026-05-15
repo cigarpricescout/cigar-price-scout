@@ -37,38 +37,182 @@ function buildCigarLandingUrl(brand, line) {
   return `https://cigarpricescout.com/cigars/${brandSlug}/${lineSlug}`;
 }
 
+const FALLBACK_WRAPPER_BUCKETS = ["Natural / Connecticut", "Habano", "Sun Grown", "Maduro"];
+
+function debounce(fn, ms) {
+  let t;
+  return (...args) => {
+    clearTimeout(t);
+    t = setTimeout(() => fn(...args), ms);
+  };
+}
+
+function catalogBlKey(brand, line) {
+  return `${String(brand || "").trim()}|${String(line || "").trim()}`;
+}
+
+function catalogBlvKey(brand, line, vitola) {
+  return `${String(brand || "").trim()}|${String(line || "").trim()}|${String(vitola || "").trim()}`;
+}
+
+function defaultCatalogShape() {
+  return {
+    brands: [],
+    lines_by_brand: {},
+    vitolas_by_brand_line: {},
+    vitolas_for_match: [],
+    boxes_by_brand_line_vitola: {},
+    buckets_by_brand_line_vitola: {},
+    buckets_by_brand_line: {},
+    vitolas_by_brand_line_bucket: {},
+    all_bucket_names: [...FALLBACK_WRAPPER_BUCKETS],
+  };
+}
+
+function mergeCatalog(raw) {
+  const d = defaultCatalogShape();
+  if (!raw || typeof raw !== "object") return d;
+  return {
+    brands: raw.brands || d.brands,
+    lines_by_brand: raw.lines_by_brand || d.lines_by_brand,
+    vitolas_by_brand_line: raw.vitolas_by_brand_line || d.vitolas_by_brand_line,
+    vitolas_for_match: raw.vitolas_for_match || d.vitolas_for_match,
+    boxes_by_brand_line_vitola: raw.boxes_by_brand_line_vitola || d.boxes_by_brand_line_vitola,
+    buckets_by_brand_line_vitola: raw.buckets_by_brand_line_vitola || d.buckets_by_brand_line_vitola,
+    buckets_by_brand_line: raw.buckets_by_brand_line || d.buckets_by_brand_line,
+    vitolas_by_brand_line_bucket: raw.vitolas_by_brand_line_bucket || d.vitolas_by_brand_line_bucket,
+    all_bucket_names: (raw.all_bucket_names && raw.all_bucket_names.length)
+      ? raw.all_bucket_names
+      : d.all_bucket_names,
+  };
+}
+
+/** Wrapper choices after brand+line (order: brand → line → wrapper → vitola → box). */
+function mountWrapperSelectForBrandLine(catalog, selEl, brand, line, preferredBucket) {
+  if (!selEl) return;
+  const bl = catalogBlKey(brand, line);
+  const fromMaster = (catalog.buckets_by_brand_line && catalog.buckets_by_brand_line[bl]) || [];
+  const all = (catalog.all_bucket_names && catalog.all_bucket_names.length)
+    ? catalog.all_bucket_names
+    : FALLBACK_WRAPPER_BUCKETS;
+  const buckets = fromMaster.length ? fromMaster : all;
+  const prev = (selEl.value || "").trim();
+  let html = '<option value="">Not sure</option>';
+  html += `<option value="__manual__">${escapeHtml("Other / not in catalog")}</option>`;
+  for (const bkt of buckets) {
+    html += `<option value="${escapeAttr(bkt)}">${escapeHtml(bkt)}</option>`;
+  }
+  selEl.innerHTML = html;
+  const pick = (v) => v && [...selEl.options].some(o => o.value === v);
+  if (pick(prev)) selEl.value = prev;
+  else if (pick(preferredBucket)) selEl.value = preferredBucket;
+}
+
+function vitolaOptionsFor(catalog, brand, line, wrapperBucket) {
+  const bl = catalogBlKey(brand, line);
+  const allSorted = ((catalog.vitolas_by_brand_line && catalog.vitolas_by_brand_line[bl]) || []).slice().sort();
+  const wb = (wrapperBucket || "").trim();
+  if (!wb || wb === "__manual__") return allSorted;
+  const k = `${bl}|${wb}`;
+  const sub = (catalog.vitolas_by_brand_line_bucket && catalog.vitolas_by_brand_line_bucket[k]) || [];
+  if (sub.length) return [...sub].sort();
+  return allSorted;
+}
+
+/** Vitola choices after brand+line+wrapper. */
+function mountVitolaSelect(catalog, selEl, brand, line, wrapperBucket, preferredVitola) {
+  if (!selEl) return;
+  const opts = vitolaOptionsFor(catalog, brand, line, wrapperBucket);
+  const prev = (selEl.value || "").trim();
+  let html = '<option value="">Choose vitola…</option>';
+  for (const v of opts) {
+    html += `<option value="${escapeAttr(v)}">${escapeHtml(v)}</option>`;
+  }
+  selEl.innerHTML = html;
+  const pick = (x) => x && [...selEl.options].some(o => o.value === x);
+  if (pick(prev)) selEl.value = prev;
+  else if (pick(preferredVitola)) selEl.value = preferredVitola;
+}
+
+/** Box control: single master count → locked input; several → select; none → free number. */
+function mountBoxQtyForCatalog(mountEl, catalog, brand, line, vitola, preferredVal) {
+  if (!mountEl) return;
+  const k = catalogBlvKey(brand, line, vitola);
+  const boxList = (catalog.boxes_by_brand_line_vitola && catalog.boxes_by_brand_line_vitola[k]) || [];
+  const pv = preferredVal != null && String(preferredVal).trim() !== "" ? String(preferredVal).trim() : "";
+  if (boxList.length === 1) {
+    const only = boxList[0];
+    mountEl.innerHTML = `
+      <label for="f-box_qty">Box quantity</label>
+      <input type="number" id="f-box_qty" class="catalog-locked" readonly
+             value="${escapeAttr(only)}"
+             title="From master catalog for this vitola." />
+    `;
+    return;
+  }
+  if (boxList.length > 1) {
+    const opts = boxList.map(b => `
+        <option value="${b}" ${String(b) === pv ? "selected" : ""}>${b}</option>
+      `).join("");
+    mountEl.innerHTML = `
+      <label for="f-box_qty">Box quantity</label>
+      <select id="f-box_qty">${opts}</select>
+    `;
+    return;
+  }
+  mountEl.innerHTML = `
+    <label for="f-box_qty">Box quantity</label>
+    <input type="number" id="f-box_qty" value="${escapeAttr(pv)}"
+           placeholder="25" min="1" max="100" />
+    <div class="hint-inline">Choose brand, line, wrapper &amp; vitola from the catalog, or type a box count for a new SKU.</div>
+  `;
+}
+
 // ── Bootstrap ──────────────────────────────────────────────────────────
 
 (async () => {
-  // Hard gate: if the user hasn't consented yet, send them to the
-  // consent screen instead of showing the comparison UI.
-  if (!(await hasConsented())) {
-    return renderNeedConsent();
-  }
-
-  let payload;
   try {
-    payload = await new Promise((resolve) => {
-      chrome.runtime.sendMessage({ type: "getStatusForTab" }, (resp) => {
-        resolve(resp || { tab: null, response: null, scraped: null });
+    // Hard gate: if the user hasn't consented yet, send them to the
+    // consent screen instead of showing the comparison UI.
+    if (!(await hasConsented())) {
+      return renderNeedConsent();
+    }
+
+    let payload;
+    try {
+      payload = await new Promise((resolve) => {
+        chrome.runtime.sendMessage({ type: "getStatusForTab" }, (resp) => {
+          const err = chrome.runtime.lastError;
+          if (err) {
+            resolve({
+              tab: null,
+              response: { state: "error", error: err.message },
+              scraped: null,
+            });
+            return;
+          }
+          resolve(resp || { tab: null, response: null, scraped: null });
+        });
       });
-    });
+    } catch (e) {
+      return renderError(String(e));
+    }
+
+    const { tab, response, scraped } = payload;
+    if (!tab || !tab.url) return renderEmpty("Open a cigar retailer page to see prices.");
+    if (!response) return renderError("Couldn't reach the price database. Check your connection.");
+
+    switch (response.state) {
+      case "matched":     return renderMatched(tab, response, scraped);
+      case "candidate":   return renderCandidate(tab, response, scraped, null);
+      case "seen":        return renderSeen(tab, response, scraped);
+      case "no_scraper":  return renderNoScraper(tab, response);
+      case "non_product": return renderEmpty("Browse a cigar product page to see comparisons.");
+      case "error":       return renderError(response.error || "Unknown error");
+      default:            return renderError(`Unexpected state: ${response.state}`);
+    }
   } catch (e) {
-    return renderError(String(e));
-  }
-
-  const { tab, response, scraped } = payload;
-  if (!tab || !tab.url) return renderEmpty("Open a cigar retailer page to see prices.");
-  if (!response) return renderError("Couldn't reach the price database. Check your connection.");
-
-  switch (response.state) {
-    case "matched":     return renderMatched(tab, response, scraped);
-    case "candidate":   return renderCandidate(tab, response, scraped, null);
-    case "seen":        return renderSeen(tab, response, scraped);
-    case "no_scraper":  return renderNoScraper(tab, response);
-    case "non_product": return renderEmpty("Browse a cigar product page to see comparisons.");
-    case "error":       return renderError(response.error || "Unknown error");
-    default:            return renderError(`Unexpected state: ${response.state}`);
+    renderError(String((e && e.message) || e));
   }
 })();
 
@@ -181,10 +325,38 @@ function renderMatched(tab, response, scraped) {
   }
 
   if (!comparison || !comparison.results || comparison.results.length === 0) {
+    const pickRowEmpty = (response.cigar_options && response.cigar_options.length > 1)
+      ? `
+      <div class="field cigar-picker" style="margin-bottom:12px">
+        <label for="cigar-pick" style="font-size:12px;font-weight:600">Which cigar on this page?</label>
+        <select id="cigar-pick" style="width:100%;margin-top:4px;padding:6px 8px;font-size:13px;border-radius:6px;border:1px solid #d1d5db">
+          ${response.cigar_options.map((o) => `
+            <option value="${escapeAttr(o.cigar_id)}" ${o.cigar_id === response.matched_cid ? "selected" : ""}>${escapeHtml(o.label)}</option>
+          `).join("")}
+        </select>
+      </div>`
+      : "";
+    const displayName = (comparison && comparison.cigar_name)
+      || [comparison && comparison.brand, comparison && comparison.line].filter(Boolean).join(" ")
+      || "This listing";
+    const metaBits = [
+      comparison && comparison.wrapper,
+      comparison && comparison.vitola,
+      comparison && comparison.size,
+      (comparison && comparison.box_qty) ? `Box of ${comparison.box_qty}` : "",
+    ].filter(Boolean);
+    const metaLine = metaBits.length ? metaBits.join(" · ") : "";
+    const cidHint = response.matched_cid
+      ? `<div class="cigar-cid" style="font-size:11px;color:#6b7280;word-break:break-all;margin-top:6px">CID: ${escapeHtml(response.matched_cid)}</div>`
+      : "";
+
     root.innerHTML = `
       ${renderHeader(tab, response)}
-      <div class="banner matched">✓ We track this cigar</div>
+      <div class="banner matched">✓ We track: ${escapeHtml(displayName)}</div>
       <div class="section">
+        ${metaLine ? `<div class="cigar-meta" style="font-size:13px;line-height:1.45;margin-bottom:8px">${escapeHtml(metaLine)}</div>` : ""}
+        ${cidHint}
+        ${pickRowEmpty}
         <div class="empty-state" style="padding: 16px 0;">
           ${escapeHtml(comparison?.reason || "Not enough retailers yet to compare.")}
         </div>
@@ -206,6 +378,21 @@ function renderMatched(tab, response, scraped) {
           previousMatched: { tab, response, scraped },
         });
       });
+    }
+    if (response.cigar_options && response.cigar_options.length > 1) {
+      const sel = document.getElementById("cigar-pick");
+      if (sel) {
+        sel.addEventListener("change", async () => {
+          await setPreferredCidForUrl(tab.url, sel.value);
+          chrome.runtime.sendMessage({ type: "invalidateCache", url: tab.url });
+          chrome.runtime.sendMessage({ type: "getStatusForTab" }, (resp) => {
+            if (chrome.runtime.lastError) return;
+            if (resp && resp.response && resp.tab) {
+              renderMatched(resp.tab, resp.response, resp.scraped);
+            }
+          });
+        });
+      }
     }
     wireFooter();
     return;
@@ -605,10 +792,10 @@ async function renderCandidate(tab, response, scraped, opts = null) {
   // canonical catalog brands/lines/vitolas, (b) returns empty when no
   // match exists (better an empty field than a wrong one), and (c)
   // returns the catalog brand/line whitelists so the inputs can offer
-  // a <datalist> typeahead. On any failure we fall back to a blank
-  // form rather than re-introducing the noisy split — by design.
+  // a <datalist> typeahead on brand/line. Wrapper and vitola use
+  // master-driven <select>s (brand → line → wrapper → vitola → box).
   let prefill = { brand: "", line: "", vitola: "" };
-  let catalog = { brands: [], lines_by_brand: {}, vitolas_for_match: [] };
+  let catalog = defaultCatalogShape();
   try {
     const guessRes = await publicFetch("/api/public/guess-metadata", {
       method: "POST",
@@ -621,7 +808,7 @@ async function renderCandidate(tab, response, scraped, opts = null) {
       },
     });
     if (guessRes?.prefill) prefill = guessRes.prefill;
-    if (guessRes?.catalog) catalog = guessRes.catalog;
+    if (guessRes?.catalog) catalog = mergeCatalog(guessRes.catalog);
   } catch (_) {
     // Endpoint unreachable or 500 — fall through with blanks. The user
     // can still type freely; the only thing we lose is autocomplete.
@@ -649,8 +836,6 @@ async function renderCandidate(tab, response, scraped, opts = null) {
     ? (catalog.lines_by_brand[initialValues.brand] || []) : [];
   const lineOptions = initialLines
     .map(l => `<option value="${escapeAttr(l)}">`).join("");
-  const vitolaOptions = (catalog.vitolas_for_match || [])
-    .map(v => `<option value="${escapeAttr(v)}">`).join("");
 
   root.innerHTML = `
     ${renderHeader(tab, response)}
@@ -672,25 +857,15 @@ async function renderCandidate(tab, response, scraped, opts = null) {
           <datalist id="lines-list">${lineOptions}</datalist>
         </div>
         <div class="field">
-          <label for="f-vitola">Vitola</label>
-          <input type="text" id="f-vitola" list="vitolas-list" value="${escapeAttr(initialValues.vitola)}" placeholder="e.g. Signature" autocomplete="off" />
-          <datalist id="vitolas-list">${vitolaOptions}</datalist>
+          <label for="f-wrapper">Wrapper <span class="hint-inline">(catalog)</span></label>
+          <select id="f-wrapper"></select>
         </div>
         <div class="field">
-          <label for="f-wrapper">Wrapper <span class="hint-inline">(optional)</span></label>
-          <select id="f-wrapper">
-            <option value="">Not sure</option>
-            <option value="Natural / Connecticut" ${initialValues.wrapper === "Natural / Connecticut" ? "selected" : ""}>Natural / Connecticut</option>
-            <option value="Habano" ${initialValues.wrapper === "Habano" ? "selected" : ""}>Habano</option>
-            <option value="Sun Grown" ${initialValues.wrapper === "Sun Grown" ? "selected" : ""}>Sun Grown</option>
-            <option value="Maduro" ${initialValues.wrapper === "Maduro" ? "selected" : ""}>Maduro</option>
-          </select>
+          <label for="f-vitola">Vitola</label>
+          <select id="f-vitola"></select>
         </div>
         <div class="field-row">
-          <div class="field">
-            <label for="f-box_qty">Box quantity</label>
-            <input type="number" id="f-box_qty" value="${escapeAttr(initialValues.box_qty || "")}" placeholder="25" min="1" max="100" />
-          </div>
+          <div class="field" id="box-qty-field"></div>
           <div class="field">
             <label for="f-price">Price (USD)</label>
             <input type="number" id="f-price" value="${escapeAttr(initialValues.price || "")}" placeholder="340.00" step="0.01" min="0" />
@@ -710,31 +885,88 @@ async function renderCandidate(tab, response, scraped, opts = null) {
     </div>
   `;
 
-  // When the user changes brand, swap the line typeahead to that
-  // brand's lines (catalog payload already includes lines_by_brand for
-  // every brand, so this is a free client-side update). Same idea
-  // applies to vitolas, but vitola lists are not preloaded for every
-  // (brand,line) — we'd need another fetch to repopulate, so we just
-  // clear the vitola list when the line changes and let the user type.
+  // Master-driven cascade: brand → line → wrapper → vitola → box (matches
+  // cigarpricescout.com field order and master_cigars.csv).
   const brandInput = document.getElementById("f-brand");
   const lineInput = document.getElementById("f-line");
   const linesList = document.getElementById("lines-list");
-  const vitolasList = document.getElementById("vitolas-list");
-  if (brandInput && linesList) {
-    brandInput.addEventListener("change", () => {
-      const b = (brandInput.value || "").trim();
-      const ls = (catalog.lines_by_brand && catalog.lines_by_brand[b]) || [];
-      linesList.innerHTML = ls.map(l => `<option value="${escapeAttr(l)}">`).join("");
-      if (vitolasList) vitolasList.innerHTML = "";
-    });
+  const wrapperSelect = document.getElementById("f-wrapper");
+  const vitolaSelect = document.getElementById("f-vitola");
+  const boxQtyMount = document.getElementById("box-qty-field");
+
+  let lastBrand = (initialValues.brand || "").trim();
+  let lastLine = (initialValues.line || "").trim();
+
+  function refreshLineDatalist() {
+    const b = (brandInput.value || "").trim();
+    const ls = (catalog.lines_by_brand && catalog.lines_by_brand[b]) || [];
+    linesList.innerHTML = ls.map(l => `<option value="${escapeAttr(l)}">`).join("");
   }
-  if (lineInput && vitolasList) {
-    lineInput.addEventListener("change", () => {
-      // Conservative: blank the typeahead when line changes. The user
-      // can still type any vitola; we just don't keep stale options
-      // belonging to the previous line in the dropdown.
-      vitolasList.innerHTML = "";
-    });
+
+  function readBoxPreference() {
+    const el = document.getElementById("f-box_qty");
+    if (!el) return initialValues.box_qty;
+    if (el.tagName === "SELECT") return el.value;
+    return (el.value || "").trim() || initialValues.box_qty;
+  }
+
+  function runCatalogCascade() {
+    const b = (brandInput.value || "").trim();
+    const l = (lineInput.value || "").trim();
+    const wBefore = (wrapperSelect.value || "").trim();
+    mountWrapperSelectForBrandLine(
+      catalog, wrapperSelect, b, l,
+      wBefore || localGuess.wrapper_bucket,
+    );
+    const w = (wrapperSelect.value || "").trim();
+    const vitPref = (vitolaSelect.value || "").trim() || (initialValues.vitola || "").trim();
+    mountVitolaSelect(catalog, vitolaSelect, b, l, w, vitPref);
+    const v = (vitolaSelect.value || "").trim();
+    mountBoxQtyForCatalog(boxQtyMount, catalog, b, l, v, readBoxPreference());
+  }
+
+  refreshLineDatalist();
+  runCatalogCascade();
+
+  const onBrandCommit = () => {
+    const b = (brandInput.value || "").trim();
+    if (b !== lastBrand) {
+      lastBrand = b;
+      lineInput.value = "";
+      vitolaSelect.value = "";
+      lastLine = "";
+    }
+    refreshLineDatalist();
+    runCatalogCascade();
+  };
+
+  const onLineCommit = () => {
+    const l = (lineInput.value || "").trim();
+    if (l !== lastLine) {
+      lastLine = l;
+      vitolaSelect.value = "";
+    }
+    runCatalogCascade();
+  };
+
+  if (brandInput) {
+    brandInput.addEventListener("change", onBrandCommit);
+    brandInput.addEventListener("blur", onBrandCommit);
+    brandInput.addEventListener("input", debounce(() => {
+      refreshLineDatalist();
+    }, 200));
+  }
+  if (lineInput) {
+    lineInput.addEventListener("change", onLineCommit);
+    lineInput.addEventListener("blur", onLineCommit);
+    lineInput.addEventListener("input", debounce(runCatalogCascade, 250));
+  }
+  if (vitolaSelect) {
+    vitolaSelect.addEventListener("change", runCatalogCascade);
+    vitolaSelect.addEventListener("blur", runCatalogCascade);
+  }
+  if (wrapperSelect) {
+    wrapperSelect.addEventListener("change", runCatalogCascade);
   }
 
   document.getElementById("submit").addEventListener("click", () => submitProposal(tab, response, scraped));
@@ -758,8 +990,12 @@ async function submitProposal(tab, response, scraped) {
   const brand = get("f-brand");
   const line = get("f-line");
   const vitola = get("f-vitola");
-  const wrapperBucket = get("f-wrapper");
-  const boxQtyRaw = get("f-box_qty");
+  let wrapperBucket = get("f-wrapper");
+  if (wrapperBucket === "__manual__") wrapperBucket = "";
+  const boxEl = document.getElementById("f-box_qty");
+  const boxQtyRaw = boxEl && boxEl.tagName === "SELECT"
+    ? String(boxEl.value || "").trim()
+    : get("f-box_qty");
   const priceRaw = get("f-price");
 
   if (!brand || !line || !vitola || !boxQtyRaw) {
@@ -807,6 +1043,18 @@ async function submitProposal(tab, response, scraped) {
     }
 
     if (preview && preview.candidate && preview.candidate.cigar_id) {
+      const conf = (preview.candidate.confidence || "").toUpperCase();
+      if (conf === "HIGH") {
+        btn.textContent = "Publishing…";
+        try {
+          await executeConfirmCandidate(tab, response, scraped, formMeta, preview.candidate);
+          return;
+        } catch (e) {
+          toast(`Could not auto-publish (${e.message || e}). Please confirm manually.`);
+          renderCigarConfirm(tab, response, scraped, formMeta, preview.candidate);
+          return;
+        }
+      }
       renderCigarConfirm(tab, response, scraped, formMeta, preview.candidate);
       return;
     }
@@ -828,6 +1076,33 @@ async function submitProposal(tab, response, scraped) {
 // three actions: YES (auto-publish), NO (operator review), Edit. YES
 // is the primary because most candidates the matcher offers will be
 // correct — this is HIGH-confidence only on the server side.
+
+// Shared body for "Yes, that's it" and for HIGH-confidence auto-confirm
+// after preview-candidate.
+async function executeConfirmCandidate(tab, response, scraped, formMeta, candidate) {
+  const observerId = await getObserverId();
+  const confirmRes = await publicFetch("/api/community/confirm-candidate", {
+    method: "POST",
+    body: {
+      observer_id: observerId,
+      observer_source: "consumer",
+      url: tab.url,
+      cigar_id: candidate.cigar_id,
+      scraped_title: formMeta.scraped_title,
+      confirmed_price: formMeta.confirmed_price,
+      in_stock: null,
+    },
+  });
+  chrome.runtime.sendMessage({ type: "invalidateCache", url: tab.url });
+
+  if (confirmRes && confirmRes.comparison
+      && confirmRes.comparison.results
+      && confirmRes.comparison.results.length > 0) {
+    renderProvisionalComparison(tab, response, scraped, confirmRes);
+    return;
+  }
+  renderSubmittedWithSearch(tab, response, scraped, formMeta);
+}
 
 function renderCigarConfirm(tab, response, scraped, formMeta, candidate) {
   root.innerHTML = `
@@ -864,33 +1139,7 @@ function renderCigarConfirm(tab, response, scraped, formMeta, candidate) {
     if (noBtn) noBtn.disabled = true;
     yesBtn.textContent = "Publishing…";
     try {
-      const observerId = await getObserverId();
-      const confirmRes = await publicFetch("/api/community/confirm-candidate", {
-        method: "POST",
-        body: {
-          observer_id: observerId,
-          observer_source: "consumer",
-          url: tab.url,
-          cigar_id: candidate.cigar_id,
-          scraped_title: formMeta.scraped_title,
-          confirmed_price: formMeta.confirmed_price,
-          in_stock: null,
-        },
-      });
-      chrome.runtime.sendMessage({ type: "invalidateCache", url: tab.url });
-
-      if (confirmRes && confirmRes.comparison
-          && confirmRes.comparison.results
-          && confirmRes.comparison.results.length > 0) {
-        // Reuse the provisional renderer — same comparison shape, same
-        // sort, same row template. Banner copy makes clear that this
-        // mapping is now live for everyone.
-        renderProvisionalComparison(tab, response, scraped, confirmRes);
-        return;
-      }
-      // No comparison yet (single-retailer CID or build error) — still
-      // a successful publish, so show the thank-you with a CTA.
-      renderSubmittedWithSearch(tab, response, scraped, formMeta);
+      await executeConfirmCandidate(tab, response, scraped, formMeta, candidate);
     } catch (e) {
       yesBtn.disabled = false;
       if (noBtn) noBtn.disabled = false;

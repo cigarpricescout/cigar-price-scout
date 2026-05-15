@@ -51,6 +51,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from app.cid_matcher import (
+    canonical_cigar_id_for_comparison,
     canonicalize_url,
     merge_cid_into_url_index,
     url_index_entry_cids,
@@ -212,6 +213,10 @@ def init_community_tables() -> None:
         cur.execute("""
             CREATE INDEX IF NOT EXISTS community_url_proposals_url_idx
                 ON community_url_proposals (url)
+        """)
+        cur.execute("""
+            ALTER TABLE community_url_proposals
+                ADD COLUMN IF NOT EXISTS needs_new_catalog_cid BOOLEAN NOT NULL DEFAULT FALSE
         """)
         cur.execute("""
             CREATE TABLE IF NOT EXISTS review_decisions (
@@ -532,13 +537,38 @@ async def observe(request: Request, body: ObserveBody):
 
 # ── POST /api/community/propose-metadata ───────────────────────────────
 
+
+def _proposal_needs_new_catalog_work(body: "ProposeMetadataBody") -> bool:
+    """True when (brand, line) is not an exact pair present in master_cigars.
+
+    Used to flag proposals where the consumer typed a custom line (or an
+    unknown brand): the operator path is then "add full master row + CID
+    first, then map this URL" rather than a quick pick from Similar CIDs.
+    """
+    brand = (_trim(body.brand) or "").strip()
+    line = (_trim(body.line) or "").strip()
+    if not brand or not line:
+        return False
+    try:
+        cat = _get_catalog_match_index()
+    except Exception:
+        return False
+    brands_sorted = cat.get("brands_sorted") or []
+    if brand not in brands_sorted:
+        return True
+    lines = (cat.get("lines_by_brand") or {}).get(brand) or []
+    return line not in lines
+
+
 @router.post("/propose-metadata")
 async def propose_metadata(request: Request, body: ProposeMetadataBody):
     """Consumer-submitted metadata proposal for a URL that has no CID yet.
 
     Goes into community_url_proposals with status='pending'. The operator
-    reviews each proposal via the admin UI and decides whether to map it
-    to an existing CID, create a new CID, or reject it.
+    reviews each proposal via the admin UI and maps it to an existing
+    master cigar_id (stage-approval). When ``needs_new_catalog_cid`` is set,
+    the consumer's brand/line pair is not in master yet — add the full CSV
+    row + CID to master first, then approve with that exact key.
     """
     observer = _observer_id(body.observer_id, request)
     if not _rate_limit(_prop_hour, observer, 3600, _PROPOSE_MAX_PER_HOUR):
@@ -550,6 +580,8 @@ async def propose_metadata(request: Request, body: ProposeMetadataBody):
     if source not in {"operator", "consumer"}:
         source = "consumer"
 
+    needs_new_catalog_cid = _proposal_needs_new_catalog_work(body)
+
     confirmed_cents = _to_price_cents(body.confirmed_price)
     try:
         conn = _get_conn()
@@ -559,14 +591,16 @@ async def propose_metadata(request: Request, body: ProposeMetadataBody):
               (url, retailer_key, proposed_brand, proposed_line, proposed_vitola,
                proposed_size, proposed_wrapper, proposed_box_qty,
                confirmed_price_cents,
-               scraped_title, observer_id, observer_source, status)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'pending')
+               scraped_title, observer_id, observer_source, status,
+               needs_new_catalog_cid)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'pending',%s)
             RETURNING id
         """, (
             body.url, retailer_key, _trim(body.brand), _trim(body.line),
             _trim(body.vitola), _trim(body.size), _trim(body.wrapper),
             body.box_qty, confirmed_cents,
             _trim(body.scraped_title), observer, source,
+            needs_new_catalog_cid,
         ))
         proposal_id = cur.fetchone()[0]
         conn.commit()
@@ -601,6 +635,7 @@ async def propose_metadata(request: Request, body: ProposeMetadataBody):
             "proposal_id": proposal_id,
             "retailer_key": retailer_key,
             "status": "pending",
+            "needs_new_catalog_cid": needs_new_catalog_cid,
             # Always include the comparison key so the consumer popup
             # can branch on truthiness without "key exists" checks.
             "comparison": comparison,
@@ -748,6 +783,7 @@ async def preview_candidate(request: Request, body: ProposeMetadataBody):
         candidate = _build_candidate_display_label(match_info["cigar_id"])
         if candidate:
             candidate["confidence"] = match_info.get("confidence")
+            candidate["score"] = match_info.get("score")
 
     return {
         "ok": True,
@@ -1302,12 +1338,12 @@ async def public_url_status(
     matched_cid: Optional[str] = None
     cigar_options: Optional[List[Dict[str, str]]] = None
     try:
-        from app.extension_endpoints import _cache_state  # type: ignore
+        from app.extension_endpoints import _cache_state, _pick_matched_cid  # type: ignore
+
         live = _cache_state.get("url_index", {}).get(url)
         rk_live, cids_live = url_index_entry_cids(live)
         if rk_live == retailer_key and cids_live:
-            sel = (cid or "").strip()
-            matched_cid = sel if sel and sel in cids_live else cids_live[0]
+            matched_cid = _pick_matched_cid(cids_live, (cid or "").strip() or None)
             if len(cids_live) > 1:
                 cigar_options = []
                 for c in sorted(cids_live):
@@ -1349,7 +1385,7 @@ async def public_url_status(
         if seen_status is None:
             cur.execute(
                 "SELECT status, proposed_brand, proposed_line, proposed_vitola, "
-                "       proposed_box_qty, proposed_wrapper "
+                "       proposed_box_qty, proposed_wrapper, needs_new_catalog_cid "
                 "FROM community_url_proposals "
                 "WHERE url=%s ORDER BY created_at DESC LIMIT 1",
                 (url,),
@@ -1366,6 +1402,7 @@ async def public_url_status(
                         "vitola":  row[3] or None,
                         "box_qty": row[4] or None,
                         "wrapper": row[5] or None,  # bucket name
+                        "needs_new_catalog_cid": bool(row[6]),
                     }
         conn.close()
     except Exception as e:
@@ -1404,20 +1441,16 @@ def _try_match_proposal_to_cid(
 ) -> Optional[Dict[str, Any]]:
     """Best-effort server-side CID match for a consumer proposal.
 
-    Returns a dict with cid/score/confidence/wrapper_code/box_qty when the
-    proposal matches a master CID with HIGH confidence AND the consumer's
-    wrapper bucket (if provided) is compatible AND box_qty matches
-    exactly. Returns None otherwise so the caller falls back to the
-    standard "in review" UX.
+    Primary path: **unique master-row match** on the same fields we ask the
+    user for (brand, line, vitola, box quantity, optional wrapper bucket).
+    That lines up with ``master_cigars.csv``: when those fields identify
+    exactly one row, that row's ``cigar_id`` is the recommendation.
 
-    This powers the Gap 2 instant-comparison feedback: when we can
-    confidently auto-resolve, the consumer sees the price comparison
-    card immediately instead of "thanks, in review" — even though the
-    operator still does the final approval.
+    Fallback: URL + synthetic title scoring via ``find_top_candidates``,
+    same as the operator extension, when metadata alone is ambiguous.
 
-    Conservative on purpose: HIGH-only, wrapper-bucket-checked, exact
-    box_qty match. Wrong auto-matches would surface a misleading
-    comparison; we'd rather show "in review" than wrong data.
+    Returns a dict with cid/score/confidence/wrapper_code/box_qty, or None
+    so callers fall back to the standard "in review" UX.
     """
     if not (body.brand and body.line):
         return None
@@ -1446,10 +1479,32 @@ def _try_match_proposal_to_cid(
             return None
 
     try:
-        from app.cid_matcher import find_top_candidates  # type: ignore
+        from app.cid_matcher import (  # type: ignore
+            find_top_candidates,
+            find_unique_metadata_match,
+        )
     except Exception as e:
-        logger.warning("find_top_candidates unavailable: %s", e)
+        logger.warning("cid_matcher unavailable: %s", e)
         return None
+
+    if body.vitola and str(body.vitola).strip():
+        unique = find_unique_metadata_match(
+            body.brand,
+            body.line,
+            body.vitola,
+            int(body.box_qty),
+            body.wrapper,
+            master,
+        )
+        if unique:
+            return {
+                "cigar_id": unique["cigar_id"],
+                "score": unique.get("score"),
+                "confidence": unique.get("confidence"),
+                "wrapper_code": unique.get("wrapper_code"),
+                "box_qty": unique.get("box_qty"),
+                "source": "metadata_unique_match",
+            }
 
     # Synthesize a title from the proposal so the matcher has both the
     # URL (for hostname / slug hints) and a strong text signal.
@@ -1514,12 +1569,12 @@ def _build_comparison_for_cid(
     zip: str = "",
     limit: int = 3,
 ) -> Optional[Dict[str, Any]]:
-    """Top-N cheapest in-stock retailers carrying this CID.
+    """Top-N cheapest retailers for one canonical ``cigar_id``.
 
-    Reuses app.main.load_all_products() so we stay consistent with the
-    public /compare web page — same data, same filters, same delivered-
-    price math. Returns None if fewer than 2 retailers carry the CID
-    (consistent with the website's minimum-comparison rule).
+    Loads the same ``Product`` list as the site (``load_all_products()``) and
+    uses the same shipping/tax helpers. **Rows are included only when**
+    ``canonical_cigar_id_for_comparison(product.cigar_id)`` equals the
+    canonical CID for the URL — no looser brand/line/vitola matching here.
     """
     try:
         from app.main import (  # type: ignore
@@ -1537,17 +1592,67 @@ def _build_comparison_for_cid(
     try:
         state = zip_to_state(zip) if zip else "OR"
         all_products = load_all_products()
-        matches = [p for p in all_products if getattr(p, "cigar_id", None) == cid]
+        canon_cid = canonical_cigar_id_for_comparison(cid)
+        matches = [
+            p for p in all_products
+            if canonical_cigar_id_for_comparison(getattr(p, "cigar_id", None) or "")
+            == canon_cid
+        ]
         distinct_retailers = {p.retailer_key for p in matches}
         if len(distinct_retailers) < MIN_RETAILERS_FOR_COMPARISON:
-            return {
-                "cigar_id": cid,
+            sparse: Dict[str, Any] = {
+                "cigar_id": canon_cid,
                 "results": [],
                 "reason": (
                     f"Only {len(distinct_retailers)} retailer(s) carry this cigar. "
                     f"At least {MIN_RETAILERS_FOR_COMPARISON} are needed."
                 ),
             }
+            if matches:
+                fp = matches[0]
+                sparse.update({
+                    "cigar_name": f"{fp.brand} {fp.line}".strip(),
+                    "brand": fp.brand,
+                    "line": fp.line,
+                    "wrapper": fp.wrapper,
+                    "vitola": fp.vitola,
+                    "size": fp.size,
+                    "box_qty": fp.box_qty,
+                    "strength": getattr(fp, "strength", "") or "",
+                    "country": getattr(fp, "country", "") or "",
+                })
+            else:
+                try:
+                    from app.main import load_master_index  # type: ignore
+
+                    mi = load_master_index()
+                    raw = (cid or "").strip()
+                    row = mi.get(raw) or mi.get(canon_cid)
+                    if not row:
+                        for mk, mv in mi.items():
+                            if canonical_cigar_id_for_comparison(mk) == canon_cid:
+                                row = mv
+                                break
+                    if row:
+                        bq = row.get("box_qty") or 0
+                        try:
+                            box_int = int(bq) if bq not in ("", None) else 0
+                        except (TypeError, ValueError):
+                            box_int = 0
+                        sparse.update({
+                            "cigar_name": f"{row.get('brand', '')} {row.get('line', '')}".strip(),
+                            "brand": row.get("brand", ""),
+                            "line": row.get("line", ""),
+                            "wrapper": row.get("wrapper", ""),
+                            "vitola": row.get("vitola", ""),
+                            "size": row.get("size", ""),
+                            "box_qty": box_int,
+                            "strength": row.get("strength", "") or "",
+                            "country": row.get("country", "") or "",
+                        })
+                except Exception:
+                    pass
+            return sparse
 
         retailer_lookup = {r["key"]: r for r in RETAILERS}
         results = []
@@ -1576,9 +1681,9 @@ def _build_comparison_for_cid(
             })
         # Sort: in-stock first, then cheapest delivered.
         results.sort(key=lambda r: (not r["in_stock"], r["delivered_cents"]))
-        first = matches[0]
+        first = next((p for p in matches if (p.cigar_id or "") == canon_cid), matches[0])
         return {
-            "cigar_id": cid,
+            "cigar_id": canon_cid,
             "cigar_name": f"{first.brand} {first.line}".strip(),
             "brand": first.brand,
             "line": first.line,
@@ -1842,6 +1947,20 @@ def _get_catalog_match_index() -> Dict[str, Any]:
           Vitolas for each (brand, line) — both for matching the
           scraped text AND for the vitola <datalist>.
       vitola_match_pairs: dict[(brand, line), list[tuple[str, str]]]
+      buckets_by_brand_line: dict["brand|line", list[str]]
+          Distinct wrapper buckets that appear on any vitola for that
+          brand+line (wrapper is chosen before vitola in the consumer UI).
+      vitolas_by_brand_line_bucket: dict["brand|line|bucket", list[str]]
+          Vitolas for that brand+line whose CID maps to that consumer
+          bucket. ``__UNBUCKETED__`` holds vitolas with no mapped bucket
+          (shown only when wrapper is "Not sure").
+      boxes_by_brand_line_vitola: dict["brand|line|vitola", list[int]]
+          Distinct box counts from master for that vitola (consumer form).
+      buckets_by_brand_line_vitola: dict["brand|line|vitola", list[str]]
+          Wrapper bucket labels present in master for that vitola.
+      all_bucket_names: list[str]
+          Full consumer bucket ordering (fallback when a vitola has no
+          mapped codes in the four buckets).
     """
     now = time.time()
     if (_catalog_match_cache.get("data") is not None
@@ -1856,7 +1975,13 @@ def _get_catalog_match_index() -> Dict[str, Any]:
     lines_by_brand: Dict[str, set[str]] = defaultdict(set)
     vitolas_by_bl: Dict[tuple[str, str], set[str]] = defaultdict(set)
 
-    for row in master.values():
+    from app.cid_matcher import parse_cid  # type: ignore
+    from app.wrapper_buckets import bucket_for_code, bucket_names  # type: ignore
+
+    boxes_by_blv: Dict[str, set] = defaultdict(set)
+    codes_by_blv: Dict[str, set[str]] = defaultdict(set)
+
+    for cid, row in master.items():
         brand = (row.get("brand") or "").strip()
         line = (row.get("line") or "").strip()
         vitola = (row.get("vitola") or "").strip()
@@ -1867,6 +1992,52 @@ def _get_catalog_match_index() -> Dict[str, Any]:
             lines_by_brand[brand].add(line)
             if vitola:
                 vitolas_by_bl[(brand, line)].add(vitola)
+        if brand and line and vitola:
+            blv_key = f"{brand}|{line}|{vitola}"
+            parts = parse_cid(cid) if cid else None
+            wc = (parts or {}).get("wrapper_code") or ""
+            if wc:
+                codes_by_blv[blv_key].add(str(wc).strip().upper())
+            try:
+                bq_raw = row.get("box_qty")
+                bqi = int(bq_raw) if bq_raw not in (None, "", 0, "0") else 0
+            except (TypeError, ValueError):
+                bqi = 0
+            if bqi > 0:
+                boxes_by_blv[blv_key].add(bqi)
+
+    buckets_by_blv: Dict[str, List[str]] = {}
+    for blv_key, codes in codes_by_blv.items():
+        seen: set[str] = set()
+        ordered: List[str] = []
+        for c in sorted(codes):
+            bkt = bucket_for_code(c)
+            if bkt and bkt not in seen:
+                seen.add(bkt)
+                ordered.append(bkt)
+        if ordered:
+            buckets_by_blv[blv_key] = ordered
+
+    buckets_by_brand_line: Dict[str, set[str]] = defaultdict(set)
+    vitolas_by_brand_line_bucket: Dict[str, set[str]] = defaultdict(set)
+    UNBUCKETED = "__UNBUCKETED__"
+
+    for blv_key, bkt_list in buckets_by_blv.items():
+        parts = blv_key.split("|", 2)
+        if len(parts) < 3:
+            continue
+        b, l, v = parts[0], parts[1], parts[2]
+        bl_key = f"{b}|{l}"
+        for bkt in bkt_list:
+            buckets_by_brand_line[bl_key].add(bkt)
+            vitolas_by_brand_line_bucket[f"{bl_key}|{bkt}"].add(v)
+
+    for (b, l), vs in vitolas_by_bl.items():
+        bl_key = f"{b}|{l}"
+        for v in vs:
+            blv_key = f"{b}|{l}|{v}"
+            if blv_key not in buckets_by_blv:
+                vitolas_by_brand_line_bucket[f"{bl_key}|{UNBUCKETED}"].add(v)
 
     def _match_pairs(values) -> list:
         # (normalized, canonical) sorted by normalized length desc so
@@ -1884,6 +2055,17 @@ def _get_catalog_match_index() -> Dict[str, Any]:
         "line_match_pairs": {b: _match_pairs(ls) for b, ls in lines_by_brand.items()},
         "vitolas_by_brand_line": {f"{b}|{l}": sorted(vs) for (b, l), vs in vitolas_by_bl.items()},
         "vitola_match_pairs": {(b, l): _match_pairs(vs) for (b, l), vs in vitolas_by_bl.items()},
+        "boxes_by_brand_line_vitola": {
+            k: sorted(vs) for k, vs in boxes_by_blv.items() if vs
+        },
+        "buckets_by_brand_line_vitola": buckets_by_blv,
+        "buckets_by_brand_line": {
+            k: sorted(s) for k, s in buckets_by_brand_line.items() if s
+        },
+        "vitolas_by_brand_line_bucket": {
+            k: sorted(vs) for k, vs in vitolas_by_brand_line_bucket.items() if vs
+        },
+        "all_bucket_names": bucket_names(),
     }
     _catalog_match_cache.update({"data": data, "timestamp": now})
     return data
@@ -1971,7 +2153,13 @@ async def public_guess_metadata(request: Request, body: GuessMetadataBody):
           "catalog": {
             "brands": [...],
             "lines_by_brand": {...},
-            "vitolas_for_match": [...]  # only for the matched (brand,line)
+            "vitolas_for_match": [...],  # prefill (brand,line) only
+            "vitolas_by_brand_line": {...},  # full cascade map
+            "boxes_by_brand_line_vitola": {...},
+            "buckets_by_brand_line_vitola": {...},
+            "buckets_by_brand_line": {...},
+            "vitolas_by_brand_line_bucket": {...},
+            "all_bucket_names": [...],
           },
           "matched_via": "master_catalog" | "no_match"
         }
@@ -2005,6 +2193,12 @@ async def public_guess_metadata(request: Request, body: GuessMetadataBody):
                 "brands": catalog["brands_sorted"],
                 "lines_by_brand": catalog["lines_by_brand"],
                 "vitolas_for_match": vitolas_for_match,
+                "vitolas_by_brand_line": catalog["vitolas_by_brand_line"],
+                "boxes_by_brand_line_vitola": catalog["boxes_by_brand_line_vitola"],
+                "buckets_by_brand_line_vitola": catalog["buckets_by_brand_line_vitola"],
+                "buckets_by_brand_line": catalog["buckets_by_brand_line"],
+                "vitolas_by_brand_line_bucket": catalog["vitolas_by_brand_line_bucket"],
+                "all_bucket_names": catalog["all_bucket_names"],
             },
             "matched_via": "master_catalog" if prefill["brand"] else "no_match",
         }

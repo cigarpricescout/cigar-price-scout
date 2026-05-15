@@ -128,6 +128,32 @@ ok = 'Best Seller' in af_hem_vitolas and 'Short Story' in af_hem_vitolas
 print(f'  [{"PASS" if ok else "FAIL"}] Hemingway vitolas include Best Seller + Short Story ({len(af_hem_vitolas)} total)')
 results.append(ok)
 
+print('\n[H] Consumer cascade facets (box counts + wrapper buckets from master)')
+key = "Alec Bradley|Black Market Esteli|Gordo"
+boxes = idx.get("boxes_by_brand_line_vitola", {}).get(key) or []
+ok = isinstance(boxes, list) and len(boxes) >= 2 and 20 in boxes
+print(f'  [{"PASS" if ok else "FAIL"}] {key} has multiple catalog box sizes (got {boxes})')
+results.append(ok)
+buckets = idx.get("buckets_by_brand_line_vitola", {}).get(key) or []
+ok = isinstance(buckets, list) and "Sun Grown" in buckets
+print(f'  [{"PASS" if ok else "FAIL"}] {key} wrapper buckets include Sun Grown (NIC) (got {buckets})')
+results.append(ok)
+abn = idx.get("all_bucket_names") or []
+ok = len(abn) == 4
+print(f'  [{"PASS" if ok else "FAIL"}] all_bucket_names has four consumer buckets')
+results.append(ok)
+
+print('\n[I] Brand+line wrapper facets then vitolas by bucket')
+bl = "Alec Bradley|Black Market Esteli"
+bb = idx.get("buckets_by_brand_line", {}).get(bl) or []
+ok = "Sun Grown" in bb
+print(f'  [{"PASS" if ok else "FAIL"}] buckets_by_brand_line includes Sun Grown (got {bb})')
+results.append(ok)
+vb = idx.get("vitolas_by_brand_line_bucket", {}).get(bl + "|Sun Grown") or []
+ok = "Gordo" in vb
+print(f'  [{"PASS" if ok else "FAIL"}] vitolas_by_brand_line_bucket Sun Grown includes Gordo (got {vb})')
+results.append(ok)
+
 print()
 print('=' * 78)
 total = len(results)

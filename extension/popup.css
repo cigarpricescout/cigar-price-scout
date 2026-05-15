@@ -124,20 +124,51 @@ body { padding: 0; }
 .cand {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   font-size: 11px;
   background: #fafafa;
   border: 1px solid #eee;
   border-radius: 4px;
-  padding: 4px 6px;
+  padding: 6px 8px;
   cursor: pointer;
 }
 .cand:hover { background: #f0f0f0; }
+.cand .col-left {
+  flex: 1;
+  min-width: 0;
+}
+.cand-primary {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: #222;
+}
+.cand-tech {
+  margin-top: 4px;
+  font-size: 10px;
+  color: #666;
+}
+.cand-tech summary {
+  cursor: pointer;
+  user-select: none;
+}
+.cand-tech .cand-cid {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  display: block;
+  margin-top: 4px;
+  word-break: break-all;
+}
 .cand .cand-cid {
   font-family: ui-monospace, Menlo, Consolas, monospace;
   flex: 1;
   margin-right: 6px;
   word-break: break-all;
+}
+.catalog-draft-summary {
+  font-size: 13px;
+  line-height: 1.45;
+  color: #333;
+  margin-bottom: 6px;
 }
 
 .match-details {
@@ -181,6 +212,19 @@ body { padding: 0; }
   align-items: center;
   justify-content: space-between;
   margin-bottom: 6px;
+}
+.community-proposal .cp-novel {
+  font-size: 11px;
+  color: #0d47a1;
+  line-height: 1.45;
+  margin-bottom: 8px;
+  padding: 8px;
+  background: #fff8e1;
+  border: 1px solid #ffcc80;
+  border-radius: 4px;
+}
+.community-proposal .cp-novel code {
+  font-size: 10px;
 }
 .community-proposal .cp-badge {
   font-size: 10px;

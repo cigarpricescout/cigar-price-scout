@@ -9,9 +9,11 @@ discovery agent rank candidates the same way.
 Public surface:
     parse_cid(cid)                       -> dict | None
     build_cid(parts)                     -> str
+    canonical_cigar_id_for_comparison(cid) -> str
     slug_from_url(url)                   -> str
     programmatic_score(cid_parts, url, title=None) -> (score, details)
     load_master_cigars(csv_path)         -> list[dict]
+    find_unique_metadata_match(brand, line, vitola, box_qty, wrapper_bucket, master) -> dict | None
     find_top_candidates(url, title, master, limit=5) -> list[dict]
     hostname_to_retailer_key(hostname, registry) -> str | None
 """
@@ -20,7 +22,7 @@ from __future__ import annotations
 import csv
 import re
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 # Query parameters we strip from URLs before any URL-index lookup or
@@ -162,9 +164,19 @@ def build_cid(parts: Dict[str, object]) -> str:
         s = ("" if v is None else str(v)).strip()
         return re.sub(r"\s+", "", s).lower()
 
+    # Parent segment: many master rows use an empty middle slot (`BRAND||LINE`)
+    # when there is no distinct parent company in the catalog. Only when
+    # `parent_brand` is explicitly non-empty do we emit it (e.g. PADRON|PADRON|…).
+    pb_raw = parts.get("parent_brand")
+    parent_seg = (
+        cid_part(pb_raw)
+        if pb_raw is not None and str(pb_raw).strip() != ""
+        else ""
+    )
+
     return "|".join([
         cid_part(parts.get("brand")),
-        cid_part(parts.get("parent_brand")) or cid_part(parts.get("brand")),
+        parent_seg,
         cid_part(parts.get("line")),
         cid_part(parts.get("vitola")),
         cid_part(parts.get("vitola2")) or cid_part(parts.get("vitola")),
@@ -172,6 +184,55 @@ def build_cid(parts: Dict[str, object]) -> str:
         cid_part(parts.get("wrapper_code")),
         box,
     ])
+
+
+# Wrapper codes occasionally mistyped in staged rows; map to master catalog
+# codes for cross-retailer comparison joins only (storage may keep the typo).
+_COMPARISON_WRAPPER_ALIASES = {
+    "CAN": "CAM",  # Cameroon is CAM in master; "CAN" is a common typo
+}
+
+
+def canonical_cigar_id_for_comparison(cid: Optional[str]) -> str:
+    """Return a normalized CID for equality checks across retailer rows.
+
+    Master catalog often uses an empty parent segment (``BRAND||LINE``) while
+    some staged/legacy rows duplicated the house brand (``BRAND|BRAND|LINE``).
+    Those are the same product but would not match with raw ``==``.
+
+    Used by consumer comparison builders so a URL mapped to a legacy-shaped
+    CID still joins other retailers' rows that share the canonical master key.
+    """
+    if not cid:
+        return ""
+    raw = cid.strip()
+    p = parse_cid(raw)
+    if not p:
+        return raw
+
+    def seg(s: str) -> str:
+        return re.sub(r"\s+", "", (s or "").strip()).upper()
+
+    brand_u = seg(p["brand"])
+    parent_raw = (p.get("parent_brand") or "").strip()
+    parent_u = seg(parent_raw) if parent_raw else ""
+    # Collapse duplicate house-brand parent to empty (matches master ``||``).
+    parent_for_build = "" if (parent_u and parent_u == brand_u) else parent_raw
+
+    wc = seg(p.get("wrapper_code"))
+    wc = _COMPARISON_WRAPPER_ALIASES.get(wc, wc)
+
+    parts: Dict[str, object] = {
+        "brand": p["brand"],
+        "parent_brand": parent_for_build,
+        "line": p["line"],
+        "vitola": p["vitola"],
+        "vitola2": (p.get("vitola2") or "").strip() or p["vitola"],
+        "size": p["size"],
+        "wrapper_code": wc,
+        "box_qty_str": p["box_qty_str"],
+    }
+    return build_cid(parts)
 
 
 def slug_from_url(url: str) -> str:
@@ -393,6 +454,102 @@ def load_master_cigars(csv_path: Path) -> List[Dict[str, str]]:
                 "_parts": parts,
             })
     return out
+
+
+def _norm_catalog_field(value: Optional[str]) -> str:
+    """Lowercase, trim, collapse internal whitespace for human-field compare."""
+    if value is None:
+        return ""
+    return " ".join(str(value).strip().lower().split())
+
+
+def find_unique_metadata_match(
+    brand: str,
+    line: str,
+    vitola: str,
+    box_qty: int,
+    wrapper_bucket: Optional[str],
+    master: Iterable[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    """Return the single master row that matches catalog identity fields, or None.
+
+    This is the simple mental model for community proposals: the form asks
+    for brand, line, vitola, box quantity, and (optionally) a wrapper bucket.
+    Those fields are the same axes the master CSV is keyed on for humans.
+    When they narrow to exactly one row, that row's ``cigar_id`` is the only
+    sensible recommendation — no URL slug heuristics or title scoring required.
+
+    ``wrapper_bucket`` should be one of the consumer bucket labels from
+    ``app.wrapper_buckets`` (or empty / unknown → no wrapper filter).
+
+    Returns a ``find_top_candidates``-shaped dict, or None when zero or many
+    rows match (caller should fall back to URL+title scoring).
+    """
+    nb = _norm_catalog_field(brand)
+    nl = _norm_catalog_field(line)
+    nv = _norm_catalog_field(vitola)
+    if not nb or not nl or not nv:
+        return None
+    try:
+        bq = int(box_qty)
+    except (TypeError, ValueError):
+        return None
+    if bq <= 0:
+        return None
+
+    allowed_codes: Optional[Set[str]] = None
+    if wrapper_bucket and str(wrapper_bucket).strip():
+        try:
+            from app.wrapper_buckets import codes_for_bucket  # type: ignore
+
+            ac = codes_for_bucket(wrapper_bucket.strip())
+            if ac:
+                allowed_codes = {c.upper() for c in ac}
+        except Exception:
+            allowed_codes = None
+
+    matches: List[Dict[str, Any]] = []
+    for row in master:
+        try:
+            row_bq = int(row.get("box_qty") or 0)
+        except (TypeError, ValueError):
+            continue
+        if row_bq != bq:
+            continue
+        if _norm_catalog_field(row.get("brand")) != nb:
+            continue
+        if _norm_catalog_field(row.get("line")) != nl:
+            continue
+        if _norm_catalog_field(row.get("vitola")) != nv:
+            continue
+        wc = (str(row.get("wrapper_code") or "")).strip().upper()
+        if allowed_codes is not None and wc and wc not in allowed_codes:
+            continue
+        matches.append(row)
+
+    if len(matches) != 1:
+        return None
+
+    row = matches[0]
+    details: Dict[str, bool] = {
+        "brand_match": True,
+        "line_match": True,
+        "vitola_match": True,
+        "metadata_unique_match": True,
+    }
+    return {
+        "cigar_id": row["cigar_id"],
+        "score": 1.0,
+        "confidence": "HIGH",
+        "details": details,
+        "brand": row.get("brand"),
+        "line": row.get("line"),
+        "vitola": row.get("vitola"),
+        "wrapper": row.get("wrapper"),
+        "wrapper_code": row.get("wrapper_code"),
+        "size": row.get("size"),
+        "box_qty": row.get("box_qty"),
+    }
 
 
 def find_top_candidates(

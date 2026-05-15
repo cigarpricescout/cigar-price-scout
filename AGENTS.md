@@ -176,7 +176,7 @@ Consequences for the per-retailer CSV files in `static/data/`:
 | GET  | `/api/admin/retailer-registry` | Full registry view |
 | GET  | `/api/admin/url-status?url=&cid=` | Per-URL state for the operator extension (optional `cid=` when the URL maps to multiple CIDs). |
 | GET  | `/api/admin/master-vocab` | Brand/line/vitola/wrapper vocab for the popup datalist |
-| POST | `/api/admin/stage-approval` | Stage an extension approval |
+| POST | `/api/admin/stage-approval` | Stage a URL → **existing** `cigar_id` from `master_cigars` only. Unknown keys return 409 (new SKUs are added via catalog / admin, not here). |
 | POST | `/api/admin/skip-url` | Add a URL to `url_skip_list` |
 | GET  | `/api/admin/pending-new-retailers` | Operator queue of unknown-retailer URLs |
 | GET  | `/api/admin/retailer-requests` | Aggregated by hostname — prioritize anti-bot retailers to onboard |
@@ -185,7 +185,7 @@ Consequences for the per-retailer CSV files in `static/data/`:
 | POST | `/api/admin/mark-extension-published` | Local publisher confirms a row landed in the CSV |
 | GET  | `/api/admin/auto-publish-report` | Lists recent consumer auto-confirms (`source='consumer_auto'`) for daily spot-check; optional artifact via `daily-consumer-auto-publish-report.yml` when `ADMIN_SECRET_KEY` is set on the repo |
 | POST | `/api/admin/reject-auto-publish` | Operator reverses a bad consumer auto-publish row |
-| POST | `/api/admin/resolve-community-proposal` | Operator approves/edits/rejects a `community_url_proposals` row. The `/admin/review?source=community` page uses this for one-click triage. |
+| POST | `/api/admin/resolve-community-proposal` | Operator resolves a `community_url_proposals` row (`approve_existing` with a master `cigar_id`, or reject/duplicate). `approve_new` is disabled — add SKUs to master first. |
 
 Note: `/api/admin/url-status` also returns a `community_proposal` object
 on every response (null when none exists) so the operator extension
@@ -228,6 +228,11 @@ Every retailer is a row in `RETAILERS`. Fields:
   **In stock** fields (pre-filled from the page scrape). For `active`
   retailers the fields are hidden because the daily extractor will
   overwrite anything entered there.
+- When the operator clicks a **Similar CIDs** row or a **URL-based
+  candidate**, the popup **locks** approval to that row's exact
+  `cigar_id` and POSTs `cid` (not `cid_parts`) to `/api/admin/stage-approval`,
+  avoiding rebuild mismatches. Editing any cigar field or wrapper clears
+  the lock; building a brand-new CID still uses the form + `cid_parts`.
 - **Local publisher** (`tools/extension/publish_extension_approvals.py`):
   for `active` writes a *bare row* (only `cigar_id` + `url`, scraper
   fills the rest later); for `blocked`/`dormant` writes a *full row*
@@ -265,6 +270,10 @@ Examples:
 
 Rules:
 - All segments uppercase, whitespace-stripped.
+- The **parent** segment may be empty (`BRAND||LINE|…`) when the catalog has
+  no distinct parent company for that row. The operator extension preserves
+  this by defaulting `parent_brand` to blank; `build_cid()` only emits a
+  parent when it is explicitly non-empty (e.g. `PADRON|PADRON|PADRONSERIES|…`).
 - `SIZE` is `LENGTH×RING` (e.g., `6x46`).
 - `WRAPPERCODE` is a short code (SUN, HAB, MAD, CON, etc.). Human-readable
   wrapper name lives in the master catalog, not the CID. Consumers never
@@ -371,8 +380,9 @@ review via `tools/ai/review_matches.py`.
 (Operator-side UI not built yet as of 2026-05-13. Workflow:)
 1. `GET /api/admin/observed-prices-recent` to see context.
 2. `POST /api/admin/resolve-community-proposal` with the proposal_id and either:
-   - `action="approve_existing"` + `cid="..."`, OR
-   - `action="approve_new"` + `cid_parts={...}` (creates a new master CID).
+   - `action="approve_existing"` + `cid="..."` (must already exist in `master_cigars.csv`), OR
+   - `action="reject"` / `action="duplicate"` to close without staging.
+   (`approve_new` is disabled — add new SKUs to master via catalog/git first.)
 3. The local publisher next picks up the resulting `extension_staged_approvals` row.
 
 ---

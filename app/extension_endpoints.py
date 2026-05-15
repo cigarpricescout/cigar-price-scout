@@ -12,10 +12,11 @@ Design contract (matches the user's manual workflow exactly):
     i.e. only `cigar_id` and `url` are populated, every other column empty,
     so the retailer's existing extractor fills in title/price/in_stock on the
     next daily price-update run. This matches the format the user has used
-    for manual additions.
-  * For new CIDs (not yet in master_cigars), the same publisher also appends
-    a row to `data/master_cigars.csv` and upserts into `data/master_cigars.db`
-    BEFORE writing the retailer CSV row.
+    for manual additions. The `cigar_id` MUST already exist in
+    `data/master_cigars.csv` — the extension approval API refuses to stage
+    unknown keys (new SKUs are added through the catalog / admin workflow first).
+  * Legacy publisher behavior could still append master rows for very old
+    `is_new_cid` rows already in Postgres; new approvals no longer create that state.
   * Two sibling tables exist for adjacent flows:
       - `pending_new_retailers`: URLs hitting unknown hostnames.
       - `url_skip_list`: URLs the user clicked "Skip" on.
@@ -47,6 +48,7 @@ from pydantic import BaseModel, Field
 from app.cid_matcher import (
     build_cid,
     build_retailer_registry,
+    canonical_cigar_id_for_comparison,
     canonicalize_url,
     find_top_candidates,
     hostname_to_retailer_key,
@@ -316,7 +318,7 @@ class StageApprovalBody(BaseModel):
 class ResolveProposalBody(BaseModel):
     proposal_id: int
     # 'approve_existing' — map to existing CID; cid required.
-    # 'approve_new'      — operator creates a new CID via cid_parts.
+    # 'approve_new'      — disabled; add SKUs to master_cigars first, then approve_existing.
     # 'reject'           — discard the proposal.
     # 'duplicate'        — already covered by another proposal/CID.
     action: str
@@ -342,11 +344,50 @@ class IdsBody(BaseModel):
 
 
 def _pick_matched_cid(cids: List[str], cid_query: Optional[str]) -> Optional[str]:
+    """Pick the active cigar_id when one canonical URL maps to several CIDs.
+
+    If ``cid_query`` is present and matches an indexed CID, it wins (user /
+    extension picker). When multiple CIDs share a PDP and there is no query,
+    prefer the CID that appears at the **most distinct retailers** in
+    ``load_all_products()`` — otherwise the default ``cids[0]`` can be an
+    orphan SKU (e.g. a 30-count Pequeno row on the same URL as the Robusto
+    PDP), which makes the consumer comparison show "only 1 retailer" while
+    ``/compare`` for the common vitola still lists many retailers.
+    """
     if not cids:
         return None
-    if cid_query and cid_query in cids:
-        return cid_query
-    return cids[0]
+    q = (cid_query or "").strip()
+    if q and q in cids:
+        return q
+    if len(cids) == 1:
+        return cids[0]
+    try:
+        from app.main import load_all_products  # type: ignore
+    except Exception:
+        return cids[0]
+    try:
+        all_products = load_all_products()
+
+        def distinct_retailers_for(canonical_target: str) -> int:
+            return len({
+                p.retailer_key
+                for p in all_products
+                if canonical_cigar_id_for_comparison(getattr(p, "cigar_id", None) or "")
+                == canonical_target
+            })
+
+        ranked: List[Tuple[int, str]] = []
+        for c in cids:
+            canon = canonical_cigar_id_for_comparison(c)
+            ranked.append((distinct_retailers_for(canon), c))
+        ranked.sort(key=lambda t: (-t[0], t[1]))
+        return ranked[0][1]
+    except Exception:
+        logger.warning(
+            "_pick_matched_cid: coverage ranking failed; using first CID",
+            exc_info=True,
+        )
+        return cids[0]
 
 
 def _cigar_pick_options(cids: List[str]) -> List[Dict[str, str]]:
@@ -551,7 +592,8 @@ def _lookup_community_proposal(url: str) -> Optional[Dict]:
                    created_at, retailer_key,
                    (SELECT COUNT(*) FROM community_url_proposals
                     WHERE url=%s AND status='pending') AS total_pending,
-                   is_correction, current_cid, current_price_cents
+                   is_correction, current_cid, current_price_cents,
+                   COALESCE(needs_new_catalog_cid, FALSE) AS needs_new_catalog_cid
             FROM community_url_proposals
             WHERE url=%s AND status='pending'
             ORDER BY created_at DESC
@@ -590,6 +632,7 @@ def _lookup_community_proposal(url: str) -> Optional[Dict]:
                 round(current_price_cents / 100.0, 2)
                 if current_price_cents is not None else None
             ),
+            "needs_new_catalog_cid": bool(row[16]),
         }
     except Exception as e:
         logger.warning("lookup_community_proposal error: %s", e)
@@ -661,12 +704,12 @@ async def stage_approval(request: Request, body: StageApprovalBody):
     """Stage one extension approval. Writes Postgres only — no CSV/DB touch.
 
     The resolved CID is either:
-      * provided directly via `body.cid` (existing-CID approval), or
-      * built from `body.cid_parts` (form-edited CID; may or may not be in master).
+      * provided directly via `body.cid` (must match a row in master_cigars), or
+      * built from `body.cid_parts` only for admin / non-extension callers that
+        still send parts; the resulting string must also exist in master.
 
-    Whether the CID currently exists in master_cigars is recorded as
-    `is_new_cid`. The local publisher reads this flag to decide whether to
-    create a master row before writing the retailer CSV row.
+    New cigars are never created through this endpoint: unknown CIDs return
+    HTTP 409 so retailer CSVs never receive a key that is absent from master.
 
     The retailer CSV row written downstream is BARE — only `cigar_id` and
     `url` are populated, every other column empty — matching the user's
@@ -708,13 +751,32 @@ async def stage_approval(request: Request, body: StageApprovalBody):
         )
 
     cid_in_master = cid in _cache_state["master_by_cid"]
-    is_new_cid = not cid_in_master
+    if not cid_in_master:
+        alt = canonical_cigar_id_for_comparison(cid)
+        if alt and alt in _cache_state["master_by_cid"]:
+            cid = alt
+            cid_in_master = True
+            parts_dict = None
+            parsed = parse_cid(cid)
+            if not parsed:
+                return JSONResponse(
+                    {"error": f"invalid CID format after normalize: '{cid}'"},
+                    status_code=400,
+                )
+        else:
+            return JSONResponse(
+                {
+                    "error": (
+                        f"CID '{cid}' is not in master_cigars. "
+                        "Add the SKU to the master catalog first, then map this URL "
+                        "to that exact master key (use Similar CIDs in the operator "
+                        "extension). This API does not create new CIDs."
+                    )
+                },
+                status_code=409,
+            )
 
-    if is_new_cid and not body.create_if_missing:
-        return JSONResponse(
-            {"error": f"CID '{cid}' not in master and create_if_missing=False"},
-            status_code=409,
-        )
+    is_new_cid = False
 
     # When the CID is in master, we still capture its descriptive parts so the
     # row is self-describing for debugging — but the publisher only uses them
@@ -1665,7 +1727,8 @@ async def community_proposals(
                    observer_source, status, operator_notes, resolved_cid,
                    created_at, reviewed_at,
                    confirmed_price_cents,
-                   is_correction, current_cid, current_price_cents
+                   is_correction, current_cid, current_price_cents,
+                   COALESCE(needs_new_catalog_cid, FALSE) AS needs_new_catalog_cid
               FROM community_url_proposals
              WHERE status = %s
              ORDER BY created_at DESC
@@ -1735,13 +1798,11 @@ async def resolve_community_proposal(request: Request, body: ResolveProposalBody
     """Operator action on a single community proposal.
 
     Actions:
-      * approve_existing  — map URL to an existing CID (no master change).
+      * approve_existing  — map URL to an existing master `cigar_id` (required).
                             Stages an extension_staged_approvals row so the
                             local publisher writes a bare retailer-CSV row.
-      * approve_new       — operator promotes the proposal into a real CID.
-                            Stages an extension_staged_approvals row with
-                            is_new_cid=TRUE so the publisher creates the
-                            master_cigars row first.
+      * approve_new       — disabled (returns 409). Add the SKU to
+                            `data/master_cigars.csv` first, then use approve_existing.
       * reject / duplicate — closes the proposal, no staging.
     Every action also writes a review_decisions row for ML training.
     """
@@ -1776,6 +1837,21 @@ async def resolve_community_proposal(request: Request, body: ResolveProposalBody
         (pid, p_url, p_retailer, p_brand, p_line, p_vitola, p_size,
          p_wrapper, p_box_qty, p_title) = prop
 
+        if action == "approve_new":
+            conn.rollback()
+            conn.close()
+            return JSONResponse(
+                {
+                    "error": (
+                        "approve_new is disabled: add the cigar to "
+                        "data/master_cigars.csv (catalog workflow) first, then "
+                        "resolve this proposal with approve_existing and the "
+                        "exact master cigar_id."
+                    )
+                },
+                status_code=409,
+            )
+
         proposed_metadata = {
             "brand": p_brand, "line": p_line, "vitola": p_vitola,
             "size": p_size, "wrapper": p_wrapper, "box_qty": p_box_qty,
@@ -1785,7 +1861,7 @@ async def resolve_community_proposal(request: Request, body: ResolveProposalBody
         resolved_cid: Optional[str] = None
         final_metadata: Optional[Dict] = None
 
-        if action in ("approve_existing", "approve_new"):
+        if action == "approve_existing":
             if not p_retailer:
                 conn.rollback()
                 conn.close()
@@ -1794,44 +1870,48 @@ async def resolve_community_proposal(request: Request, body: ResolveProposalBody
                     status_code=400,
                 )
 
-            if action == "approve_existing":
-                if not body.cid:
+            if not body.cid:
+                conn.rollback()
+                conn.close()
+                return JSONResponse(
+                    {"error": "approve_existing requires `cid`"},
+                    status_code=400,
+                )
+            resolved_cid = body.cid.strip()
+            if resolved_cid not in _cache_state["master_by_cid"]:
+                alt = canonical_cigar_id_for_comparison(resolved_cid)
+                if alt in _cache_state["master_by_cid"]:
+                    resolved_cid = alt
+                else:
                     conn.rollback()
                     conn.close()
                     return JSONResponse(
-                        {"error": "approve_existing requires `cid`"},
-                        status_code=400,
+                        {
+                            "error": (
+                                f"CID '{body.cid.strip()}' is not in master_cigars. "
+                                "Add the SKU to master first, then approve with "
+                                "that exact cigar_id."
+                            )
+                        },
+                        status_code=409,
                     )
-                resolved_cid = body.cid.strip()
-                parsed = parse_cid(resolved_cid)
-                if not parsed:
-                    conn.rollback()
-                    conn.close()
-                    return JSONResponse(
-                        {"error": f"invalid CID '{resolved_cid}'"},
-                        status_code=400,
-                    )
-                is_new = resolved_cid not in _cache_state["master_by_cid"]
-                parts_dict = {
-                    "brand": parsed["brand"], "parent_brand": parsed["parent_brand"],
-                    "line": parsed["line"], "vitola": parsed["vitola"],
-                    "vitola2": parsed["vitola2"], "size": parsed["size"],
-                    "wrapper_code": parsed["wrapper_code"],
-                    "box_qty": _extract_box_qty(parsed["box_qty_str"]) or 0,
-                    "wrapper": None,
-                }
-            else:  # approve_new
-                if not body.cid_parts:
-                    conn.rollback()
-                    conn.close()
-                    return JSONResponse(
-                        {"error": "approve_new requires `cid_parts`"},
-                        status_code=400,
-                    )
-                parts_dict = body.cid_parts.dict()
-                parts_dict["box_qty_str"] = f"BOX{int(parts_dict['box_qty'])}"
-                resolved_cid = build_cid(parts_dict)
-                is_new = resolved_cid not in _cache_state["master_by_cid"]
+            parsed = parse_cid(resolved_cid)
+            if not parsed:
+                conn.rollback()
+                conn.close()
+                return JSONResponse(
+                    {"error": f"invalid CID '{resolved_cid}'"},
+                    status_code=400,
+                )
+            is_new = False
+            parts_dict = {
+                "brand": parsed["brand"], "parent_brand": parsed["parent_brand"],
+                "line": parsed["line"], "vitola": parsed["vitola"],
+                "vitola2": parsed["vitola2"], "size": parsed["size"],
+                "wrapper_code": parsed["wrapper_code"],
+                "box_qty": _extract_box_qty(parsed["box_qty_str"]) or 0,
+                "wrapper": None,
+            }
 
             final_metadata = {k: parts_dict.get(k) for k in (
                 "brand", "parent_brand", "line", "vitola", "vitola2",
@@ -1873,8 +1953,19 @@ async def resolve_community_proposal(request: Request, body: ResolveProposalBody
                 p_title, None, None,
             ))
 
+        elif action in ("reject", "duplicate"):
+            resolved_cid = None
+            final_metadata = None
+        else:
+            conn.rollback()
+            conn.close()
+            return JSONResponse(
+                {"error": f"unsupported action '{action}' after validation"},
+                status_code=400,
+            )
+
         # Close the proposal regardless of approve/reject path.
-        new_status = "approved" if action in ("approve_existing", "approve_new") else action
+        new_status = "approved" if action == "approve_existing" else action
         cur.execute("""
             UPDATE community_url_proposals
                SET status=%s, operator_notes=%s,
