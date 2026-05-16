@@ -156,7 +156,12 @@ function renderMappedCigarsSection(response) {
               <div class="mapped-cigar-label">${escapeHtml(o.label)}</div>
               <code class="mapped-cigar-cid">${escapeHtml(o.cigar_id)}</code>
             </div>
-            <button type="button" class="secondary edit-cid-btn" data-cid="${escapeAttr(o.cigar_id)}">Edit</button>
+            <div class="mapped-cigar-actions" style="display:flex;gap:6px;flex-shrink:0">
+              <button type="button" class="secondary edit-cid-btn" data-cid="${escapeAttr(o.cigar_id)}">Edit</button>
+              ${o.removable_staged
+                ? `<button type="button" class="secondary remove-staged-cid-btn" data-cid="${escapeAttr(o.cigar_id)}" style="color:#b91c1c;border-color:#fecaca">Remove</button>`
+                : ""}
+            </div>
           </div>
         `).join("")}
       </div>`
@@ -168,7 +173,7 @@ function renderMappedCigarsSection(response) {
       ${picker}
       ${listBlock}
       ${options.length > 1
-        ? `<div class="hint-inline" style="margin-top:8px;font-size:11px;color:#6b7280">Each mapping is a separate master SKU on this page. Edit one without removing the others.</div>`
+        ? `<div class="hint-inline" style="margin-top:8px;font-size:11px;color:#6b7280">Each mapping is a separate master SKU on this page. Edit one without removing the others.${options.some((o) => o.removable_staged) ? " <strong>Remove</strong> only appears for pending operator staging (not CSV rows) — delete duplicate CSV lines in git if needed." : ""}</div>`
         : ""}
     </div>`;
 }
@@ -765,6 +770,40 @@ function wireMatchedActions(tab, response) {
     btn.addEventListener("click", () => {
       const cid = btn.getAttribute("data-cid") || "";
       openCandidateForEdit(tab, response, cid, { force: false });
+    });
+  });
+
+  document.querySelectorAll(".remove-staged-cid-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const rmCid = (btn.getAttribute("data-cid") || "").trim();
+      if (!rmCid || !response.retailer_key) return;
+      const canonUrl = (response.url || tab.url || "").trim();
+      const msg =
+        "Remove this pending staged mapping from the live index?\n\n" +
+        "(CSV-only rows are not removed — edit static/data in git.)\n\n" +
+        rmCid;
+      if (!confirm(msg)) return;
+      void (async () => {
+        try {
+          await apiFetch("/api/admin/revoke-staged-url-mapping", {
+            method: "POST",
+            body: {
+              retailer_key: response.retailer_key,
+              url: canonUrl,
+              cid: rmCid,
+            },
+          });
+          toast("Removed pending mapping");
+          chrome.runtime.sendMessage({ type: "invalidateCache", url: tab.url }).catch(() => {});
+          const payload = await chrome.runtime.sendMessage({ type: "getStatusForTab", forceRefresh: true });
+          if (payload && payload.response && payload.tab) {
+            if (payload.response.state === "matched") renderMatched(payload.tab, payload.response);
+            else if (payload.response.state === "seen") renderSeen(payload.tab, payload.response);
+          }
+        } catch (e) {
+          toast(String((e && e.message) || e), "error");
+        }
+      })();
     });
   });
 

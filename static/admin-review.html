@@ -95,9 +95,11 @@
   <div class="stats" id="stats">Loading...</div>
 </div>
 
-<div class="filters source-toggle" id="source-toggle" style="background:#fafafa;border-bottom:1px solid #ddd;justify-content:center">
-  <button id="btn-src-harvester" class="active" onclick="setSource('harvester')">Harvester queue</button>
-  <button id="btn-src-community" onclick="setSource('community')">Community submissions <span id="cnt-community"></span></button>
+<div class="filters source-toggle" id="source-toggle" style="background:#fafafa;border-bottom:1px solid #ddd;justify-content:center;flex-wrap:wrap;gap:6px">
+  <button id="btn-src-harvester" class="active" type="button" onclick="setSource('harvester')">Harvester <span id="cnt-harvester"></span></button>
+  <button id="btn-src-community" type="button" onclick="setSource('community')">Community <span id="cnt-community"></span></button>
+  <button id="btn-src-extension" type="button" onclick="setSource('extension')">CSV publish queue <span id="cnt-extension"></span></button>
+  <button id="btn-src-retailers" type="button" onclick="setSource('retailers')">New retailers <span id="cnt-retailers"></span></button>
 </div>
 
 <div class="filters" id="filters">
@@ -144,15 +146,14 @@ let currentBrand = '';
 let currentSearch = '';
 let totalMatches = 0;
 let selectedTokens = new Set();
-// Source toggle: 'harvester' uses url_staged_matches (default, the
-// existing weekly-discovery agent flow). 'community' uses
-// community_url_proposals (consumer extension submissions). Persisted
-// via ?source= so links into either view are stable.
+// Source toggle: harvester | community | extension | retailers
 let currentSource = (new URLSearchParams(location.search).get('source') || 'harvester').toLowerCase();
-if (currentSource !== 'community') currentSource = 'harvester';
+if (!['harvester', 'community', 'extension', 'retailers'].includes(currentSource)) currentSource = 'harvester';
 
 async function fetchMatches() {
   if (currentSource === 'community') return fetchCommunityProposals();
+  if (currentSource === 'extension') return fetchExtensionPublishQueue();
+  if (currentSource === 'retailers') return fetchNewRetailerQueue();
   const params = new URLSearchParams({key: KEY, offset: currentOffset, limit: PAGE_SIZE});
   if (currentConfidence) params.set('confidence', currentConfidence);
   if (currentRetailer) params.set('retailer', currentRetailer);
@@ -222,6 +223,111 @@ async function fetchCommunityProposals() {
   };
 }
 
+async function fetchExtensionPublishQueue() {
+  const params = new URLSearchParams({ key: KEY, limit: '500' });
+  const resp = await fetch('/api/admin/pending-extension-approvals?' + params);
+  if (!resp.ok) {
+    document.getElementById('cards').innerHTML = '<div class="empty"><h2>Error loading</h2><p>CSV publish queue</p></div>';
+    return null;
+  }
+  const data = await resp.json();
+  let rows = data.pending || [];
+  if (currentRetailer) rows = rows.filter((r) => r.retailer_key === currentRetailer);
+  if (currentBrand) rows = rows.filter((r) => (r.brand || '').toLowerCase() === currentBrand.toLowerCase());
+  if (currentSearch) {
+    const q = currentSearch.toLowerCase();
+    rows = rows.filter((r) =>
+      (r.cid || '').toLowerCase().includes(q) ||
+      (r.url || '').toLowerCase().includes(q) ||
+      (r.title || '').toLowerCase().includes(q) ||
+      (r.brand || '').toLowerCase().includes(q),
+    );
+  }
+  const matches = rows.map(extensionRowToMatchCard);
+  const retailers = [...new Set((data.pending || []).map((r) => r.retailer_key).filter(Boolean))].sort();
+  const brands = [...new Set((data.pending || []).map((r) => r.brand).filter(Boolean))].sort();
+  return {
+    total: matches.length,
+    offset: 0,
+    limit: PAGE_SIZE,
+    confidence_counts: {},
+    available_retailers: retailers,
+    available_brands: brands,
+    matches,
+  };
+}
+
+function extensionRowToMatchCard(r) {
+  const productTitle = r.title || [r.brand, r.line, r.vitola].filter(Boolean).join(' ') || '(no title)';
+  const src = (r.source || 'operator').replace(/'/g, '');
+  const reason = `product='${productTitle.replace(/'/g, '')}' variant='${src}'`;
+  return {
+    token: `extstaged:${r.id}`,
+    cid: r.cid || '',
+    retailer_key: r.retailer_key || '',
+    url: r.url || '',
+    confidence: 'HIGH',
+    reason,
+    brand: r.brand || '',
+    line: r.line || '',
+    vitola: r.vitola || '',
+    wrapper: r.wrapper || '',
+    size: r.size || '',
+    box_qty: r.box_qty || null,
+    price: r.price != null ? Number(r.price) : null,
+    in_stock: r.in_stock,
+    created_at: r.created_at,
+    _extension_staged: true,
+    _ext_source: r.source || 'operator',
+    _is_new_cid: !!r.is_new_cid,
+  };
+}
+
+async function fetchNewRetailerQueue() {
+  const resp = await fetch('/api/admin/pending-new-retailers?' + new URLSearchParams({ key: KEY }));
+  if (!resp.ok) {
+    document.getElementById('cards').innerHTML = '<div class="empty"><h2>Error loading</h2><p>New retailers</p></div>';
+    return null;
+  }
+  const data = await resp.json();
+  let rows = data.pending || [];
+  if (currentSearch) {
+    const q = currentSearch.toLowerCase();
+    rows = rows.filter((r) =>
+      (r.hostname || '').toLowerCase().includes(q) ||
+      (r.url || '').toLowerCase().includes(q),
+    );
+  }
+  const matches = rows.map((r) => ({
+    token: `newretailer:${r.id}`,
+    cid: '',
+    retailer_key: '',
+    url: r.url || '',
+    confidence: 'MEDIUM',
+    reason: `product='${(r.hostname || '').replace(/'/g, '')}' variant='new-retailer-request'`,
+    brand: r.hostname || '',
+    line: '',
+    vitola: '',
+    wrapper: '',
+    size: '',
+    box_qty: null,
+    price: null,
+    in_stock: null,
+    created_at: r.created_at,
+    _new_retailer: true,
+    _nr_id: r.id,
+  }));
+  return {
+    total: matches.length,
+    offset: 0,
+    limit: PAGE_SIZE,
+    confidence_counts: {},
+    available_retailers: [],
+    available_brands: [],
+    matches,
+  };
+}
+
 function confidenceLabel(p) {
   const tc = p.top_candidate;
   if (!tc) return 'LOW';
@@ -287,6 +393,8 @@ function parseReason(reason) {
 
 function renderCard(m) {
   if (m._community) return renderCommunityCard(m);
+  if (m._extension_staged) return renderExtensionStagedCard(m);
+  if (m._new_retailer) return renderNewRetailerCard(m);
   const price = m.price ? `$${m.price.toFixed(2)}` : '';
   const stock = m.in_stock === true ? 'In Stock' : m.in_stock === false ? 'Out of Stock' : '';
   const stockColor = m.in_stock === true ? '#2e7d32' : '#c62828';
@@ -405,6 +513,71 @@ function renderCommunityCard(m) {
   </div>`;
 }
 
+function renderExtensionStagedCard(m) {
+  const selected = selectedTokens.has(m.token) ? ' selected' : '';
+  const parsed = parseReason(m.reason);
+  const srcLabel = m._ext_source === 'consumer_auto' ? 'Consumer · auto (YES)' : 'Operator extension';
+  const price = m.price != null ? `$${m.price.toFixed(2)}` : '';
+  const newCidWarn = m._is_new_cid
+    ? '<div style="margin-top:6px;font-size:11px;color:#c62828;font-weight:600">is_new_cid — publisher must append master before retailer CSV.</div>'
+    : '';
+  return `<div class="card" id="card-${m.token}">
+    <div class="card-body">
+      <div class="top-row">
+        <div>
+          <div class="section-label">CSV publish queue (Postgres)</div>
+        </div>
+        <span class="confidence HIGH">STAGED</span>
+      </div>
+      <div style="font-size:11px;padding:8px;background:#ecfdf5;color:#14532d;border-radius:6px;margin-top:4px;line-height:1.4">
+        Already approved into the live overlay. <strong>Windows publisher</strong> writes <code>static/data/{retailer}.csv</code> on the next run.
+      </div>
+      <div class="cid-full">${escHTML(m.cid || '—')}</div>
+      ${newCidWarn}
+      <hr class="divider">
+      <div class="section-label">Source</div>
+      <div class="product-meta">
+        <span class="retailer-tag">${escHTML(m.retailer_key)}</span>
+        <span style="font-size:12px;color:#666">${escHTML(srcLabel)}</span>
+        ${price ? `<span style="font-weight:600">${price}</span>` : ''}
+      </div>
+      <div class="section-label">Page title</div>
+      <div class="product-title">${escHTML(parsed.productTitle || '—')}</div>
+      <div class="url-row"><a href="${m.url}" target="_blank" rel="noopener">${escHTML(m.url)}</a></div>
+    </div>
+    <div class="actions">
+      <button class="approve-btn" style="background:#e8e8e8;color:#555;cursor:default" type="button" disabled title="Use Withdraw if this row should not reach git">Queued</button>
+      <button class="reject-btn" onclick="reviewOne('${m.token}','reject')">Withdraw</button>
+      <button class="select-btn${selected}" onclick="toggleSelect('${m.token}')" title="Select for bulk">&#9744;</button>
+    </div>
+  </div>`;
+}
+
+function renderNewRetailerCard(m) {
+  const selected = selectedTokens.has(m.token) ? ' selected' : '';
+  const host = m.brand || '(hostname)';
+  return `<div class="card" id="card-${m.token}">
+    <div class="card-body">
+      <div class="top-row">
+        <div>
+          <div class="section-label">New retailer request</div>
+        </div>
+        <span class="confidence MEDIUM">HOST</span>
+      </div>
+      <div class="cid-name">${escHTML(host)}</div>
+      <div style="font-size:12px;color:#555;margin-top:8px;line-height:1.45">
+        Not a SKU mapping — someone asked to support this shop. Add <code>RETAILERS</code> + CSV in git, deploy, then run
+        <code>sync_new_retailer_queue.py</code> and mark rows processed with <code>mark-retailer-queued</code>.
+      </div>
+      <div class="url-row"><a href="${m.url}" target="_blank" rel="noopener">${escHTML(m.url)}</a></div>
+    </div>
+    <div class="actions">
+      <button class="approve-btn" type="button" onclick="window.open('${m.url.replace(/'/g, "\\'")}', '_blank', 'noopener')">Open URL</button>
+      <button class="select-btn${selected}" onclick="toggleSelect('${m.token}')" title="Select for bulk">&#9744;</button>
+    </div>
+  </div>`;
+}
+
 // Renders the proposed-vs-current diff inside a correction card. We
 // don't have the master record's brand/line/vitola server-side at this
 // point (that would require another lookup against current_cid), so
@@ -493,16 +666,18 @@ async function loadPage() {
   const data = await fetchMatches();
   if (!data) return;
 
-  // Refresh the community-queue badge whenever we load a page so a
-  // local action (approve/reject) immediately decrements it without
-  // waiting for the 60s timer.
-  refreshCommunityBadge();
+  // Refresh tab badges after list changes.
+  refreshQueueBadges();
 
   totalMatches = data.total;
   const cc = data.confidence_counts || {};
 
-  document.getElementById('stats').textContent =
-    `${totalMatches} pending | ${cc.HIGH || 0} HIGH | ${cc.MEDIUM || 0} MEDIUM`;
+  if (currentSource === 'harvester') {
+    document.getElementById('stats').textContent =
+      `${totalMatches} pending | ${cc.HIGH || 0} HIGH | ${cc.MEDIUM || 0} MEDIUM`;
+  } else {
+    document.getElementById('stats').textContent = `${totalMatches} item(s) in this queue`;
+  }
   document.getElementById('cnt-high').textContent = cc.HIGH ? `(${cc.HIGH})` : '';
   document.getElementById('cnt-medium').textContent = cc.MEDIUM ? `(${cc.MEDIUM})` : '';
 
@@ -543,7 +718,27 @@ async function reviewOne(token, action) {
   card.classList.add('removing');
 
   try {
-    if (token.startsWith('community:')) {
+    if (token.startsWith('extstaged:')) {
+      const id = parseInt(token.split(':')[1], 10);
+      if (action === 'reject') {
+        const resp = await fetch('/api/admin/supersede-extension-staged', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Admin-Key': KEY },
+          body: JSON.stringify({ ids: [id] }),
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data.error || 'failed');
+        showToast('Withdrawn from publish queue');
+      } else {
+        showToast('Already queued — use Withdraw to cancel before publisher runs');
+        card.classList.remove('removing');
+        return;
+      }
+    } else if (token.startsWith('newretailer:')) {
+      showToast('Onboard in git — see card instructions');
+      card.classList.remove('removing');
+      return;
+    } else if (token.startsWith('community:')) {
       // Community proposal: hits resolve-community-proposal with the
       // top_candidate's CID for approve, or action='reject' for reject.
       const proposal_id = parseInt(token.split(':')[1], 10);
@@ -605,12 +800,15 @@ function clearSelection() {
 async function bulkAction(action) {
   if (selectedTokens.size === 0) return;
   const tokens = [...selectedTokens];
-  const harvesterTokens = tokens.filter(t => !t.startsWith('community:'));
-  const communityIds = tokens
-    .filter(t => t.startsWith('community:'))
-    .map(t => parseInt(t.split(':')[1], 10));
+    const harvesterTokens = tokens.filter(t => !t.startsWith('community:') && !t.startsWith('extstaged:') && !t.startsWith('newretailer:'));
+    const communityIds = tokens
+      .filter(t => t.startsWith('community:'))
+      .map(t => parseInt(t.split(':')[1], 10));
+    const extIds = tokens
+      .filter(t => t.startsWith('extstaged:'))
+      .map(t => parseInt(t.split(':')[1], 10));
 
-  try {
+    try {
     if (harvesterTokens.length) {
       const resp = await fetch('/api/admin/bulk-review', {
         method: 'POST',
@@ -619,6 +817,18 @@ async function bulkAction(action) {
       });
       const data = await resp.json();
       showToast(`${data.updated || 0} harvester ${action === 'approve' ? 'approved' : 'rejected'}`);
+    }
+    if (extIds.length && action === 'reject') {
+      const resp = await fetch('/api/admin/supersede-extension-staged', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Key': KEY },
+        body: JSON.stringify({ ids: extIds }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (resp.ok) showToast(`Withdrew ${data.superseded || extIds.length} from publish queue`);
+      else showToast(data.error || 'extension withdraw failed', true);
+    } else if (extIds.length && action === 'approve') {
+      showToast('Extension queue: use Withdraw, not bulk approve', true);
     }
     if (communityIds.length) {
       // No bulk endpoint on the server side yet — fan out one request
@@ -664,7 +874,7 @@ function setConfidence(val) {
 }
 
 function setSource(src) {
-  if (src !== 'community' && src !== 'harvester') return;
+  if (!['harvester', 'community', 'extension', 'retailers'].includes(src)) return;
   if (currentSource === src) return;
   currentSource = src;
   currentOffset = 0;
@@ -673,17 +883,20 @@ function setSource(src) {
   currentBrand = '';
   currentSearch = '';
   document.getElementById('search-box').value = '';
-  // Update toggle button styles
   document.getElementById('btn-src-harvester').classList.toggle('active', src === 'harvester');
   document.getElementById('btn-src-community').classList.toggle('active', src === 'community');
-  // Reset the confidence-row "All" pill so the previous selection
-  // doesn't visually persist when switching.
+  document.getElementById('btn-src-extension').classList.toggle('active', src === 'extension');
+  document.getElementById('btn-src-retailers').classList.toggle('active', src === 'retailers');
   document.querySelectorAll('#filters button[id^="btn-"]').forEach(b => b.classList.remove('active'));
   const allBtn = document.getElementById('btn-all');
   if (allBtn) allBtn.classList.add('active');
-  // Update page title + URL so refresh keeps the chosen view.
-  document.getElementById('page-title').textContent =
-    src === 'community' ? 'Community Submissions' : 'Match Review';
+  const titles = {
+    harvester: 'Harvester queue',
+    community: 'Community submissions',
+    extension: 'CSV publish queue',
+    retailers: 'New retailer requests',
+  };
+  document.getElementById('page-title').textContent = titles[src] || 'Review';
   const url = new URL(location.href);
   if (src === 'harvester') url.searchParams.delete('source');
   else url.searchParams.set('source', src);
@@ -691,19 +904,47 @@ function setSource(src) {
   loadPage();
 }
 
-async function refreshCommunityBadge() {
-  // Independent of the active mode — always show how many community
-  // proposals are pending so the operator sees the queue at a glance.
-  // Skip candidate matching to keep the badge query fast.
+async function refreshQueueBadges() {
   try {
     const resp = await fetch('/api/admin/community-proposals?' + new URLSearchParams({
       key: KEY, status: 'pending', limit: 500, include_candidates: 'false',
     }));
-    if (!resp.ok) return;
-    const data = await resp.json();
-    const n = (data.results || []).length;
-    const badge = document.getElementById('cnt-community');
-    if (badge) badge.textContent = n > 0 ? `(${n >= 500 ? '500+' : n})` : '';
+    if (resp.ok) {
+      const data = await resp.json();
+      const n = (data.results || []).length;
+      const badge = document.getElementById('cnt-community');
+      if (badge) badge.textContent = n > 0 ? `(${n >= 500 ? '500+' : n})` : '';
+    }
+  } catch (e) { /* silent */ }
+  try {
+    const resp = await fetch('/api/admin/pending-matches?' + new URLSearchParams({
+      key: KEY, offset: '0', limit: '1',
+    }));
+    if (resp.ok) {
+      const j = await resp.json();
+      const el = document.getElementById('cnt-harvester');
+      if (el) el.textContent = (j.total || 0) > 0 ? `(${j.total})` : '';
+    }
+  } catch (e) { /* silent */ }
+  try {
+    const resp = await fetch('/api/admin/pending-extension-approvals?' + new URLSearchParams({
+      key: KEY, limit: '500',
+    }));
+    if (resp.ok) {
+      const j = await resp.json();
+      const n = (j.pending || []).length;
+      const el = document.getElementById('cnt-extension');
+      if (el) el.textContent = n > 0 ? `(${n >= 500 ? '500+' : n})` : '';
+    }
+  } catch (e) { /* silent */ }
+  try {
+    const resp = await fetch('/api/admin/pending-new-retailers?' + new URLSearchParams({ key: KEY }));
+    if (resp.ok) {
+      const j = await resp.json();
+      const n = (j.pending || []).length;
+      const el = document.getElementById('cnt-retailers');
+      if (el) el.textContent = n > 0 ? `(${n})` : '';
+    }
   } catch (e) { /* silent */ }
 }
 function setRetailer(val) { currentRetailer = val; currentOffset = 0; loadPage(); }
@@ -728,15 +969,19 @@ function showToast(msg, err) {
 (function initSource() {
   document.getElementById('btn-src-harvester').classList.toggle('active', currentSource === 'harvester');
   document.getElementById('btn-src-community').classList.toggle('active', currentSource === 'community');
-  document.getElementById('page-title').textContent =
-    currentSource === 'community' ? 'Community Submissions' : 'Match Review';
+  document.getElementById('btn-src-extension').classList.toggle('active', currentSource === 'extension');
+  document.getElementById('btn-src-retailers').classList.toggle('active', currentSource === 'retailers');
+  const titles = {
+    harvester: 'Harvester queue',
+    community: 'Community submissions',
+    extension: 'CSV publish queue',
+    retailers: 'New retailer requests',
+  };
+  document.getElementById('page-title').textContent = titles[currentSource] || 'Review';
 })();
 
-refreshCommunityBadge();
-// Refresh the badge every 60s so operator notices new submissions
-// without having to reload — same cadence the popup uses for its
-// own /url-status pings.
-setInterval(refreshCommunityBadge, 60_000);
+refreshQueueBadges();
+setInterval(refreshQueueBadges, 60_000);
 
 loadPage();
 </script>

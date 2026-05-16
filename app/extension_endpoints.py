@@ -38,7 +38,7 @@ import os
 import re
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Query, Request
@@ -82,6 +82,9 @@ _cache_state = {
     "master_by_cid": {},    # dict[str, dict]
     "retailers": {},       # hostname -> retailer_key
     "url_index": {},       # url -> (retailer_key, List[cigar_id])
+    # (canonical_url, retailer_key, cid) for pending extension_staged_approvals
+    # overlay rows only — used to offer "remove wrong staged SKU" in operator UI.
+    "staged_overlay_triples": frozenset(),
 }
 
 
@@ -133,8 +136,10 @@ def _refresh_cache(force: bool = False) -> None:
         # to drain to CSV. CSV wins on collision (already-published
         # rows shouldn't be overwritten by stale staging data).
         overlay_rows = _load_staged_approval_url_overlay()
+        staged_overlay_triples: Set[Tuple[str, str, str]] = set()
         overlay_added = 0
         for o_url, retailer_key, cid in overlay_rows:
+            staged_overlay_triples.add((o_url, retailer_key, cid))
             before = url_index.get(o_url)
             merge_cid_into_url_index(url_index, o_url, retailer_key, cid)
             if url_index.get(o_url) != before:
@@ -146,6 +151,7 @@ def _refresh_cache(force: bool = False) -> None:
             "master_by_cid": master_by_cid,
             "retailers": retailers,
             "url_index": url_index,
+            "staged_overlay_triples": frozenset(staged_overlay_triples),
         })
         logger.info(
             "Extension cache refreshed: %d master CIDs, %d retailer hosts, "
@@ -344,6 +350,13 @@ class IdsBody(BaseModel):
     ids: List[int] = Field(default_factory=list)
 
 
+class RevokeStagedUrlMappingBody(BaseModel):
+    """Drop one pending overlay CID for a URL (wrong duplicate SKU)."""
+    retailer_key: str = Field(..., min_length=1)
+    url: str = Field(..., min_length=1)
+    cid: str = Field(..., min_length=1)
+
+
 def _pick_matched_cid(cids: List[str], cid_query: Optional[str]) -> Optional[str]:
     """Pick the active cigar_id when one canonical URL maps to several CIDs.
 
@@ -416,6 +429,23 @@ def _cigar_pick_options(cids: List[str]) -> List[Dict[str, str]]:
             label = cid
         out.append({"cigar_id": cid, "label": label})
     return out
+
+
+def _cigar_pick_options_with_staged_flags(
+    cids: List[str], canonical_url: str, retailer_key: str
+) -> Optional[List[Dict[str, object]]]:
+    """Multi-CID picker entries, with ``removable_staged`` when sourced from overlay."""
+    if len(cids) <= 1:
+        return None
+    triples = _cache_state.get("staged_overlay_triples") or frozenset()
+    opts: List[Dict[str, object]] = []
+    for row in _cigar_pick_options(cids):
+        cid = str(row.get("cigar_id") or "")
+        opts.append({
+            **row,
+            "removable_staged": (canonical_url, retailer_key, cid) in triples,
+        })
+    return opts
 
 
 def _operator_listing_source_payload(
@@ -550,7 +580,7 @@ async def url_status(
     rk_live, cids_live = url_index_entry_cids(live_hit)
     if rk_live == retailer_key and cids_live:
         matched_cid = _pick_matched_cid(cids_live, cid)
-        cigar_options = _cigar_pick_options(cids_live) if len(cids_live) > 1 else None
+        cigar_options = _cigar_pick_options_with_staged_flags(cids_live, url, retailer_key)
         return {
             "state": "matched",
             "retailer_key": retailer_key,
@@ -578,7 +608,7 @@ async def url_status(
         rk_fs, cids_fs = url_index_entry_cids(live_for_seen)
         if rk_fs == retailer_key and len(cids_fs) > 1:
             seen_matched = _pick_matched_cid(cids_fs, (cid or "").strip() or seen_cid)
-            seen_options = _cigar_pick_options(cids_fs)
+            seen_options = _cigar_pick_options_with_staged_flags(cids_fs, url, retailer_key)
         return {
             "state": "seen",
             "retailer_key": retailer_key,
@@ -1110,7 +1140,15 @@ async def queue_new_retailer(request: Request, body: QueueNewRetailerBody):
 # ── GET/POST: local-publisher endpoints ───────────────────────────────
 
 @router.get("/pending-extension-approvals")
-async def pending_extension_approvals(request: Request):
+async def pending_extension_approvals(
+    request: Request,
+    limit: Optional[int] = Query(
+        None,
+        ge=1,
+        le=2000,
+        description="Cap rows (dashboard). Omit for full queue (local publisher).",
+    ),
+):
     """Local publisher fetches all pending extension approvals.
 
     Includes both new-CID rows (is_new_cid=TRUE — must be created in master
@@ -1127,11 +1165,13 @@ async def pending_extension_approvals(request: Request):
             SELECT id, cid, retailer_key, url, is_new_cid,
                    brand, parent_brand, line, vitola, vitola2, size,
                    wrapper_code, wrapper, box_qty,
-                   title, price, in_stock, created_at
+                   title, price, in_stock, source, created_at
             FROM extension_staged_approvals
             WHERE status='pending'
             ORDER BY is_new_cid DESC, created_at ASC
-        """)
+        """ + (" LIMIT %s" if limit is not None else ""),
+            (limit,) if limit is not None else (),
+        )
         rows = cur.fetchall()
         conn.close()
         # Include extractor_status per row so the local publisher can decide
@@ -1153,12 +1193,53 @@ async def pending_extension_approvals(request: Request):
                 "title": r[14],
                 "price": float(r[15]) if r[15] is not None else None,
                 "in_stock": r[16],
-                "created_at": str(r[17]) if r[17] else None,
+                "source": (r[17] or "operator").strip(),
+                "created_at": str(r[18]) if r[18] else None,
                 "extractor_status": get_extractor_status(r[2]),
             } for r in rows
         ]}
     except Exception as e:
         logger.exception("pending_extension_approvals failed: %s", e)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@router.post("/supersede-extension-staged")
+async def supersede_extension_staged(request: Request, body: IdsBody):
+    """Mark extension_staged_approvals rows superseded before the publisher runs.
+
+    Used when a URL→CID row was staged by mistake (wrong duplicate SKU) or
+    should not be written to git CSVs. Does not touch retailer CSVs.
+    """
+    auth = _check_admin(request)
+    if auth:
+        return auth
+    if not body.ids:
+        return {"superseded": 0}
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            UPDATE extension_staged_approvals
+               SET status = 'superseded'
+             WHERE id = ANY(%s) AND status = 'pending'
+            """,
+            (list(body.ids),),
+        )
+        n = cur.rowcount or 0
+        conn.commit()
+        conn.close()
+        _refresh_cache(force=True)
+        try:
+            from app.main import _product_cache  # type: ignore
+
+            _product_cache["data"] = None
+            _product_cache["timestamp"] = 0
+        except Exception as e:
+            logger.warning("product cache bust after supersede failed: %s", e)
+        return {"superseded": n}
+    except Exception as e:
+        logger.exception("supersede_extension_staged failed: %s", e)
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
@@ -1327,6 +1408,80 @@ async def mark_retailer_queued(request: Request, body: IdsBody):
         return {"processed": updated}
     except Exception as e:
         logger.exception("mark_retailer_queued failed: %s", e)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@router.post("/revoke-staged-url-mapping")
+async def revoke_staged_url_mapping(request: Request, body: RevokeStagedUrlMappingBody):
+    """Supersede pending ``extension_staged_approvals`` for one (retailer_key, url, cid).
+
+    Removes that row's contribution to the live ``url_index`` overlay on the
+    next cache refresh. Does **not** edit retailer CSVs on disk (Railway never
+    does). If a duplicate mapping was already published into git, delete the
+    extra CSV row locally and push.
+    """
+    auth = _check_admin(request)
+    if auth:
+        return auth
+    url_canon = canonicalize_url(body.url.strip())
+    rk = body.retailer_key.strip()
+    cid = body.cid.strip()
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT id, url FROM extension_staged_approvals
+             WHERE retailer_key = %s AND cid = %s AND status = 'pending'
+            """,
+            (rk, cid),
+        )
+        ids = [row[0] for row in cur.fetchall() if canonicalize_url(row[1]) == url_canon]
+        if not ids:
+            conn.close()
+            return JSONResponse(
+                {
+                    "error": (
+                        "No pending staged row matched. This CID may come only from "
+                        f"static/data/{rk}.csv — remove that row locally, commit, and push."
+                    ),
+                },
+                status_code=404,
+            )
+        cur.execute(
+            """
+            UPDATE extension_staged_approvals
+               SET status = 'superseded'
+             WHERE id = ANY(%s)
+            """,
+            (ids,),
+        )
+        updated = cur.rowcount or 0
+        conn.commit()
+        conn.close()
+
+        _refresh_cache(force=True)
+        try:
+            from app.main import _product_cache  # type: ignore
+
+            _product_cache["data"] = None
+            _product_cache["timestamp"] = 0
+        except Exception as e:
+            logger.warning("product cache bust after revoke failed: %s", e)
+
+        _log_review_decision(
+            decision_type="revoke_staged_url_mapping",
+            url=url_canon,
+            retailer_key=rk,
+            proposed_cid=cid,
+            final_cid=None,
+            final_metadata={"superseded_ids": ids},
+            source_table="extension_staged_approvals",
+            notes="operator removed duplicate overlay mapping",
+        )
+        return {"ok": True, "superseded": updated, "ids": ids}
+    except Exception as e:
+        logger.exception("revoke_staged_url_mapping failed: %s", e)
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
