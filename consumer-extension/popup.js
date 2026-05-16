@@ -826,14 +826,8 @@ function renderCorrection(tab, response, scraped) {
           <input type="text" id="c-vitola" value="${escapeAttr(comparison.vitola || "")}" maxlength="80" />
         </div>
         <div class="field">
-          <label for="c-wrapper">Wrapper</label>
-          <select id="c-wrapper">
-            <option value="">Not sure</option>
-            <option value="${escapeAttr(NATURAL_LIGHT_WRAPPER_BUCKET)}" ${wrapperGuess === NATURAL_LIGHT_WRAPPER_BUCKET ? "selected" : ""}>${escapeHtml(NATURAL_LIGHT_WRAPPER_BUCKET)}</option>
-            <option value="Habano" ${wrapperGuess === "Habano" ? "selected" : ""}>Habano</option>
-            <option value="Sun Grown" ${wrapperGuess === "Sun Grown" ? "selected" : ""}>Sun Grown</option>
-            <option value="Maduro" ${wrapperGuess === "Maduro" ? "selected" : ""}>Maduro</option>
-          </select>
+          <label for="c-wrapper">Wrapper <span class="hint-inline">(category + catalog names)</span></label>
+          <select id="c-wrapper"></select>
         </div>
         <div class="field-row">
           <div class="field">
@@ -876,6 +870,33 @@ function renderCorrection(tab, response, scraped) {
     renderMatched(tab, response, scraped);
   });
   wireFooter();
+
+  void (async () => {
+    let catalog = defaultCatalogShape();
+    try {
+      const guessRes = await publicFetch("/api/public/guess-metadata", {
+        method: "POST",
+        body: {
+          url: tab.url || "",
+          title: scraped?.title || "",
+          jsonld_name: scraped?.jsonldName || "",
+          jsonld_brand: scraped?.jsonldBrand || "",
+          og_description: scraped?.ogDescription || "",
+        },
+      });
+      if (guessRes?.catalog) catalog = mergeCatalog(guessRes.catalog);
+    } catch (_) { /* keep defaults */ }
+    const sel = document.getElementById("c-wrapper");
+    if (!sel) return;
+    const b = (comparison.brand || "").trim();
+    const l = (comparison.line || "").trim();
+    const v = (comparison.vitola || "").trim();
+    mountWrapperSelectForBrandLineVitola(catalog, sel, b, l, v, {
+      prevRaw: "",
+      preferredPlainBucket: wrapperGuess,
+      scrapeHaystack: comparison.wrapper || "",
+    });
+  })();
 }
 
 // Loose mirror of detectWrapperBucket() — but operates on a string that
@@ -901,7 +922,9 @@ async function submitCorrection(tab, response, scraped, ctx) {
   const brand = get("c-brand");
   const line = get("c-line");
   const vitola = get("c-vitola");
-  const wrapper = get("c-wrapper");
+  const wrapperRaw = get("c-wrapper");
+  const pw = parseWrapperSelectValue(wrapperRaw);
+  const proposedWrapperBucket = pw.bucket || null;
   const boxQtyRaw = get("c-box_qty");
   const priceRaw = get("c-price");
 
@@ -961,7 +984,7 @@ async function submitCorrection(tab, response, scraped, ctx) {
         proposed_brand: brand,
         proposed_line: line,
         proposed_vitola: vitola,
-        proposed_wrapper: wrapper || null,
+        proposed_wrapper: proposedWrapperBucket,
         proposed_box_qty: proposedBoxQty,
         proposed_price: proposedPrice,
         scraped_title: scraped?.title || scraped?.jsonldName || null,
@@ -1091,6 +1114,7 @@ function renderResultRow(r, idx, cheapestDeliv, opts = {}) {
   const stockBadge = r.in_stock
     ? `<span class="stock-badge in-stock">in stock</span>`
     : `<span class="stock-badge out">out of stock</span>`;
+  const badgesRow = `<span class="result-badges">${thisPageLabel}${authBadge}${stockBadge}</span>`;
   const shipTax = (r.shipping_cents + r.tax_cents) > 0
     ? `<span class="ship-tax">+${formatMoney(r.shipping_cents + r.tax_cents)} ship/tax</span>`
     : "";
@@ -1098,9 +1122,8 @@ function renderResultRow(r, idx, cheapestDeliv, opts = {}) {
     <a href="${escapeAttr(r.url || '#')}" target="_blank" rel="noopener" class="result-row ${cheapestClass} ${oosClass} ${thisPageClass}">
       <div class="result-rank">${idx + 1}</div>
       <div class="result-name">
-        ${escapeHtml(r.retailer_name)}
-        ${thisPageLabel}
-        ${authBadge}${stockBadge}
+        <span class="result-retailer-label">${escapeHtml(r.retailer_name)}</span>
+        ${badgesRow}
       </div>
       <div class="result-price">
         <span class="price-line">${formatMoney(r.delivered_cents)}</span>

@@ -619,7 +619,7 @@ function wrapperField(value) {
     : "";
   const showSpecific = !!value && !currentBucket;  // off-bucket → reveal override
   return `
-    <div class="field wrapper-field">
+    <div class="field wrapper-field full" style="grid-column:1/-1">
       <label for="f-wrapper_bucket">Wrapper</label>
       <select id="f-wrapper_bucket" name="wrapper_bucket"${showSpecific ? ' style="display:none"' : ""}>
         <option value="">— pick one —</option>
@@ -634,6 +634,10 @@ function wrapperField(value) {
       <select id="f-wrapper_code" name="wrapper_code"${showSpecific ? "" : ' style="display:none"'}>
         <option value=""></option>
         ${custom}${codeOptions}
+      </select>
+      <label for="f-master-wrapper-suggest" style="margin-top:8px;display:block;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:#888">Master catalog (this vitola)</label>
+      <select id="f-master-wrapper-suggest" style="width:100%;margin-top:3px;font-size:12px">
+        <option value="">— optional: pick exact master wrapper —</option>
       </select>
     </div>
   `;
@@ -833,12 +837,30 @@ function wireCandidateActions(tab, response) {
     refreshCidPreviewBlock();
     refreshCatalogDraftSummary();
     rebuildDatalists(readFields());
+    refreshMasterWrapperSuggest(readFields());
     refreshSimilar();
   };
 
   wireWrapperBucket(response, onFormEdit);
 
-  const fields = document.querySelectorAll("#cid-fields input, #cid-fields select");
+  const mws = document.getElementById("f-master-wrapper-suggest");
+  if (mws) {
+    mws.addEventListener("change", () => {
+      const v = (mws.value || "").trim();
+      const codeEl = document.getElementById("f-wrapper_code");
+      const bucketEl = document.getElementById("f-wrapper_bucket");
+      if (v && codeEl) {
+        codeEl.value = v;
+        const bk = bucketForCode(v);
+        if (bucketEl && bk) bucketEl.value = bk;
+      }
+      onFormEdit();
+    });
+  }
+
+  const fields = document.querySelectorAll(
+    "#cid-fields input, #cid-fields select:not(#f-master-wrapper-suggest)",
+  );
   fields.forEach(f => {
     f.addEventListener("input", onFormEdit);
     f.addEventListener("change", onFormEdit);
@@ -882,6 +904,7 @@ function wireCandidateActions(tab, response) {
   document.getElementById("open-options").addEventListener("click", openOptions);
 
   rebuildDatalists(readFields());
+  refreshMasterWrapperSuggest(readFields());
   refreshSimilar();
 
   const top = (response.candidates && response.candidates[0]) || null;
@@ -917,6 +940,40 @@ function rebuildDatalists(parts) {
 }
 
 function norm(v) { return String(v || "").trim().toLowerCase(); }
+
+/** Populate #f-master-wrapper-suggest from VOCAB_ROWS for current brand/line/vitola. */
+function refreshMasterWrapperSuggest(parts) {
+  const sel = document.getElementById("f-master-wrapper-suggest");
+  const codeEl = document.getElementById("f-wrapper_code");
+  if (!sel || !codeEl || !VOCAB_ROWS.length) return;
+  const byBrand = VOCAB_ROWS.filter(r => norm(r.brand) === norm(parts.brand));
+  const byLine = byBrand.filter(r => norm(r.line) === norm(parts.line));
+  const v1 = norm(parts.vitola);
+  const v2 = norm(parts.vitola2 || "");
+  const byVit = byLine.filter(r => {
+    const rv = norm(r.vitola);
+    return rv === v1 || (v2 && rv === v2);
+  });
+  const seen = new Set();
+  const opts = [];
+  for (const r of byVit) {
+    const code = String(r.wrapper_code || "").trim().toUpperCase();
+    if (!code || seen.has(code)) continue;
+    seen.add(code);
+    const wn = String(r.wrapper || "").trim();
+    const label = wn ? `${wn} (${code})` : code;
+    opts.push({ code, label });
+  }
+  opts.sort((a, b) => a.label.localeCompare(b.label));
+  let html = '<option value="">— optional: pick exact master wrapper —</option>';
+  for (const o of opts) {
+    html += `<option value="${escapeAttr(o.code)}">${escapeHtml(o.label)}</option>`;
+  }
+  sel.innerHTML = html;
+  const cur = (codeEl.value || "").trim().toUpperCase();
+  if (cur && [...sel.options].some(o => o.value === cur)) sel.value = cur;
+  else sel.value = "";
+}
 
 function setDatalistFromRows(id, rows, key) {
   const dl = document.getElementById(id);
