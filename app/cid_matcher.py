@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import csv
 import re
+import unicodedata
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
@@ -194,6 +195,14 @@ _COMPARISON_WRAPPER_ALIASES = {
 }
 
 
+def _ascii_ident_token(s: Optional[str]) -> str:
+    """Uppercase A–Z/0–9 only, for stable token compares across accents."""
+    if not s:
+        return ""
+    t = unicodedata.normalize("NFKD", str(s).strip().upper())
+    return re.sub(r"[^A-Z0-9]+", "", t.encode("ascii", "ignore").decode("ascii"))
+
+
 def canonical_cigar_id_for_comparison(cid: Optional[str]) -> str:
     """Return a normalized CID for equality checks across retailer rows.
 
@@ -223,10 +232,17 @@ def canonical_cigar_id_for_comparison(cid: Optional[str]) -> str:
     wc = seg(p.get("wrapper_code"))
     wc = _COMPARISON_WRAPPER_ALIASES.get(wc, wc)
 
+    line_val = p["line"]
+    if brand_u == "ARTUROFUENTE":
+        lt = _ascii_ident_token(line_val)
+        # Catalog + retailers sometimes label the same line "Añejo" vs "Añejo Reserva".
+        if lt == "ANEJORESERVA":
+            line_val = "Añejo"
+
     parts: Dict[str, object] = {
         "brand": p["brand"],
         "parent_brand": parent_for_build,
-        "line": p["line"],
+        "line": line_val,
         "vitola": p["vitola"],
         "vitola2": (p.get("vitola2") or "").strip() or p["vitola"],
         "size": p["size"],
@@ -611,8 +627,32 @@ def find_top_candidates(
             "box_qty": row.get("box_qty"),
         }))
 
-    scored.sort(key=lambda x: x[0], reverse=True)
-    return [item for _, item in scored[:limit]]
+    def _af_anejo_reserva_penalty(cid: str) -> int:
+        pp = parse_cid(cid)
+        if not pp:
+            return 0
+        if _ascii_ident_token(pp.get("brand")) != "ARTUROFUENTE":
+            return 0
+        if _ascii_ident_token(pp.get("line")) == "ANEJORESERVA":
+            return 1
+        return 0
+
+    scored.sort(
+        key=lambda x: (-x[0], _af_anejo_reserva_penalty(str(x[1].get("cigar_id") or "")), str(x[1].get("cigar_id") or "")),
+    )
+    out: List[Dict[str, object]] = []
+    seen_canon: Set[str] = set()
+    for _, item in scored:
+        cid = str(item.get("cigar_id") or "").strip()
+        canon = canonical_cigar_id_for_comparison(cid)
+        if canon:
+            if canon in seen_canon:
+                continue
+            seen_canon.add(canon)
+        out.append(item)
+        if len(out) >= limit:
+            break
+    return out
 
 
 def hostname_to_retailer_key(

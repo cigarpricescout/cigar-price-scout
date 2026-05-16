@@ -42,6 +42,7 @@ from __future__ import annotations
 import logging
 import re
 import time
+import unicodedata
 from collections import defaultdict, deque
 from typing import Any, Deque, Dict, List, Optional
 from urllib.parse import urlparse
@@ -1032,8 +1033,8 @@ async def confirm_candidate(request: Request, body: ConfirmCandidateBody):
 # "Loose" guardrails for the report-incorrect flow. Picked deliberately
 # wide so we accept legit clearance prices and seasonal sales, but
 # narrow enough to block obvious typos ($140 → $14) and bot mischief.
-# The operator still reviews every correction; these guards exist so
-# we don't *queue* obviously-bad data.
+# Same-SKU volatile tweaks (≤10% price and/or stock) skip the queue;
+# larger edits and metadata mismatches still go to operator review.
 _REPORT_PRICE_MIN_CENTS = 500           # $5 — below this is almost certainly a typo
 _REPORT_PRICE_MAX_CENTS = 500_000       # $5,000 — most expensive boxes top out well below this
 _REPORT_PRICE_MAX_DEVIATION = 0.75      # ±75% of the price we were showing
@@ -1047,7 +1048,9 @@ def _cid_slug_key(s: Optional[str]) -> str:
     """Collapse to lowercase alphanumerics for brand/line/vitola token compare."""
     if not s:
         return ""
-    return re.sub(r"[^a-z0-9]+", "", str(s).strip().lower())
+    t = unicodedata.normalize("NFKD", str(s).strip().lower())
+    t = t.encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"[^a-z0-9]+", "", t)
 
 
 def _wrapper_bucket_matches_cid_code(bucket: Optional[str], cid_code: str) -> bool:
@@ -2195,6 +2198,60 @@ def _normalize_for_match(s: str) -> str:
     return f" {norm} "
 
 
+def _merge_arturo_fuente_anejo_reserva_catalog_lines(
+    lines_by_brand: Dict[str, set],
+    vitolas_by_bl: Dict[tuple, set],
+    boxes_by_blv: Dict[str, set],
+    codes_by_blv: Dict[str, set[str]],
+    wrapper_rows_acc: Dict[str, Dict[str, Dict[str, str]]],
+) -> None:
+    """Treat AF 'Añejo Reserva' as the same line as 'Añejo' in extension pickers."""
+    brand = "Arturo Fuente"
+    lines = lines_by_brand.get(brand)
+    if not lines:
+        return
+    reserva_lines = {ln for ln in lines if _cid_slug_key(ln) == "anejoreserva"}
+    if not reserva_lines:
+        return
+    anejo_lines = {ln for ln in lines if _cid_slug_key(ln) == "anejo"}
+    canonical = (
+        sorted(anejo_lines, key=lambda s: (len(s), s.lower()))[0]
+        if anejo_lines
+        else "Añejo"
+    )
+    if not anejo_lines:
+        lines.add(canonical)
+    for rl in reserva_lines:
+        lines.discard(rl)
+        vs = vitolas_by_bl.pop((brand, rl), set())
+        if vs:
+            vitolas_by_bl.setdefault((brand, canonical), set()).update(vs)
+        prefix_old = f"{brand}|{rl}|"
+        for k in list(boxes_by_blv.keys()):
+            if not k.startswith(prefix_old):
+                continue
+            vit = k[len(prefix_old):]
+            nk = f"{brand}|{canonical}|{vit}"
+            boxes_by_blv.setdefault(nk, set()).update(boxes_by_blv.pop(k))
+        for k in list(codes_by_blv.keys()):
+            if not k.startswith(prefix_old):
+                continue
+            vit = k[len(prefix_old):]
+            nk = f"{brand}|{canonical}|{vit}"
+            codes_by_blv.setdefault(nk, set()).update(codes_by_blv.pop(k))
+        for k in list(wrapper_rows_acc.keys()):
+            if not k.startswith(prefix_old):
+                continue
+            vit = k[len(prefix_old):]
+            nk = f"{brand}|{canonical}|{vit}"
+            incoming = wrapper_rows_acc.pop(k)
+            tgt = wrapper_rows_acc.setdefault(nk, {})
+            for dedupe_k, row in incoming.items():
+                prev = tgt.get(dedupe_k)
+                if not prev or len(row.get("code") or "") > len(prev.get("code") or ""):
+                    tgt[dedupe_k] = row
+
+
 def _get_catalog_match_index() -> Dict[str, Any]:
     """Build (and cache) the brand / line / vitola lookup index.
 
@@ -2301,6 +2358,10 @@ def _get_catalog_match_index() -> Dict[str, Any]:
                 bqi = 0
             if bqi > 0:
                 boxes_by_blv[blv_key].add(bqi)
+
+    _merge_arturo_fuente_anejo_reserva_catalog_lines(
+        lines_by_brand, vitolas_by_bl, boxes_by_blv, codes_by_blv, wrapper_rows_acc
+    )
 
     buckets_by_blv: Dict[str, List[str]] = {}
     for blv_key, codes in codes_by_blv.items():
