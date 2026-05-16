@@ -135,6 +135,8 @@ except Exception:
             return 895  # $8.95
         elif retailer_key == 'smokeinn':
             return 995  # $9.95
+        elif retailer_key == 'cigarplacebiz' and base_dollars >= 200:
+            return 0  # Free shipping on orders $200+
         elif retailer_key == 'stogies' and base_dollars >= 100:
             return 0  # Free shipping on $100+
         elif retailer_key == 'stogies':
@@ -160,6 +162,8 @@ except Exception:
         # Retailer nexus - states where they charge tax
         retailer_nexus = {
             'abcfws': ['FL'],
+            'finckcigarcompany': ['TX'],
+            'cigarplacebiz': ['FL'],
             'absolutecigars': ['VA'],
             'atlantic': ['PA'],
             'bestcigar': ['PA'],
@@ -542,7 +546,7 @@ except Exception as _comm_err:
 #   3. Deploy. The registry picks up the hostname and the consumer
 #      extension will let users contribute observations + propose CIDs.
 RETAILERS = [
-    {"key": "abcfws", "name": "ABC Fine Wine & Spirits", "csv": f"{CSV_PATH_PREFIX}/abcfws.csv", "authorized": False},
+    {"key": "abcfws", "name": "ABC Fine Wine & Spirits", "csv": f"{CSV_PATH_PREFIX}/abcfws.csv", "authorized": False, "hostname": "abcfws.com"},
     {"key": "absolutecigars", "name": "Absolute Cigars", "csv": f"{CSV_PATH_PREFIX}/absolutecigars.csv", "authorized": False},
     {"key": "atlantic", "name": "Atlantic Cigar", "csv": f"{CSV_PATH_PREFIX}/atlantic.csv", "authorized": False},
     {"key": "bestcigar", "name": "Best Cigar Prices", "csv": f"{CSV_PATH_PREFIX}/bestcigar.csv", "authorized": False, "extractor_status": "blocked", "hostname": "bestcigarprices.com"},
@@ -567,6 +571,8 @@ RETAILERS = [
     {"key": "cigarpage", "name": "Cigar Page", "csv": f"{CSV_PATH_PREFIX}/cigarpage.csv", "authorized": False, "extractor_status": "blocked", "hostname": "cigarpage.com"},
     {"key": "cigarpairingparlor", "name": "The Cigar Pairing Parlor LLC", "csv": f"{CSV_PATH_PREFIX}/cigarpairingparlor.csv", "authorized": False},
     {"key": "cigarplace", "name": "Cigar Place", "csv": f"{CSV_PATH_PREFIX}/cigarplace.csv", "authorized": False},
+    {"key": "cigarplacebiz", "name": "Cigar Place", "csv": f"{CSV_PATH_PREFIX}/cigarplacebiz.csv", "authorized": False, "extractor_status": "blocked", "hostname": "cigarplace.biz"},
+    {"key": "finckcigarcompany", "name": "Finck Cigar Company", "csv": f"{CSV_PATH_PREFIX}/finckcigarcompany.csv", "authorized": False, "extractor_status": "blocked", "hostname": "finckcigarcompany.com"},
     {"key": "cigarprimestore", "name": "Cigar Prime Store", "csv": f"{CSV_PATH_PREFIX}/cigarprimestore.csv", "authorized": False},
     {"key": "cigarsdirect", "name": "Cigars Direct", "csv": f"{CSV_PATH_PREFIX}/cigarsdirect.csv", "authorized": False},
     {"key": "cigarwarehouseusa", "name": "Cigar Warehouse USA", "csv": f"{CSV_PATH_PREFIX}/cigarwarehouseusa.csv", "authorized": False, "extractor_status": "blocked", "hostname": "cigarwarehouseusa.com"},

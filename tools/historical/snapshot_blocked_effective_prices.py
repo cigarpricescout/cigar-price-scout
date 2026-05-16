@@ -36,11 +36,17 @@ def _product_to_track_row(product: Any) -> Optional[Dict[str, Any]]:
     if not cid or price_cents <= 0:
         return None
     in_stock = getattr(product, "in_stock", True)
+    ps = getattr(product, "price_source", None) or "csv"
+    updated = getattr(product, "observed_at", None)
+    if not updated:
+        updated = datetime.now().isoformat(timespec="seconds")
     return {
         "cigar_id": cid,
         "price": price_cents / 100.0,
         "in_stock": bool(in_stock),
         "url": getattr(product, "url", "") or "",
+        "source": ps,
+        "source_updated_at": updated,
     }
 
 

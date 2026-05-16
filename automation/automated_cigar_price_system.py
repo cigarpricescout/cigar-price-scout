@@ -29,6 +29,13 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 import logging
+
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+_AUTOMATION_DIR = Path(__file__).resolve().parent
+for _p in (_PROJECT_ROOT, _AUTOMATION_DIR):
+    _s = str(_p)
+    if _s not in sys.path:
+        sys.path.insert(0, _s)
 import pandas as pd
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -172,6 +179,8 @@ class AutomatedCigarPriceSystem:
                     price REAL,
                     in_stock BOOLEAN,
                     url TEXT,
+                    source TEXT,
+                    source_updated_at TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     UNIQUE(retailer, cigar_id, date)
                 )
@@ -241,6 +250,9 @@ class AutomatedCigarPriceSystem:
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_price_history_retailer_date ON price_history(retailer, date)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_price_changes_date ON price_changes(date)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_stock_changes_date ON stock_changes(date)')
+
+            from tools.historical.price_history_db import migrate_price_history_schema
+            migrate_price_history_schema(conn)
             
             conn.commit()
             conn.close()
@@ -441,85 +453,29 @@ class AutomatedCigarPriceSystem:
         """Track price and stock changes to historical database"""
         if not self.config['historical_tracking']['enabled']:
             return
-        
+
         try:
-            conn = sqlite3.connect(self.historical_db_path, detect_types=0)
-            cursor = conn.cursor()
-            
-            today = datetime.now().date()
-            
-            # Create lookup dictionaries
-            pre_lookup = {row.get('cigar_id', ''): row for row in pre_state}
-            post_lookup = {row.get('cigar_id', ''): row for row in post_state}
-            
-            # Track all current prices/stock status
+            from tools.historical.price_history_db import record_daily_price_history
+
+            now_iso = datetime.now().isoformat(timespec="seconds")
+            enriched_post = []
             for row in post_state:
-                cigar_id = row.get('cigar_id', '')
-                price = row.get('price')
-                in_stock = row.get('in_stock', True)
-                url = row.get('url', '')
-                
-                if cigar_id and price is not None:
-                    # Insert current state (ignore duplicates)
-                    cursor.execute('''
-                        INSERT OR IGNORE INTO price_history 
-                        (retailer, cigar_id, date, price, in_stock, url)
-                        VALUES (?, ?, ?, ?, ?, ?)
-                    ''', (retailer_name, cigar_id, today, float(price), bool(in_stock), url))
-            
-            # Track price changes
-            if self.config['historical_tracking']['track_price_changes']:
-                for cigar_id, post_row in post_lookup.items():
-                    if cigar_id in pre_lookup:
-                        pre_price = pre_lookup[cigar_id].get('price')
-                        post_price = post_row.get('price')
-                        
-                        if pre_price is not None and post_price is not None:
-                            pre_price = float(pre_price)
-                            post_price = float(post_price)
-                            
-                            if abs(pre_price - post_price) > 0.01:  # Price changed
-                                price_change = post_price - pre_price
-                                change_type = 'increase' if price_change > 0 else 'decrease'
-                                
-                                cursor.execute('''
-                                    INSERT INTO price_changes 
-                                    (retailer, cigar_id, date, old_price, new_price, price_change, change_type)
-                                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                                ''', (retailer_name, cigar_id, today, pre_price, post_price, price_change, change_type))
-                    else:
-                        # New product
-                        post_price = post_row.get('price')
-                        if post_price is not None:
-                            cursor.execute('''
-                                INSERT INTO price_changes 
-                                (retailer, cigar_id, date, old_price, new_price, price_change, change_type)
-                                VALUES (?, ?, ?, ?, ?, ?, ?)
-                            ''', (retailer_name, cigar_id, today, None, float(post_price), float(post_price), 'new'))
-            
-            # Track stock changes
-            if self.config['historical_tracking']['track_stock_changes']:
-                for cigar_id, post_row in post_lookup.items():
-                    if cigar_id in pre_lookup:
-                        pre_stock = pre_lookup[cigar_id].get('in_stock', True)
-                        post_stock = post_row.get('in_stock', True)
-                        
-                        # Convert to boolean
-                        pre_stock = str(pre_stock).lower() not in ('false', '0', 'no', '')
-                        post_stock = str(post_stock).lower() not in ('false', '0', 'no', '')
-                        
-                        if pre_stock != post_stock:  # Stock status changed
-                            change_type = 'in_stock' if post_stock else 'out_of_stock'
-                            
-                            cursor.execute('''
-                                INSERT INTO stock_changes 
-                                (retailer, cigar_id, date, old_stock, new_stock, change_type)
-                                VALUES (?, ?, ?, ?, ?, ?)
-                            ''', (retailer_name, cigar_id, today, pre_stock, post_stock, change_type))
-            
-            conn.commit()
+                enriched = dict(row)
+                enriched.setdefault("source", "csv")
+                enriched.setdefault("source_updated_at", now_iso)
+                enriched_post.append(enriched)
+
+            conn = sqlite3.connect(self.historical_db_path, detect_types=0)
+            record_daily_price_history(
+                conn,
+                retailer_name,
+                pre_state,
+                enriched_post,
+                track_price_changes=self.config["historical_tracking"]["track_price_changes"],
+                track_stock_changes=self.config["historical_tracking"]["track_stock_changes"],
+            )
             conn.close()
-            
+
         except Exception as e:
             self.logger.error(f"Failed to track changes for {retailer_name}: {e}")
 
