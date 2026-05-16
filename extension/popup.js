@@ -118,6 +118,17 @@ function renderHeader(tab, response) {
   `;
 }
 
+/** Backend hint: which CSV / DB paths own live price & stock for this retailer. */
+function renderOperatorListingSource(response) {
+  const src = response.operator_listing_source;
+  if (!src || !Array.isArray(src.lines) || !src.lines.length) return "";
+  return `
+    <div class="section">
+      <div class="section-label">Where this data comes from</div>
+      ${src.lines.map((ln) => `<p class="operator-source-line">${escapeHtml(ln)}</p>`).join("")}
+    </div>`;
+}
+
 
 function renderMappedCigarsSection(response) {
   const options = response.cigar_options || [];
@@ -192,6 +203,7 @@ function renderMatched(tab, response) {
     <div class="banner matched">✓ Already published to ${escapeHtml(response.retailer_key)}</div>
     ${matchedCommunityBanner(response)}
     ${renderMappedCigarsSection(response)}
+    ${renderOperatorListingSource(response)}
     ${renderScraped(response)}
     <div class="actions">
       ${response.community_proposal
@@ -216,6 +228,7 @@ function renderSeen(tab, response) {
     <div class="banner seen">Status: ${escapeHtml(label)}</div>
     ${matchedCommunityBanner(response)}
     ${renderMappedCigarsSection(response)}
+    ${renderOperatorListingSource(response)}
     ${renderScraped(response)}
     <div class="actions">
       ${response.community_proposal

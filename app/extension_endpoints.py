@@ -418,6 +418,41 @@ def _cigar_pick_options(cids: List[str]) -> List[Dict[str, str]]:
     return out
 
 
+def _operator_listing_source_payload(
+    retailer_key: Optional[str],
+    extractor_status: Optional[str],
+) -> Optional[Dict[str, List[str]]]:
+    """Hints for operators: which CSV / workflows own live price & stock."""
+    if not retailer_key:
+        return None
+    try:
+        from app.main import PROJECT_ROOT as MAIN_ROOT, RETAILERS
+    except Exception:
+        RETAILERS = []
+        MAIN_ROOT = PROJECT_ROOT
+
+    rec = next((r for r in RETAILERS if r.get("key") == retailer_key), None)
+    display_name = (rec or {}).get("name") or retailer_key
+    csv_path = (rec or {}).get("csv") or ""
+    rel = ""
+    if csv_path:
+        try:
+            rel = str(Path(csv_path).relative_to(MAIN_ROOT))
+        except ValueError:
+            rel = Path(csv_path).name
+    lines: List[str] = [
+        f"{display_name}: the live listing row is `{rel or f'static/data/{retailer_key}.csv'}`.",
+        "Routine price/stock updates come from the daily GitHub pricing workflow (extractor output committed into that CSV).",
+    ]
+    if (extractor_status or "").lower() == "blocked":
+        lines.append(
+            "This retailer is scrape-blocked: until the CSV row updates, the API may merge "
+            "consumer observations (Postgres `observed_prices`) and pending operator approvals "
+            "(`extension_staged_approvals`, published via the extension publish script) over the CSV row.",
+        )
+    return {"lines": lines}
+
+
 # ── GET /api/admin/url-status ──────────────────────────────────────────
 
 @router.get("/url-status")
@@ -444,7 +479,9 @@ async def url_status(
           "seen_status": str | null,        # when state == "seen"
           "candidates": [ { cigar_id, score, confidence, details, brand, ... } ],
           "available_in_master": [ ... ],   # subset of candidates already in master
-          "scraped_title": str | null
+          "scraped_title": str | null,
+          "community_proposal": ... | null,
+          "operator_listing_source": { "lines": [str, ...] } | null,
         }
     """
     auth = _check_admin(request)
@@ -502,6 +539,7 @@ async def url_status(
             "available_in_master": [],
             "scraped_title": title,
             "community_proposal": community_proposal,
+            "operator_listing_source": None,
         }
 
     # 1) Already in the live retailer CSV? `url` is already canonical here
@@ -526,6 +564,9 @@ async def url_status(
             "available_in_master": [],
             "scraped_title": title,
             "community_proposal": community_proposal,
+            "operator_listing_source": _operator_listing_source_payload(
+                retailer_key, extractor_status
+            ),
         }
 
     # 2) Seen in staging? (approved / published / rejected / skipped)
@@ -551,6 +592,9 @@ async def url_status(
             "available_in_master": [],
             "scraped_title": title,
             "community_proposal": community_proposal,
+            "operator_listing_source": _operator_listing_source_payload(
+                retailer_key, extractor_status
+            ),
         }
 
     # 3) Fresh URL → propose CIDs from the master list
@@ -569,6 +613,9 @@ async def url_status(
         "available_in_master": [c["cigar_id"] for c in available],
         "scraped_title": title,
         "community_proposal": community_proposal,
+        "operator_listing_source": _operator_listing_source_payload(
+            retailer_key, extractor_status
+        ),
     }
 
 

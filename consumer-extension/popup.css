@@ -128,7 +128,7 @@ body {
 }
 
 .result-rank { font-size: 11px; color: var(--muted); text-align: center; }
-.result-name { font-weight: 500; }
+.result-name { font-weight: 500; min-width: 0; }
 .result-name .stock-badge {
   margin-left: 6px; font-size: 10px;
   padding: 1px 5px; border-radius: 3px;
@@ -156,17 +156,23 @@ body {
   padding: 1px 5px; border-radius: 3px;
   background: var(--green-bg); color: var(--green);
 }
-.result-name .observed-badge {
-  display: block;
-  margin-top: 2px;
-  font-size: 10px;
-  color: var(--muted);
-  font-weight: 400;
-}
-.result-price { font-weight: 600; font-size: 14px; }
-.result-price .ship-tax {
-  display: block; font-size: 10px; font-weight: 400; color: var(--muted);
+.result-price {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  min-width: 5.5rem;
   text-align: right;
+}
+.result-price .price-line {
+  font-weight: 600;
+  font-size: 14px;
+}
+.result-price .ship-tax {
+  display: block;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--muted);
 }
 
 .savings {
@@ -176,6 +182,48 @@ body {
   border-radius: 6px;
   font-size: 12px; font-weight: 500;
   text-align: center;
+}
+
+.view-all-btn {
+  width: 100%;
+  margin-top: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  background: white;
+  color: var(--text);
+  font-family: inherit;
+}
+.view-all-btn:hover { background: var(--gray-bg); }
+
+.actions.actions-footer-row {
+  flex-direction: column;
+  gap: 8px;
+}
+.actions-three {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+.footer-action-btn {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  background: white;
+  color: var(--text);
+  font-family: inherit;
+}
+.footer-action-btn:hover { background: var(--gray-bg); }
+.footer-action-btn-wide {
+  flex: none;
+  width: 100%;
 }
 
 /* Forms (candidate state) */

@@ -650,9 +650,8 @@ function renderMatched(tab, response, scraped) {
           ${escapeHtml(comparison?.reason || "Not enough retailers yet to compare.")}
         </div>
         <div class="actions" style="padding-top:8px">
-          <button type="button" id="add-cigar-empty" class="link-btn">Add another cigar</button>
+          <button type="button" id="add-cigar-empty" class="footer-action-btn" style="width:100%">Add cigar</button>
         </div>
-        <div class="hint-below" style="font-size:11px;color:#6b7280">Packs and singles excluded — to be added in future iterations.</div>
       </div>
       <div class="footer">
         <a href="#" id="open-options">Settings</a>
@@ -695,6 +694,10 @@ function renderMatched(tab, response, scraped) {
   const savingsCents = (currentRow && currentRow.delivered_cents > cheapestDeliv)
     ? currentRow.delivered_cents - cheapestDeliv
     : 0;
+  const pageIsCheapestDeal = !!(currentRow && currentRow.delivered_cents === cheapestDeliv);
+  const bannerMatched = pageIsCheapestDeal
+    ? "✓ You've found the cheapest!"
+    : `✓ Cheapest: ${formatMoney(cheapestDeliv)} at ${escapeHtml(cheapest.retailer_name)}`;
 
   const displayRows = compareRowsForPopup(comparison, tab.url, currentPageRetailer);
   const pickRow = (response.cigar_options && response.cigar_options.length > 1)
@@ -711,14 +714,11 @@ function renderMatched(tab, response, scraped) {
 
   root.innerHTML = `
     ${renderHeader(tab, response)}
-    <div class="banner matched">✓ Cheapest: ${formatMoney(cheapestDeliv)} at ${escapeHtml(cheapest.retailer_name)}</div>
+    <div class="banner matched">${escapeHtml(bannerMatched)}</div>
     <div class="section">
       <div class="cigar-name">${escapeHtml(comparison.cigar_name || "")}</div>
       <div class="cigar-meta">
         ${escapeHtml(comparison.wrapper || "")} · ${escapeHtml(comparison.vitola || "")} · ${escapeHtml(comparison.size || "")} · Box of ${comparison.box_qty || "?"}
-      </div>
-      <div class="hint-below" style="margin:-2px 0 8px;font-size:11px;color:#6b7280">
-        “This page” is our stored price &amp; stock for the tab you have open — compare it to the retailers above.
       </div>
       ${pickRow}
       <div class="results">
@@ -726,19 +726,20 @@ function renderMatched(tab, response, scraped) {
           renderResultRow(row, index, cheapestDeliv, { thisPage }),
         ).join("")}
       </div>
+      <button type="button" id="view-all" class="view-all-btn">See all ${comparison.total_retailers || comparison.results.length} retailers</button>
       ${savingsCents > 0 ? `
         <div class="savings">
           You'd save ${formatMoney(savingsCents)} by buying from ${escapeHtml(cheapest.retailer_name)}.
         </div>
       ` : ""}
     </div>
-    <div class="actions">
-      <button id="view-all">See all ${comparison.total_retailers || comparison.results.length} retailers</button>
-      <button id="report-incorrect" class="link-btn" title="Report incorrect data for this listing">Report incorrect</button>
-      <button type="button" id="add-cigar" class="link-btn">Add another cigar</button>
-      <button id="close">Close</button>
+    <div class="actions actions-footer-row">
+      <div class="actions-three">
+        <button type="button" id="report-incorrect" class="footer-action-btn" title="Report incorrect data for this listing">Report incorrect</button>
+        <button type="button" id="add-cigar" class="footer-action-btn">Add cigar</button>
+        <button type="button" id="close" class="footer-action-btn">Close</button>
+      </div>
     </div>
-    <div class="hint-below" style="padding:0 14px 8px;font-size:11px;color:#6b7280">Packs and singles excluded — to be added in future iterations.</div>
     <div class="footer">
       <a href="#" id="open-options">Settings</a>
       <a href="https://cigarpricescout.com" target="_blank">cigarpricescout.com</a>
@@ -1093,14 +1094,6 @@ function renderResultRow(r, idx, cheapestDeliv, opts = {}) {
   const shipTax = (r.shipping_cents + r.tax_cents) > 0
     ? `<span class="ship-tax">+${formatMoney(r.shipping_cents + r.tax_cents)} ship/tax</span>`
     : "";
-  // Anti-bot retailers don't have live scrapers — their prices come from
-  // other shoppers' observations. Show an absolute "Last observed" date
-  // so users know how fresh the data is. ("Some retailers don't change
-  // prices often" — staleness is informational, not a hard cutoff.)
-  const isObserved = r.price_source === "observed";
-  const observedStamp = isObserved && r.observed_at
-    ? `<span class="observed-badge" title="Crowd-sourced from shoppers">📊 Last seen ${formatDateAbs(r.observed_at)}</span>`
-    : "";
   return `
     <a href="${escapeAttr(r.url || '#')}" target="_blank" rel="noopener" class="result-row ${cheapestClass} ${oosClass} ${thisPageClass}">
       <div class="result-rank">${idx + 1}</div>
@@ -1108,10 +1101,9 @@ function renderResultRow(r, idx, cheapestDeliv, opts = {}) {
         ${escapeHtml(r.retailer_name)}
         ${thisPageLabel}
         ${authBadge}${stockBadge}
-        ${observedStamp}
       </div>
       <div class="result-price">
-        ${formatMoney(r.delivered_cents)}
+        <span class="price-line">${formatMoney(r.delivered_cents)}</span>
         ${shipTax}
       </div>
     </a>
@@ -1205,7 +1197,6 @@ async function renderCandidate(tab, response, scraped, opts = null) {
   root.innerHTML = `
     ${renderHeader(tab, response)}
     <div class="banner candidate">${mode === "add_another" ? "+ Add another cigar" : "? Help us identify this cigar"}</div>
-    ${mode === "add_another" ? `<div class="hint-below" style="margin:-4px 14px 12px">Packs and singles excluded — to be added in future iterations.</div>` : ""}
     <div class="section">
       <div class="scraper-chip">
         Detected on page: <b>${escapeHtml(scraped?.title || scraped?.jsonldName || tab.title || "(no title)")}</b>
@@ -1653,12 +1644,16 @@ function renderProvisionalComparison(tab, response, scraped, proposeRes) {
   const savingsCents = (currentRow && currentRow.delivered_cents > cheapestDeliv)
     ? currentRow.delivered_cents - cheapestDeliv
     : 0;
+  const pageIsCheapestDeal = !!(currentRow && currentRow.delivered_cents === cheapestDeliv);
+  const bannerProvisional = pageIsCheapestDeal
+    ? "✓ You've found the cheapest!"
+    : `✓ Cheapest: ${formatMoney(cheapestDeliv)} at ${escapeHtml(cheapest.retailer_name)}`;
   const conf = (proposeRes.match && proposeRes.match.confidence) || "HIGH";
   const displayRows = compareRowsForPopup(comparison, tab.url, currentPageRetailer);
 
   root.innerHTML = `
     ${renderHeader(tab, response)}
-    <div class="banner matched">✓ Cheapest: ${formatMoney(cheapestDeliv)} at ${escapeHtml(cheapest.retailer_name)}</div>
+    <div class="banner matched">${escapeHtml(bannerProvisional)}</div>
     <div class="provisional-note">
       <strong>Thanks for contributing.</strong> We matched your submission
       (${escapeHtml(conf)} confidence) so you can see the comparison now,
@@ -1675,15 +1670,15 @@ function renderProvisionalComparison(tab, response, scraped, proposeRes) {
           renderResultRow(row, index, cheapestDeliv, { thisPage }),
         ).join("")}
       </div>
+      <button type="button" id="view-all" class="view-all-btn">See all ${comparison.total_retailers || comparison.results.length} retailers</button>
       ${savingsCents > 0 ? `
         <div class="savings">
           You'd save ${formatMoney(savingsCents)} by buying from ${escapeHtml(cheapest.retailer_name)}.
         </div>
       ` : ""}
     </div>
-    <div class="actions">
-      <button id="view-all">See all ${comparison.total_retailers || comparison.results.length} retailers</button>
-      <button id="close">Close</button>
+    <div class="actions actions-footer-row">
+      <button type="button" id="close" class="footer-action-btn footer-action-btn-wide">Close</button>
     </div>
     <div class="footer">
       <a href="#" id="open-options">Settings</a>
@@ -1912,23 +1907,6 @@ function quantityLabel(qtyType, boxQty) {
 function formatMoney(cents) {
   if (cents == null) return "—";
   return "$" + (cents / 100).toFixed(2);
-}
-
-function formatDateAbs(iso) {
-  if (!iso) return "";
-  try {
-    const d = new Date(iso);
-    if (isNaN(d.getTime())) return "";
-    // YYYY-MM-DD in user's locale tz. Chosen over relative ("3 days ago")
-    // because some anti-bot retailers rarely change prices; an absolute
-    // date lets the user judge freshness for themselves.
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${y}-${m}-${day}`;
-  } catch (_) {
-    return "";
-  }
 }
 
 function escapeHtml(s) {
