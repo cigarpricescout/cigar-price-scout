@@ -19,8 +19,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+AUTOMATION_DIR = PROJECT_ROOT / "automation"
+for p in (PROJECT_ROOT, AUTOMATION_DIR):
+    s = str(p)
+    if s not in sys.path:
+        sys.path.insert(0, s)
 
 
 def _pg_url() -> Optional[str]:
