@@ -653,6 +653,14 @@ def get_blocked_retailer_hosts() -> Dict[str, str]:
 def get_blocked_retailer_keys() -> set:
     return {r["key"] for r in RETAILERS if r.get("extractor_status") == "blocked"}
 
+
+def get_active_retailer_keys() -> set:
+    """Retailers with a daily extractor (not blocked/dormant)."""
+    return {
+        r["key"] for r in RETAILERS
+        if r.get("extractor_status", "active") not in ("blocked", "dormant")
+    }
+
 # Enhanced CSV loader with wrapper and vitola support
 class Product:
     def __init__(self, retailer_key, retailer_name, title, url, brand, line, wrapper, vitola, size, box_qty, price, in_stock=True, current_promotions_applied='', cigar_id='', community_id=None, price_source='csv', observed_at=None, observation_count=0, strength='', country=''):
@@ -1140,31 +1148,50 @@ def _load_observed_overlay(window_days: int = 14) -> list:
     return products
 
 
+def _latest_observed_for_staged_row(
+    cur, retailer_key: str, url: str, cigar_id: str, window_days: int = 14,
+) -> Optional[tuple]:
+    """Fallback price for active retailers: recent consumer/operator observe on this URL."""
+    cur.execute(
+        """
+        SELECT price_cents, in_stock, observed_at
+        FROM observed_prices
+        WHERE retailer_key = %s
+          AND url = %s
+          AND cigar_id = %s
+          AND quantity_type = 'box'
+          AND price_cents IS NOT NULL
+          AND observed_at > NOW() - (%s || ' days')::interval
+        ORDER BY observed_at DESC
+        LIMIT 1
+        """,
+        (retailer_key, url, cigar_id, str(window_days)),
+    )
+    row = cur.fetchone()
+    return row if row else None
+
+
 def _load_staged_approval_overlay() -> list:
-    """Live-overlay pending operator approvals onto /compare for blocked retailers.
+    """Live-overlay pending extension approvals onto /compare (all retailers).
 
-    Mirrors _load_observed_overlay but reads from extension_staged_approvals
-    (status='pending') instead of observed_prices. Only emits Products for
-    BLOCKED retailers — these are the ones where the staging row carries a
-    price the operator entered manually. For active retailers the staging
-    row has price=NULL (the extractor will fill it in next scrape) so
-    there's nothing useful to render until then.
+    Blocked retailers: operator-entered price on the staging row.
+    Active/scrapable retailers: scraped price on stage-approval (operator
+    extension sends page scrape) or the latest ``observed_prices`` row for
+    that URL. Without a price we cannot render on /compare yet — the bare
+    CSV row + morning scrape still picks it up later.
 
-    Why this exists: when the operator approves a URL→CID mapping via the
-    extension popup, we want it to show up on cigarpricescout.com
-    immediately — no waiting for the local publisher script, git push, or
-    Railway redeploy. Pairs with extension_endpoints._load_staged_approval_url_overlay
-    which handles the popup-side url_index.
+    Pairs with extension_endpoints._load_staged_approval_url_overlay for the
+    operator popup url_index.
     """
-    blocked_keys = get_blocked_retailer_keys()
-    if not blocked_keys:
-        return []
     try:
         conn = get_analytics_conn()
     except Exception as e:
         print(f"_load_staged_approval_overlay: analytics conn failed: {e}")
         return []
-    rows: list = []
+    active_keys = get_active_retailer_keys()
+    retailer_name_by_key = {r["key"]: r["name"] for r in RETAILERS}
+    master_index = load_master_index()
+    products = []
     try:
         cur = conn.cursor()
         cur.execute(
@@ -1174,13 +1201,80 @@ def _load_staged_approval_overlay() -> list:
                    box_qty, created_at
             FROM extension_staged_approvals
             WHERE status = 'pending'
-              AND retailer_key = ANY(%s)
-              AND price IS NOT NULL
+              AND cid IS NOT NULL
+              AND url IS NOT NULL
             ORDER BY retailer_key, cid, created_at DESC
             """,
-            (list(blocked_keys),),
         )
         rows = cur.fetchall()
+        for r in rows:
+            (retailer_key, cigar_id, url, title, price, in_stock,
+             box_qty, created_at) = r
+            try:
+                price_cents = None
+                observed_at = created_at
+                if price is not None:
+                    try:
+                        price_cents = int(round(float(price) * 100))
+                    except (TypeError, ValueError):
+                        price_cents = None
+                if (price_cents is None or price_cents <= 0) and retailer_key in active_keys:
+                    obs = _latest_observed_for_staged_row(
+                        cur, retailer_key, url, cigar_id or "",
+                    )
+                    if obs:
+                        price_cents, obs_stock, obs_at = obs
+                        if in_stock is None and obs_stock is not None:
+                            in_stock = obs_stock
+                        if obs_at:
+                            observed_at = obs_at
+                if not price_cents or price_cents <= 0:
+                    continue
+
+                master_row = master_index.get(cigar_id or "")
+                if master_row:
+                    brand   = master_row.get("brand", "")
+                    line    = master_row.get("line", "")
+                    vitola  = master_row.get("vitola", "")
+                    size    = master_row.get("size", "")
+                    wrapper = master_row.get("wrapper", "")
+                    strength = master_row.get("strength", "")
+                    country  = master_row.get("country", "")
+                    master_box_qty = master_row.get("box_qty") or 0
+                    if master_box_qty:
+                        box_qty = master_box_qty
+                else:
+                    cid_parts = (cigar_id or "").split("|")
+                    brand = cid_parts[0] if cid_parts else ""
+                    line = cid_parts[2] if len(cid_parts) > 2 else ""
+                    vitola = cid_parts[3] if len(cid_parts) > 3 else ""
+                    size = cid_parts[5] if len(cid_parts) > 5 else ""
+                    wrapper = cid_parts[6] if len(cid_parts) > 6 else ""
+                    strength = ""
+                    country = ""
+                products.append(Product(
+                    retailer_key=retailer_key,
+                    retailer_name=retailer_name_by_key.get(retailer_key, retailer_key),
+                    title=title or "",
+                    url=url,
+                    brand=brand,
+                    line=line,
+                    wrapper=wrapper,
+                    vitola=vitola,
+                    size=size,
+                    box_qty=box_qty or 25,
+                    price=price_cents / 100.0,
+                    in_stock=bool(in_stock) if in_stock is not None else True,
+                    cigar_id=cigar_id or "",
+                    price_source="operator_approved",
+                    observed_at=observed_at.isoformat() if observed_at else None,
+                    observation_count=1,
+                    strength=strength,
+                    country=country,
+                ))
+            except Exception as e:
+                print(f"_load_staged_approval_overlay: skipping row: {e}")
+                continue
     except Exception as e:
         print(f"_load_staged_approval_overlay: query failed: {e}")
     finally:
@@ -1188,58 +1282,6 @@ def _load_staged_approval_overlay() -> list:
             conn.close()
         except Exception:
             pass
-
-    retailer_name_by_key = {r["key"]: r["name"] for r in RETAILERS}
-    master_index = load_master_index()
-    products = []
-    for r in rows:
-        (retailer_key, cigar_id, url, title, price, in_stock,
-         box_qty, created_at) = r
-        try:
-            master_row = master_index.get(cigar_id or "")
-            if master_row:
-                brand   = master_row.get("brand", "")
-                line    = master_row.get("line", "")
-                vitola  = master_row.get("vitola", "")
-                size    = master_row.get("size", "")
-                wrapper = master_row.get("wrapper", "")
-                strength = master_row.get("strength", "")
-                country  = master_row.get("country", "")
-                master_box_qty = master_row.get("box_qty") or 0
-                if master_box_qty:
-                    box_qty = master_box_qty
-            else:
-                cid_parts = (cigar_id or "").split("|")
-                brand = cid_parts[0] if cid_parts else ""
-                line = cid_parts[2] if len(cid_parts) > 2 else ""
-                vitola = cid_parts[3] if len(cid_parts) > 3 else ""
-                size = cid_parts[5] if len(cid_parts) > 5 else ""
-                wrapper = cid_parts[6] if len(cid_parts) > 6 else ""
-                strength = ""
-                country = ""
-            products.append(Product(
-                retailer_key=retailer_key,
-                retailer_name=retailer_name_by_key.get(retailer_key, retailer_key),
-                title=title or "",
-                url=url,
-                brand=brand,
-                line=line,
-                wrapper=wrapper,
-                vitola=vitola,
-                size=size,
-                box_qty=box_qty or 25,
-                price=float(price) if price is not None else 0.0,
-                in_stock=bool(in_stock) if in_stock is not None else True,
-                cigar_id=cigar_id or "",
-                price_source="operator_approved",
-                observed_at=created_at.isoformat() if created_at else None,
-                observation_count=1,
-                strength=strength,
-                country=country,
-            ))
-        except Exception as e:
-            print(f"_load_staged_approval_overlay: skipping row: {e}")
-            continue
     return products
 
 
@@ -1249,21 +1291,17 @@ def _merge_blocked_overlay_onto_csv_products(
     *,
     price_source: str,
 ) -> set:
-    """Apply overlay price/stock onto existing CSV rows for blocked retailers.
+    """Apply overlay price/stock onto existing CSV rows when URLs already exist.
 
     Historically ``load_all_products`` only *appended* overlay rows when no
-    CSV row existed for ``(retailer_key, cigar_id)``. Blocked retailers almost
-    always already have a published CSV row, so consumer observations and
-    correction snapshots never changed ``in_stock`` / price on /compare.
+    CSV row existed for ``(retailer_key, cigar_id)``. Merging fixes blocked
+    retailers (published shell rows) and active retailers (stale CSV lines).
 
     Returns a set of ``(retailer_key, canonical_cigar_id)`` keys for overlay
     rows that were merged into at least one CSV product (so the caller can
     avoid appending duplicates).
     """
     if not overlay_products:
-        return set()
-    blocked = get_blocked_retailer_keys()
-    if not blocked:
         return set()
     try:
         from app.cid_matcher import (  # type: ignore
@@ -1276,8 +1314,6 @@ def _merge_blocked_overlay_onto_csv_products(
     merged_keys = set()
     for op in overlay_products:
         rk = getattr(op, "retailer_key", None) or ""
-        if rk not in blocked:
-            continue
         ocid = canonical_cigar_id_for_comparison(getattr(op, "cigar_id", None) or "")
         if not ocid:
             continue

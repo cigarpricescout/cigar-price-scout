@@ -942,7 +942,43 @@ async def stage_approval(request: Request, body: StageApprovalBody):
             _ex_stat = get_extractor_status(body.retailer_key)
         except Exception:
             _ex_stat = None
-        if _ex_stat in ("blocked", "dormant") and body.price is not None and cid:
+        if _ex_stat not in ("blocked", "dormant") and body.price is not None and cid:
+            try:
+                _pc = int(round(float(body.price) * 100))
+            except (TypeError, ValueError):
+                _pc = 0
+            if _pc > 0:
+                _instock = True if body.in_stock is None else bool(body.in_stock)
+                _bq = int(box_qty_int) if box_qty_int else None
+                try:
+                    cur.execute(
+                        """
+                        INSERT INTO observed_prices
+                          (url, retailer_key, cigar_id, quantity_type, box_qty,
+                           price_cents, currency, in_stock, scraped_title, jsonld,
+                           observer_id, observer_source)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,NULL::jsonb,%s,%s)
+                        """,
+                        (
+                            body.url,
+                            body.retailer_key,
+                            cid,
+                            "box",
+                            _bq,
+                            _pc,
+                            "USD",
+                            _instock,
+                            (body.title or "")[:500],
+                            "operator_stage",
+                            "operator_extension",
+                        ),
+                    )
+                except Exception as obs_e:
+                    logger.warning(
+                        "stage_approval observed_prices mirror (active) failed: %s",
+                        obs_e,
+                    )
+        elif _ex_stat in ("blocked", "dormant") and body.price is not None and cid:
             try:
                 _pc = int(round(float(body.price) * 100))
             except (TypeError, ValueError):
