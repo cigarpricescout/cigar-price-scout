@@ -139,6 +139,19 @@
 <script>
 const KEY = new URLSearchParams(location.search).get('key') || '';
 const PAGE_SIZE = 50;
+
+// Tokens like community:42 / newretailer:5 must not be used raw in CSS #ids
+// (a colon breaks querySelector). Use data-card-token instead.
+function escAttr(s) {
+  if (s == null) return '';
+  return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+function cardByToken(token) {
+  return document.querySelector(`[data-card-token="${escAttr(token)}"]`);
+}
+function tokenInJs(token) {
+  return String(token).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
 let currentOffset = 0;
 let currentConfidence = '';
 let currentRetailer = '';
@@ -401,7 +414,7 @@ function renderCard(m) {
   const selected = selectedTokens.has(m.token) ? ' selected' : '';
   const parsed = parseReason(m.reason);
 
-  return `<div class="card" id="card-${m.token}">
+  return `<div class="card" data-card-token="${escAttr(m.token)}">
     <div class="card-body">
       <div class="top-row">
         <div>
@@ -466,7 +479,7 @@ function renderCommunityCard(m) {
   // "should we trust this consumer over our current data?".
   const correctionDiff = m._is_correction ? renderCorrectionDiff(m) : '';
 
-  return `<div class="card${m._is_correction ? ' correction-card' : ''}" id="card-${m.token}">
+  return `<div class="card${m._is_correction ? ' correction-card' : ''}" data-card-token="${escAttr(m.token)}">
     <div class="card-body">
       <div class="top-row">
         <div>
@@ -521,7 +534,7 @@ function renderExtensionStagedCard(m) {
   const newCidWarn = m._is_new_cid
     ? '<div style="margin-top:6px;font-size:11px;color:#c62828;font-weight:600">is_new_cid — publisher must append master before retailer CSV.</div>'
     : '';
-  return `<div class="card" id="card-${m.token}">
+  return `<div class="card" data-card-token="${escAttr(m.token)}">
     <div class="card-body">
       <div class="top-row">
         <div>
@@ -556,7 +569,8 @@ function renderExtensionStagedCard(m) {
 function renderNewRetailerCard(m) {
   const selected = selectedTokens.has(m.token) ? ' selected' : '';
   const host = m.brand || '(hostname)';
-  return `<div class="card" id="card-${m.token}">
+  const tok = tokenInJs(m.token);
+  return `<div class="card" data-card-token="${escAttr(m.token)}">
     <div class="card-body">
       <div class="top-row">
         <div>
@@ -572,8 +586,9 @@ function renderNewRetailerCard(m) {
       <div class="url-row"><a href="${m.url}" target="_blank" rel="noopener">${escHTML(m.url)}</a></div>
     </div>
     <div class="actions">
-      <button class="approve-btn" type="button" onclick="window.open('${m.url.replace(/'/g, "\\'")}', '_blank', 'noopener')">Open URL</button>
-      <button class="select-btn${selected}" onclick="toggleSelect('${m.token}')" title="Select for bulk">&#9744;</button>
+      <button class="approve-btn" type="button" onclick="reviewOne('${tok}','approve')">Mark processed</button>
+      <button class="reject-btn" type="button" onclick="reviewOne('${tok}','reject')">Dismiss</button>
+      <button class="select-btn${selected}" onclick="toggleSelect('${tok}')" title="Select for bulk">&#9744;</button>
     </div>
   </div>`;
 }
@@ -712,8 +727,19 @@ async function loadPage() {
   pg.style.display = totalPages > 1 ? 'flex' : 'none';
 }
 
+async function markNewRetailersProcessed(ids) {
+  const resp = await fetch('/api/admin/mark-retailer-queued', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Admin-Key': KEY },
+    body: JSON.stringify({ ids }),
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) throw new Error(data.error || 'failed');
+  return data.processed || 0;
+}
+
 async function reviewOne(token, action) {
-  const card = document.getElementById('card-' + token);
+  const card = cardByToken(token);
   if (!card) return;
   card.classList.add('removing');
 
@@ -735,9 +761,13 @@ async function reviewOne(token, action) {
         return;
       }
     } else if (token.startsWith('newretailer:')) {
-      showToast('Onboard in git — see card instructions');
-      card.classList.remove('removing');
-      return;
+      const id = parseInt(token.split(':')[1], 10);
+      await markNewRetailersProcessed([id]);
+      showToast(
+        action === 'approve'
+          ? 'Marked processed — add RETAILERS + CSV in git, then deploy'
+          : 'Dismissed from queue'
+      );
     } else if (token.startsWith('community:')) {
       // Community proposal: hits resolve-community-proposal with the
       // top_candidate's CID for approve, or action='reject' for reject.
@@ -780,9 +810,26 @@ async function reviewOne(token, action) {
 function toggleSelect(token) {
   if (selectedTokens.has(token)) selectedTokens.delete(token);
   else selectedTokens.add(token);
-  const btn = document.querySelector(`#card-${token} .select-btn`);
+  const card = cardByToken(token);
+  const btn = card ? card.querySelector('.select-btn') : null;
   if (btn) btn.classList.toggle('selected', selectedTokens.has(token));
   updateBulkBar();
+}
+
+function updateBulkBarLabels() {
+  const approveBtn = document.querySelector('#bulk-bar .ba');
+  const rejectBtn = document.querySelector('#bulk-bar .br');
+  if (!approveBtn || !rejectBtn) return;
+  if (currentSource === 'retailers') {
+    approveBtn.textContent = 'Mark processed';
+    rejectBtn.textContent = 'Dismiss';
+  } else if (currentSource === 'extension') {
+    approveBtn.textContent = 'Approve';
+    rejectBtn.textContent = 'Withdraw';
+  } else {
+    approveBtn.textContent = 'Approve';
+    rejectBtn.textContent = 'Reject';
+  }
 }
 
 function updateBulkBar() {
@@ -807,8 +854,19 @@ async function bulkAction(action) {
     const extIds = tokens
       .filter(t => t.startsWith('extstaged:'))
       .map(t => parseInt(t.split(':')[1], 10));
+    const newRetailerIds = tokens
+      .filter(t => t.startsWith('newretailer:'))
+      .map(t => parseInt(t.split(':')[1], 10));
 
     try {
+    if (newRetailerIds.length) {
+      const n = await markNewRetailersProcessed(newRetailerIds);
+      showToast(
+        action === 'approve'
+          ? `Marked ${n} processed — add RETAILERS + CSV in git, then deploy`
+          : `Dismissed ${n} from queue`
+      );
+    }
     if (harvesterTokens.length) {
       const resp = await fetch('/api/admin/bulk-review', {
         method: 'POST',
@@ -836,7 +894,7 @@ async function bulkAction(action) {
       // low double-digits per session).
       let ok = 0, fail = 0;
       for (const id of communityIds) {
-        const card = document.getElementById('card-community:' + id);
+        const card = cardByToken('community:' + id);
         const cidEl = card ? card.querySelector('.cid-full') : null;
         const cid = cidEl ? cidEl.textContent.trim() : '';
         const body = (action === 'approve')
@@ -856,7 +914,7 @@ async function bulkAction(action) {
   } catch(e) { showToast('Bulk action failed', true); }
 
   tokens.forEach(t => {
-    const card = document.getElementById('card-' + t);
+    const card = cardByToken(t);
     if (card) card.classList.add('removing');
   });
   selectedTokens.clear();
@@ -897,6 +955,7 @@ function setSource(src) {
     retailers: 'New retailer requests',
   };
   document.getElementById('page-title').textContent = titles[src] || 'Review';
+  updateBulkBarLabels();
   const url = new URL(location.href);
   if (src === 'harvester') url.searchParams.delete('source');
   else url.searchParams.set('source', src);
@@ -978,6 +1037,7 @@ function showToast(msg, err) {
     retailers: 'New retailer requests',
   };
   document.getElementById('page-title').textContent = titles[currentSource] || 'Review';
+  updateBulkBarLabels();
 })();
 
 refreshQueueBadges();

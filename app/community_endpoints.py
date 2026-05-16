@@ -368,6 +368,9 @@ class ReportCorrectionBody(BaseModel):
     proposed_in_stock: Optional[bool] = None
     scraped_title: Optional[str] = Field(None, max_length=500)
     observer_source: Optional[str] = "consumer"
+    # When True, allow proposed_price beyond ±75% of current_price (consumer
+    # confirmed a large correction after an in-popup warning).
+    confirm_large_price_change: bool = False
 
 
 class DeleteObservationsBody(BaseModel):
@@ -1273,7 +1276,10 @@ async def report_correction(request: Request, body: ReportCorrectionBody):
             )
         if current_price_cents and current_price_cents > 0:
             deviation = abs(proposed_price_cents - current_price_cents) / current_price_cents
-            if deviation > _REPORT_PRICE_MAX_DEVIATION:
+            if (
+                deviation > _REPORT_PRICE_MAX_DEVIATION
+                and not body.confirm_large_price_change
+            ):
                 pct = int(deviation * 100)
                 return JSONResponse(
                     {"error": "price_deviation_too_large",

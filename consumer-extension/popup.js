@@ -913,7 +913,7 @@ function bucketFromWrapperString(s) {
   return "";
 }
 
-async function submitCorrection(tab, response, scraped, ctx) {
+async function submitCorrection(tab, response, scraped, ctx, opts = {}) {
   const btn = document.getElementById("submit-correction");
   btn.disabled = true;
   btn.textContent = "Submitting…";
@@ -957,14 +957,23 @@ async function submitCorrection(tab, response, scraped, ctx) {
       toast("Sale price must be at most $5,000.");
       return;
     }
-    if (ctx.currentSaleCents && ctx.currentSaleCents > 0) {
+    if (ctx.currentSaleCents && ctx.currentSaleCents > 0 && !opts.confirmedLargeChange) {
       const proposedCents = Math.round(proposedPrice * 100);
       const dev = Math.abs(proposedCents - ctx.currentSaleCents) / ctx.currentSaleCents;
       if (dev > 0.75) {
-        btn.disabled = false;
-        btn.textContent = "Submit correction";
-        toast(`That's ${Math.round(dev * 100)}% off the listed price. If a coupon is applied, enter the price BEFORE the coupon.`);
-        return;
+        const pct = Math.round(dev * 100);
+        const was = (ctx.currentSaleCents / 100).toFixed(2);
+        const ok = confirm(
+          `That price is about ${pct}% different from what we were showing ($${was} → $${proposedPrice.toFixed(2)}).\n\n` +
+          `Large changes are allowed when our listed price is wrong (for example a scrape showed $${was} but the page really shows $${proposedPrice.toFixed(2)}). ` +
+          `Do not subtract coupon codes — enter the price before any code.\n\nSubmit this correction anyway?`
+        );
+        if (!ok) {
+          btn.disabled = false;
+          btn.textContent = "Submit correction";
+          return;
+        }
+        return submitCorrection(tab, response, scraped, ctx, { confirmedLargeChange: true });
       }
     }
   }
@@ -988,6 +997,7 @@ async function submitCorrection(tab, response, scraped, ctx) {
         proposed_box_qty: proposedBoxQty,
         proposed_price: proposedPrice,
         scraped_title: scraped?.title || scraped?.jsonldName || null,
+        confirm_large_price_change: !!opts.confirmedLargeChange,
       },
     });
     chrome.runtime.sendMessage({ type: "invalidateCache", url: tab.url });
