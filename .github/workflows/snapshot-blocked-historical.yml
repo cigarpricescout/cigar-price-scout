@@ -1,0 +1,88 @@
+name: Snapshot Blocked Historical (manual)
+
+# One-off / on-demand: record blocked-retailer effective prices into
+# data/historical_prices.db without running the full scraper cycle.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Before counts
+        run: |
+          python - <<'PY'
+          import sqlite3
+          from pathlib import Path
+          db = Path("data/historical_prices.db")
+          conn = sqlite3.connect(db)
+          cur = conn.cursor()
+          cur.execute("SELECT COUNT(*) FROM price_history")
+          print("price_history total:", cur.fetchone()[0])
+          cur.execute("SELECT retailer, COUNT(*) FROM price_history GROUP BY retailer ORDER BY 2 DESC LIMIT 15")
+          for r, n in cur.fetchall():
+              print(f"  {r}: {n}")
+          conn.close()
+          PY
+
+      - name: Run blocked overlay snapshot
+        env:
+          ANALYTICS_DB_URL: ${{ secrets.ANALYTICS_DB_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          PYTHONUNBUFFERED: 1
+        run: python tools/historical/snapshot_blocked_effective_prices.py
+
+      - name: After counts
+        run: |
+          python - <<'PY'
+          import sqlite3
+          from pathlib import Path
+          db = Path("data/historical_prices.db")
+          conn = sqlite3.connect(db)
+          cur = conn.cursor()
+          cur.execute("SELECT COUNT(*) FROM price_history")
+          print("price_history total:", cur.fetchone()[0])
+          cur.execute(
+              "SELECT retailer, COUNT(*) FROM price_history WHERE date = date('now') GROUP BY retailer ORDER BY 2 DESC"
+          )
+          rows = cur.fetchall()
+          print("Today's rows by retailer:", len(rows))
+          for r, n in rows[:20]:
+              print(f"  {r}: {n}")
+          conn.close()
+          PY
+
+      - name: Configure git
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+
+      - name: Commit historical DB (if changed)
+        run: |
+          git add data/historical_prices.db
+          if git diff --cached --quiet; then
+            echo "No changes to historical_prices.db"
+            exit 0
+          fi
+          git commit -m "Historical snapshot: blocked retailer overlay ($(date +%Y-%m-%d))"
+          git push
