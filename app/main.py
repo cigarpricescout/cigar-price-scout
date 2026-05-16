@@ -727,6 +727,39 @@ def _format_wrapper_display(alias: str, canon: str) -> str:
     return c or a
 
 
+def _wrapper_filter_matches(
+    filter_val: str,
+    product: Product,
+    master_row: Optional[Dict[str, str]],
+) -> bool:
+    """Match landing-page wrapper filters to Product.wrapper.
+
+    ``/compare-all`` exposes ``wrapper`` as ``_format_wrapper_display(alias,
+    canon)`` (e.g. \"Dominican Rosado (Rosado)\"), while ``Product.wrapper``
+    follows master enrichment (``Wrapper_Alias`` or ``Wrapper``). Without
+    this bridge, ``/api/price-history`` received the display string and
+    compared it to ``Rosado``, yielding no CIDs and empty charts.
+    """
+    fv = (filter_val or "").strip().lower()
+    if not fv:
+        return True
+    pw = (product.wrapper or "").strip().lower()
+    if pw == fv:
+        return True
+    if master_row:
+        disp = _format_wrapper_display(
+            master_row.get("wrapper_alias", ""),
+            master_row.get("wrapper_canon", ""),
+        ).strip()
+        if disp.lower() == fv:
+            return True
+        for key in ("wrapper_canon", "wrapper_alias", "wrapper"):
+            cell = (master_row.get(key) or "").strip().lower()
+            if cell and cell == fv:
+                return True
+    return False
+
+
 def _master_csv_path() -> Path:
     """Locate master_cigars.csv with fallbacks for dev / static-served deploys."""
     candidates = [
@@ -2309,12 +2342,14 @@ def price_history(
 ):
     """Return historical price data for a specific cigar variation, grouped by retailer."""
     all_products = load_all_products()
+    master_index = load_master_index()
     matching_cids = set()
 
     for p in all_products:
         if p.brand.lower() != brand.lower() or p.line.lower() != line.lower():
             continue
-        if wrapper and p.wrapper.lower() != wrapper.lower():
+        master_row = master_index.get(p.cigar_id or "") if p.cigar_id else None
+        if not _wrapper_filter_matches(wrapper, p, master_row):
             continue
         if vitola and p.vitola.lower() != vitola.lower():
             continue
