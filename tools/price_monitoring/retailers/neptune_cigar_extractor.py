@@ -335,6 +335,6 @@ if __name__ == "__main__":
     actual_price = result.get('price')
     
     if actual_price and abs(actual_price - expected_price) < 1.0:
-        print("✅ SUCCESS: Correct price extracted!")
+        print("[OK] SUCCESS: Correct price extracted!")
     else:
         print(f"❌ FAILED: Expected ~${expected_price}, got ${actual_price}")

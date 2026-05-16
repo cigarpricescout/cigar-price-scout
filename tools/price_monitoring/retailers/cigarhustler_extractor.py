@@ -9,11 +9,12 @@ Compliance: Tier 1 (stable URLs, 1 req/sec)
 Test Results: 3/3 passed (Hemingway, Padron 1964, 601 La Bomba)
 """
 
+import json
 import requests
 from bs4 import BeautifulSoup
 import re
 import time
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 from datetime import datetime
 
 class CigarHustlerExtractor:
@@ -42,14 +43,17 @@ class CigarHustlerExtractor:
             response.raise_for_status()
             
             soup = BeautifulSoup(response.content, 'html.parser')
+            page_html = response.text
             
             # Extract box quantity FIRST — _extract_price uses it to sanity-check
             # candidate prices via per-stick math (rejects single-stick / 5-pack
             # prices that would otherwise be mistaken for the box price).
-            box_qty = self._extract_box_quantity(soup)
+            box_qty = self._extract_box_quantity(soup, url=url)
             
             # Extract price (ZenCart specific logic - handles sale prices)
-            box_price = self._extract_price(soup, box_qty=box_qty)
+            box_price = self._extract_price(
+                soup, box_qty=box_qty, url=url, page_html=page_html
+            )
             
             # Check stock status
             in_stock = self._check_stock_status(soup)
@@ -74,11 +78,10 @@ class CigarHustlerExtractor:
                 'error': str(e)
             }
     
-    def _extract_box_quantity(self, soup: BeautifulSoup) -> Optional[int]:
-        """Extract box quantity from product page"""
-        page_text = soup.get_text()
-        
-        # Priority patterns - check title and description
+    def _extract_box_quantity(self, soup: BeautifulSoup, url: str = '') -> Optional[int]:
+        """Extract box/pack quantity from product page."""
+        url_lower = (url or '').lower()
+        quantities: List[int] = []
         qty_patterns = [
             r'[Bb]ox [Oo]f (\d+)',           # "Box of 25"
             r'\(Box of (\d+)\)',              # "(Box of 25)"
@@ -89,38 +92,128 @@ class CigarHustlerExtractor:
             r'(\d+)[Cc]t',                    # "25ct"
         ]
         
-        # Check product title first (most reliable)
+        def collect(text: str) -> None:
+            if not text:
+                return
+            for pattern in qty_patterns:
+                for match in re.finditer(pattern, text):
+                    qty = int(match.group(1))
+                    if 5 <= qty <= 100:
+                        quantities.append(qty)
+
         title = soup.find('h1')
         if title:
-            title_text = title.get_text()
-            for pattern in qty_patterns:
-                match = re.search(pattern, title_text)
-                if match:
-                    qty = int(match.group(1))
-                    if 5 <= qty <= 100:  # Reasonable box/pack range
-                        return qty
-        
-        # Check description section
+            collect(title.get_text())
+
+        json_ld_desc = ''
+        for script in soup.find_all('script', type='application/ld+json'):
+            raw = script.string or script.get_text()
+            if not raw or 'Product' not in raw:
+                continue
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(data, dict) and data.get('@type') == 'Product':
+                json_ld_desc = data.get('description') or ''
+                collect(json_ld_desc)
+
         description = soup.find('div', class_='description')
         if description:
-            desc_text = description.get_text()
-            for pattern in qty_patterns:
-                match = re.search(pattern, desc_text)
+            collect(description.get_text())
+
+        if not quantities:
+            collect(soup.get_text())
+
+        if not quantities:
+            return None
+
+        if 'cigar-box' in url_lower:
+            return max(quantities)
+        if '5-pack' in url_lower or '5_pack' in url_lower:
+            if 5 in quantities:
+                return 5
+        if title and re.search(r'\b5\s*pack\b', title.get_text(), re.I):
+            if 5 in quantities:
+                return 5
+
+        for text in (json_ld_desc, title.get_text() if title else ''):
+            for pattern in (r'[Bb]ox [Oo]f (\d+)', r'\(Box of (\d+)\)'):
+                match = re.search(pattern, text)
                 if match:
                     qty = int(match.group(1))
                     if 5 <= qty <= 100:
                         return qty
-        
-        # Fallback: search entire page
-        for pattern in qty_patterns:
-            match = re.search(pattern, page_text)
-            if match:
-                qty = int(match.group(1))
-                if 5 <= qty <= 100:
-                    return qty
-        
+
+        return quantities[0] if len(quantities) == 1 else max(quantities)
+
+    def _parse_ch_data(self, page_html: str) -> Optional[Dict]:
+        if not page_html:
+            return None
+        match = re.search(r'var\s+CH_DATA\s*=\s*(\{.*?\})\s*;', page_html, re.DOTALL)
+        if not match:
+            return None
+        try:
+            data = json.loads(match.group(1))
+        except json.JSONDecodeError:
+            return None
+        return data if isinstance(data, dict) else None
+
+    def _preferred_ch_label(self, url: str, soup: BeautifulSoup, ch_data: Dict) -> Optional[str]:
+        url_lower = (url or '').lower()
+        labels = [
+            str(entry.get('label', '')).strip()
+            for entry in ch_data.values()
+            if isinstance(entry, dict)
+        ]
+        if not labels:
+            return None
+
+        if '5-pack' in url_lower or '5_pack' in url_lower:
+            for label in labels:
+                if re.search(r'5\s*pack', label, re.I):
+                    return label
+        if 'cigar-box' in url_lower:
+            for label in labels:
+                if re.fullmatch(r'box', label, re.I):
+                    return label
+
+        title = soup.find('h1')
+        if title and re.search(r'\b5\s*pack\b', title.get_text(), re.I):
+            for label in labels:
+                if re.search(r'5\s*pack', label, re.I):
+                    return label
+
+        for label in labels:
+            if re.fullmatch(r'box', label, re.I):
+                return label
+        return labels[0]
+
+    def _extract_price_from_ch_data(
+        self, soup: BeautifulSoup, url: str, page_html: str
+    ) -> Optional[float]:
+        ch_data = self._parse_ch_data(page_html)
+        if not ch_data:
+            return None
+
+        label = self._preferred_ch_label(url, soup, ch_data)
+        if not label:
+            return None
+
+        for entry in ch_data.values():
+            if not isinstance(entry, dict):
+                continue
+            if str(entry.get('label', '')).strip().lower() != label.lower():
+                continue
+            price = entry.get('price')
+            if price is None:
+                return None
+            try:
+                return round(float(price), 2)
+            except (TypeError, ValueError):
+                return None
         return None
-    
+
     # Per-stick sanity gate. Real cigarhustler boxes land in roughly
     # $3–$80/stick. Anything below ~$3/stick on a box page is almost
     # certainly a 5-pack price masquerading as a box (e.g. Opus X
@@ -142,7 +235,13 @@ class CigarHustlerExtractor:
         per_stick = price / box_qty
         return self._MIN_PER_STICK <= per_stick <= self._MAX_PER_STICK
 
-    def _extract_price(self, soup: BeautifulSoup, box_qty: Optional[int] = None) -> Optional[float]:
+    def _extract_price(
+        self,
+        soup: BeautifulSoup,
+        box_qty: Optional[int] = None,
+        url: str = '',
+        page_html: str = '',
+    ) -> Optional[float]:
         """
         Extract the BOX price from a ZenCart product page.
 
@@ -154,6 +253,7 @@ class CigarHustlerExtractor:
         instead of $442.50 — $442.50 ÷ 25 ≈ $17.68/stick).
 
         Strategy:
+          0. Zen Cart CH_DATA (Box / 5 Pack option prices) when present.
           1. ZenCart's <span id="productPrice…"> — authoritative when
              present AND per-stick-sane.
           2. Otherwise gather every $X.YZ in the main product section,
@@ -166,7 +266,11 @@ class CigarHustlerExtractor:
              write no price than write a wrong one (the loader treats
              missing price as out-of-stock / hidden, which is recoverable).
         """
-        box_qty = box_qty if box_qty is not None else self._extract_box_quantity(soup)
+        box_qty = box_qty if box_qty is not None else self._extract_box_quantity(soup, url=url)
+
+        ch_price = self._extract_price_from_ch_data(soup, url, page_html)
+        if ch_price is not None:
+            return ch_price
 
         # Method 1: ZenCart's standard productPrice span.
         # Only trust it when the value passes the per-stick sanity gate —
@@ -420,7 +524,15 @@ def test_cigarhustler_extraction():
             'expected_stock': True,
             'expected_qty': 5,
             'has_discount': True
-        }
+        },
+        {
+            'url': "https://cigarhustler.com/padron-1926-series-maduro-c-1_256/padron-1926-no-9-maduro-robusto-gordo-cigar-box-p-486.html",
+            'name': "Padron 1926 No. 9 Maduro Box",
+            'expected_price': 517.32,
+            'expected_stock': True,
+            'expected_qty': 24,
+            'has_discount': True
+        },
     ]
     
     print("Testing Cigar Hustler extraction...")
@@ -542,14 +654,23 @@ def test_cigarhustler_offline_box_price():
         ('regression: healthy 5-pack-only page (601 La Bomba Warhead)',
          _page('601 La Bomba Warhead 11', '<p>$71.25</p>', box_qty=5),
          71.25, 5),
+        ('CH_DATA box sale (Padron 1926 No. 9)',
+         '<html><body><h1>Padron 1926 No. 9 Maduro Robusto Gordo Cigar Box</h1>'
+         '<div><p>Save: 10% off</p><button>Add to Cart</button></div>'
+         '<script>var CH_DATA = {"1236":{"label":"Box","msrp":574.8,"price":517.32,"save_pct":10},'
+         '"4":{"label":"5 Pack","msrp":119.75,"price":113.76,"save_pct":5}};</script></body></html>',
+         517.32, 24,
+         'https://cigarhustler.com/padron-1926-no-9-maduro-robusto-gordo-cigar-box-p-486.html'),
     ]
 
     print('Cigar Hustler — offline box-price tests')
     print('-' * 70)
     failures = 0
-    for name, html, expected, box_qty in cases:
+    for case in cases:
+        name, html, expected, box_qty = case[:4]
+        url = case[4] if len(case) > 4 else ''
         soup = BeautifulSoup(html, 'html.parser')
-        got = ext._extract_price(soup, box_qty=box_qty)
+        got = ext._extract_price(soup, box_qty=box_qty, url=url, page_html=html)
         ok = (got is None and expected is None) or (
             got is not None and expected is not None and abs(got - expected) < 0.01
         )

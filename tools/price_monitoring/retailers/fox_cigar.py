@@ -17,11 +17,105 @@ CRITICAL: URL can auto-select different quantities - must detect and target box 
 Platform: WooCommerce, Tier 1 compliance
 """
 
+import json
 import requests
 from bs4 import BeautifulSoup
 import re
 from datetime import datetime
 import time
+
+
+def _parse_json_ld_product(soup: BeautifulSoup) -> dict:
+    """Read Product price/stock from schema.org JSON-LD when present."""
+    for script in soup.find_all("script", type="application/ld+json"):
+        raw = script.string or script.get_text()
+        if not raw or "Product" not in raw:
+            continue
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        items = data if isinstance(data, list) else [data]
+        for item in items:
+            if not isinstance(item, dict) or item.get("@type") != "Product":
+                continue
+            out: dict = {}
+            offers = item.get("offers")
+            if isinstance(offers, list):
+                offer = offers[0] if offers else {}
+            elif isinstance(offers, dict):
+                offer = offers
+            else:
+                offer = {}
+            price = offer.get("price")
+            specs = offer.get("priceSpecification")
+            if specs and isinstance(specs, list) and specs[0].get("price"):
+                price = specs[0].get("price")
+            if price is not None:
+                try:
+                    out["price"] = float(str(price).replace(",", ""))
+                except ValueError:
+                    pass
+            avail = str(offer.get("availability", "")).lower()
+            if avail:
+                out["in_stock"] = "instock" in avail and "outofstock" not in avail
+            name = item.get("name") or ""
+            m = re.search(r"(\d+)\s*ct\s+box", name, re.I) or re.search(
+                r"box\s+of\s+(\d+)", name, re.I
+            )
+            if m:
+                out["box_qty"] = int(m.group(1))
+            return out
+    return {}
+
+
+def _extract_without_count_section(soup: BeautifulSoup, result: dict) -> dict:
+    """Fallback for redesigned Fox product pages (no Cigar/Box Count label)."""
+    ld = _parse_json_ld_product(soup)
+    quantity_options: list = []
+    _extract_from_entire_page(soup, quantity_options, result)
+
+    box_options = [opt for opt in quantity_options if opt.get("is_box")]
+    box_qty = ld.get("box_qty")
+    in_stock = ld.get("in_stock")
+    if box_options:
+        target_box = max(box_options, key=lambda x: x["quantity"])
+        box_qty = box_qty or target_box["quantity"]
+        if in_stock is None:
+            in_stock = target_box["in_stock"]
+    if box_qty is None:
+        m = re.search(r"(\d+)\s*ct\s+box", soup.get_text(), re.I)
+        if m:
+            box_qty = int(m.group(1))
+
+    price = ld.get("price")
+    if price is None:
+        product_root = (
+            soup.select_one(".product")
+            or soup.select_one(".summary")
+            or soup.select_one("[itemtype*='Product']")
+            or soup
+        )
+        candidates = []
+        for elem in product_root.select(".woocommerce-Price-amount"):
+            m = re.search(r"\$([0-9,]+\.?\d*)", elem.get_text().replace(",", ""))
+            if m:
+                try:
+                    candidates.append(float(m.group(1)))
+                except ValueError:
+                    continue
+        if candidates:
+            price = max(candidates)
+            result["debug_info"]["price_source"] = "woocommerce_summary_max"
+
+    result["price"] = price
+    result["box_quantity"] = box_qty
+    result["in_stock"] = in_stock if in_stock is not None else (price is not None)
+    result["success"] = price is not None
+    result["debug_info"]["fallback"] = "json_ld_and_page_scan"
+    if not result["success"]:
+        result["debug_info"]["error"] = "No price after count-section fallback"
+    return result
 
 def _extract_from_container(container, quantity_options, result):
     """Extract quantity options from a specific container (original approach)"""
@@ -236,9 +330,7 @@ def extract_fox_cigar_data(url):
                     count_parent = count_elem.parent if hasattr(count_elem, 'parent') else None
         
         if not count_section:
-            result['debug_info']['error'] = 'Neither Cigar Count nor Box Count section found'
-            result['debug_info']['page_text_sample'] = soup.get_text()[:500]
-            return result
+            return _extract_without_count_section(soup, result)
         
         # Find the parent container for the count options
         # Find the parent container for the count options
@@ -390,7 +482,7 @@ def extract_fox_cigar_data(url):
                     for price_str in price_matches:
                         try:
                             potential_price = float(price_str.replace(',', ''))
-                            if 200 <= potential_price <= 500:  # Reasonable box price range
+                            if 50 <= potential_price <= 5000:
                                 price = potential_price
                                 result['debug_info']['price_source'] = 'variation_data'
                                 break
@@ -437,7 +529,7 @@ def extract_fox_cigar_data(url):
                                     result['debug_info'][f'box_variation_{i}'] = f"{cigar_count_attr}: ${potential_price}"
                                     
                                     # Use this price if it's in a reasonable range
-                                    if 100 <= potential_price <= 800:
+                                    if 50 <= potential_price <= 5000:
                                         box_variation_price = potential_price
                                         result['debug_info']['selected_variation'] = f"variation_{i}_price_{potential_price}"
                         
@@ -475,7 +567,7 @@ def extract_fox_cigar_data(url):
                             try:
                                 potential_price = float(price_match.group(1))
                                 # Use more restrictive range for fallback
-                                if 200 <= potential_price <= 500:  # Box prices are typically in this range
+                                if 50 <= potential_price <= 5000:
                                     price = potential_price
                                     result['debug_info']['price_element'] = selector
                                     result['debug_info']['price_text'] = price_text
