@@ -63,6 +63,13 @@ jobs:
           SMTP_SENDER_PASSWORD: ${{ secrets.SMTP_SENDER_PASSWORD }}
           SMTP_RECIPIENT_EMAIL: ${{ secrets.SMTP_RECIPIENT_EMAIL }}
           PYTHONUNBUFFERED: 1
+
+      - name: Snapshot blocked retailer prices to historical DB
+        run: python tools/historical/snapshot_blocked_effective_prices.py
+        env:
+          ANALYTICS_DB_URL: ${{ secrets.ANALYTICS_DB_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          PYTHONUNBUFFERED: 1
       
       - name: Commit and push changes (if needed)
         run: |
