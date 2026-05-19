@@ -17,3 +17,8 @@
 # https://newcigarshop.com/products/padron-1964-maduro-box-25
 # https://newcigarshop.com/products/arturo-fuente-hemingway-classic
 # https://newcigarshop.com/products/oliva-serie-v-melanio-robusto
+
+# Added by Chrome extension queue
+Tobacconistofgreenwich | tobacconistofgreenwich
+https://tobacconistofgreenwich.com/product/fuente-fuente-opus-x-oxo-oro-oscuro-belicoso-xxx
+
