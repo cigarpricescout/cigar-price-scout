@@ -32,6 +32,7 @@ class CigarDataUpdater:
             'cigarcountry.com': 'cigarcountry',
             'cuencacigars.com': 'cuencacigars',
             'cigarhustler.com': 'cigarhustler',
+            'cigarsdaily.com': 'cigarsdaily',
             'oldhavanacigarco.com': 'oldhavana',
             'momscigars.com': 'momscigars',
             'watchcitycigar.com': 'watchcity'

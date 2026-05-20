@@ -141,6 +141,8 @@ except Exception:
             return 0  # Free shipping on $100+
         elif retailer_key == 'stogies':
             return 999  # $9.99 flat rate
+        elif retailer_key == 'cigarsdaily' and base_dollars >= 79.99:
+            return 0  # Free domestic shipping on orders $79.99+
         elif retailer_key == 'cigarhustler':
             return 999  # $9.99 flat rate (research exact policy)
         elif retailer_key == 'cigarprimestore':
@@ -180,6 +182,7 @@ except Exception:
             'cigarcellarofmiami': ['FL'],
             'cigarhustler': ['FL'],
             'cigarking': ['AZ'],
+            'cigarsdaily': ['AZ'],  # Phoenix, AZ
             'cigora': ['PA'],
             'corona': ['FL'],
             'coronacigar': ['FL'],  # Corona Cigar Co. - Florida based,
@@ -575,6 +578,7 @@ RETAILERS = [
     {"key": "finckcigarcompany", "name": "Finck Cigar Company", "csv": f"{CSV_PATH_PREFIX}/finckcigarcompany.csv", "authorized": False, "extractor_status": "blocked", "hostname": "finckcigarcompany.com"},
     {"key": "cigarprimestore", "name": "Cigar Prime Store", "csv": f"{CSV_PATH_PREFIX}/cigarprimestore.csv", "authorized": False},
     {"key": "cigarsdirect", "name": "Cigars Direct", "csv": f"{CSV_PATH_PREFIX}/cigarsdirect.csv", "authorized": False},
+    {"key": "cigarsdaily", "name": "Cigars Daily", "csv": f"{CSV_PATH_PREFIX}/cigarsdaily.csv", "authorized": False, "extractor_status": "blocked", "hostname": "cigarsdaily.com"},
     {"key": "cigarwarehouseusa", "name": "Cigar Warehouse USA", "csv": f"{CSV_PATH_PREFIX}/cigarwarehouseusa.csv", "authorized": False, "extractor_status": "blocked", "hostname": "cigarwarehouseusa.com"},
     {"key": "cigora", "name": "Cigora", "csv": f"{CSV_PATH_PREFIX}/cigora.csv", "authorized": True, "extractor_status": "blocked", "hostname": "cigora.com"},
     {"key": "corona", "name": "Corona Cigar", "csv": f"{CSV_PATH_PREFIX}/corona.csv", "authorized": False},

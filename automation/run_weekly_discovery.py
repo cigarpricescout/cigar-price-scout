@@ -130,6 +130,8 @@ URL_DOMAIN_TO_KEY = {
     "pyramidcigars.com":         "pyramidcigars",
     "coronacigar.com":           "coronacigar",
     "cigarhustler.com":          "cigarhustler",
+    "cigarsdaily.com":           "cigarsdaily",
+    "www.cigarsdaily.com":       "cigarsdaily",
     "cigardepot.com":            "cigardepot",
     "cigarking.com":             "cigarking",
     "iheartcigars.com":          "iheartcigars",
