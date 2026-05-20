@@ -559,7 +559,7 @@ RETAILERS = [
     {"key": "boutiquecigar", "name": "The Boutique Cigar", "csv": f"{CSV_PATH_PREFIX}/boutiquecigar.csv", "authorized": False, "extractor_status": "blocked", "hostname": "theboutiquecigar.com"},
     {"key": "buitragocigars", "name": "Buitrago Cigars", "csv": f"{CSV_PATH_PREFIX}/buitragocigars.csv", "authorized": False},
     {"key": "casademontecristo", "name": "Casa de Montecristo", "csv": f"{CSV_PATH_PREFIX}/casademontecristo.csv", "authorized": False},
-    {"key": "cccrafter", "name": "CC Crafter", "csv": f"{CSV_PATH_PREFIX}/cccrafter.csv", "authorized": False},
+    {"key": "cccrafter", "name": "CC Crafter", "csv": f"{CSV_PATH_PREFIX}/cccrafter.csv", "authorized": False, "extractor_status": "blocked", "hostname": "cccrafter.com"},
     {"key": "cdmcigars", "name": "CDM Cigars", "csv": f"{CSV_PATH_PREFIX}/cdmcigars.csv", "authorized": False},
     {"key": "cheaplittlecigars", "name": "Cheap Little Cigars", "csv": f"{CSV_PATH_PREFIX}/cheaplittlecigars.csv", "authorized": False},
     {"key": "ci", "name": "Cigars International", "csv": f"{CSV_PATH_PREFIX}/ci.csv", "authorized": True, "extractor_status": "blocked", "hostname": "cigarsinternational.com"},

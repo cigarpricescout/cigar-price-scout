@@ -266,6 +266,17 @@ class AutomatedCigarPriceSystem:
     def discover_retailers(self) -> Dict:
         """Auto-discover available retailer update scripts in the app/ folder"""
         self.logger.info("Auto-discovering retailer update scripts in app/ folder...")
+
+        try:
+            from app.main import get_active_retailer_keys
+            active_keys = get_active_retailer_keys()
+        except Exception as e:
+            self.logger.warning(
+                "Could not load active retailer keys from app.main (%s); "
+                "blocked/dormant retailers may still run updaters",
+                e,
+            )
+            active_keys = None
         
         retailers = {}
         
@@ -318,6 +329,12 @@ class AutomatedCigarPriceSystem:
                 retailer_name = retailer_name_map.get(script_base, script_base)
                 csv_file = f'{retailer_name}.csv'
                 csv_path = self.static_data_dir / csv_file
+
+                if active_keys is not None and retailer_name not in active_keys:
+                    self.logger.info(
+                        f"  Skipping: {script_name} ({retailer_name} is blocked/dormant)"
+                    )
+                    continue
                 
                 if csv_path.exists():
                     # CSV exists — also check it has at least one data row.
