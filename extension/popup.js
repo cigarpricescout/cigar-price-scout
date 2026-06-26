@@ -479,7 +479,14 @@ function renderCandidate(tab, response) {
         ${field("line",          "Line",          parts.line,          "text")}
         ${field("vitola",        "Vitola",        parts.vitola,        "text")}
         ${field("vitola2",       "Vitola2",       parts.vitola2,       "text")}
-        ${field("size",          "Size (auto from vitola)", parts.size, "text")}
+        <div class="field">
+          <label for="f-size">Size (from catalog)</label>
+          <input id="f-size" name="size" type="text"
+                 value="${escapeAttr(parts.size ?? "")}"
+                 readonly tabindex="-1"
+                 title="Auto-filled from the catalog — set by the cigar you map to, not typed"
+                 style="background:#f3f4f6;color:#6b7280;cursor:not-allowed" />
+        </div>
         ${wrapperField(parts.wrapper_code)}
         ${field("box_qty",       "Box Qty",       parts.box_qty,       "number")}
       </div>
