@@ -3081,9 +3081,26 @@ async def cigar_landing_page(brand: str, line: str):
         
         # Fill in JSON-LD structured data and meta tag values
         retailer_count = len({p.retailer_key for p in matching_products if p.price_cents})
+        # Price range is computed from ALL priced rows, not just the first 25 SSR'd
+        # ones — otherwise the SERP title/meta and JSON-LD could show "$0" when a
+        # qualifying variation's rows sort beyond the SSR cap.
+        all_prices = [p.price_cents / 100 for p in matching_products if p.price_cents]
+        low_price = min(all_prices) if all_prices else 0
+        high_price = max(all_prices) if all_prices else 0
+        any_in_stock = any(p.in_stock for p in matching_products if p.price_cents)
+
         html = html.replace('{{OFFER_COUNT}}', str(len(matching_products)))
-        html = html.replace('{{LOW_PRICE}}', f"{min(prices):.2f}" if prices else "0")
-        html = html.replace('{{HIGH_PRICE}}', f"{max(prices):.2f}" if prices else "0")
+        # JSON-LD requires raw numeric values (dot decimal, no separators).
+        html = html.replace('{{LOW_PRICE}}', f"{low_price:.2f}")
+        html = html.replace('{{HIGH_PRICE}}', f"{high_price:.2f}")
+        # Title / meta / OG use a human-friendly price (no trailing .00, thousands
+        # separators) for cleaner SERP snippets and better click-through.
+        html = html.replace('{{LOW_PRICE_DISPLAY}}', _format_price_display(low_price))
+        html = html.replace('{{HIGH_PRICE_DISPLAY}}', _format_price_display(high_price))
+        html = html.replace(
+            '{{AVAILABILITY}}',
+            'https://schema.org/InStock' if any_in_stock else 'https://schema.org/OutOfStock',
+        )
         html = html.replace('{{RETAILER_COUNT}}', str(retailer_count))
         
         if has_seo:
@@ -3105,36 +3122,17 @@ async def cigar_landing_page(brand: str, line: str):
             html = html.replace('{{FAQ_ANSWER_3}}', faq_3)
             html = html.replace('{{LAST_UPDATED}}', last_updated)
             
-            rating_value = cigar_data.get('rating_average', '')
-            review_count = cigar_data.get('review_count', '').replace('+', '')
-            
-            if rating_value and review_count:
-                aggregate_rating = (
-                    '"aggregateRating": {\n'
-                    '      "@type": "AggregateRating",\n'
-                    f'      "ratingValue": "{rating_value}",\n'
-                    '      "bestRating": "100",\n'
-                    f'      "reviewCount": "{review_count}"\n'
-                    '    },'
-                )
-                review_body = seo_description[:200].replace('"', '\\"')
-                review_block = (
-                    '"review": {\n'
-                    '      "@type": "Review",\n'
-                    '      "author": { "@type": "Organization", "name": "Cigar Price Scout" },\n'
-                    '      "reviewRating": {\n'
-                    '        "@type": "Rating",\n'
-                    f'        "ratingValue": "{rating_value}",\n'
-                    '        "bestRating": "100"\n'
-                    '      },\n'
-                    f'      "reviewBody": "{review_body}"\n'
-                    '    },'
-                )
-                html = html.replace('{{AGGREGATE_RATING_BLOCK}}', aggregate_rating)
-                html = html.replace('{{REVIEW_BLOCK}}', review_block)
-            else:
-                html = html.replace('{{AGGREGATE_RATING_BLOCK}}', '')
-                html = html.replace('{{REVIEW_BLOCK}}', '')
+            # Intentionally NOT emitting aggregateRating/review structured data.
+            # Google's review-snippet policy prohibits "self-serving" reviews — a
+            # site rating the products it lists, authored by the site itself — and
+            # aggregateRatings not backed by genuine, independently collected user
+            # reviews. Our prior markup authored reviews as "Cigar Price Scout" with
+            # estimated counts ("25+"), which risks a sitewide "spammy structured
+            # markup" manual action that suppresses ALL rich results. Reinstate only
+            # when backed by real first-party user reviews. The legitimate price
+            # AggregateOffer below is unaffected.
+            html = html.replace('{{AGGREGATE_RATING_BLOCK}}', '')
+            html = html.replace('{{REVIEW_BLOCK}}', '')
         else:
             import re
             html = re.sub(r'<div class="text-center my-8">.*?Learn More About This Cigar.*?</button>\s*</div>', '', html, flags=re.DOTALL)
@@ -3174,6 +3172,20 @@ async def cigar_landing_page(brand: str, line: str):
 def create_slug(text: str) -> str:
     """Convert 'Padron 1964' to 'padron-1964'"""
     return text.lower().replace(' ', '-').replace('/', '-')
+
+
+def _format_price_display(amount: float) -> str:
+    """Human-friendly price for SERP titles/meta tags.
+
+    Adds thousands separators and drops a trailing ".00" so snippets read
+    "from $768" / "from $2,499" instead of "from $768.00". Used ONLY for the
+    visible title/meta/OG text — never for JSON-LD, which needs raw numerics.
+    """
+    if not amount:
+        return "0"
+    if abs(amount - round(amount)) < 0.005:
+        return f"{int(round(amount)):,}"
+    return f"{amount:,.2f}"
 
 
 def normalize_line_slug(line: str) -> str:

@@ -12,8 +12,8 @@
 
     <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>{{BRAND}} {{LINE}} Box Prices from ${{LOW_PRICE}} | {{RETAILER_COUNT}} Retailers Compared</title>
-  <meta name="description" content="Compare {{BRAND}} {{LINE}} box prices from ${{LOW_PRICE}} to ${{HIGH_PRICE}} at {{RETAILER_COUNT}} retailers. Updated daily with shipping and tax included." />
+    <title>{{BRAND}} {{LINE}} Prices from ${{LOW_PRICE_DISPLAY}} | Compare {{RETAILER_COUNT}} Retailers</title>
+  <meta name="description" content="Compare {{BRAND}} {{LINE}} cigar prices from ${{LOW_PRICE_DISPLAY}} across {{RETAILER_COUNT}} retailers and find the best in-stock deal. Updated daily with shipping &amp; tax estimates." />
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://cigarpricescout.com/cigars/{{BRAND_SLUG}}/{{LINE_SLUG}}" />
     <link rel="icon" type="image/png" href="/static/logo.png">
@@ -26,6 +26,7 @@
     "name": "{{BRAND}} {{LINE}} Cigars",
     "description": "Compare box prices for {{BRAND}} {{LINE}} cigars from top online retailers. Updated daily with shipping and tax calculations.",
     "category": "Cigars",
+    "url": "https://cigarpricescout.com/cigars/{{BRAND_SLUG}}/{{LINE_SLUG}}",
     "brand": {
       "@type": "Brand",
       "name": "{{BRAND}}"
@@ -35,7 +36,7 @@
     "offers": {
       "@type": "AggregateOffer",
       "priceCurrency": "USD",
-      "availability": "https://schema.org/InStock",
+      "availability": "{{AVAILABILITY}}",
       "offerCount": "{{OFFER_COUNT}}",
       "lowPrice": "{{LOW_PRICE}}",
       "highPrice": "{{HIGH_PRICE}}"
@@ -136,8 +137,8 @@
     }
     </style>
 
-    <meta property="og:title" content="{{BRAND}} {{LINE}} Box Prices from ${{LOW_PRICE}} | {{RETAILER_COUNT}} Retailers Compared" />
-    <meta property="og:description" content="Compare {{BRAND}} {{LINE}} box prices from ${{LOW_PRICE}} to ${{HIGH_PRICE}} at {{RETAILER_COUNT}} retailers. Updated daily with shipping and tax included." />
+    <meta property="og:title" content="{{BRAND}} {{LINE}} Prices from ${{LOW_PRICE_DISPLAY}} | Compare {{RETAILER_COUNT}} Retailers" />
+    <meta property="og:description" content="Compare {{BRAND}} {{LINE}} cigar prices from ${{LOW_PRICE_DISPLAY}} across {{RETAILER_COUNT}} retailers and find the best in-stock deal. Updated daily with shipping &amp; tax estimates." />
     <meta property="og:url" content="https://cigarpricescout.com/cigars/{{BRAND_SLUG}}/{{LINE_SLUG}}" />
     <meta property="og:type" content="product" />
     <meta property="og:image" content="https://cigarpricescout.com/static/logo.png" />
