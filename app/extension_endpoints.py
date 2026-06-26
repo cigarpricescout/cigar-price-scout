@@ -351,10 +351,18 @@ class IdsBody(BaseModel):
 
 
 class RevokeStagedUrlMappingBody(BaseModel):
-    """Drop one pending overlay CID for a URL (wrong duplicate SKU)."""
+    """Drop one overlay CID for a URL (wrong duplicate SKU).
+
+    By default this only retires *pending* rows (the live overlay). Set
+    ``include_published=True`` to also retire a leftover *published* record —
+    use this only when the corresponding live listing row has already been
+    removed from the retailer CSV, otherwise the CSV row stays live while the
+    Postgres record disagrees.
+    """
     retailer_key: str = Field(..., min_length=1)
     url: str = Field(..., min_length=1)
     cid: str = Field(..., min_length=1)
+    include_published: bool = False
 
 
 def _pick_matched_cid(cids: List[str], cid_query: Optional[str]) -> Optional[str]:
@@ -451,8 +459,19 @@ def _cigar_pick_options_with_staged_flags(
 def _operator_listing_source_payload(
     retailer_key: Optional[str],
     extractor_status: Optional[str],
+    *,
+    state: str = "matched",
+    seen_status: Optional[str] = None,
 ) -> Optional[Dict[str, List[str]]]:
-    """Hints for operators: which CSV / workflows own live price & stock."""
+    """Hints for operators: which CSV / workflows own live price & stock.
+
+    The copy is tailored to ``state`` so it never misleads:
+      * ``matched``   — the URL is in the live listing data (CSV/url_index).
+      * ``seen``      — there's an approval on record (e.g. published) but the
+                        URL is NOT currently in the live listing data (the CSV
+                        row was removed, or it's still pending drain).
+      * other         — fresh candidate the operator may approve.
+    """
     if not retailer_key:
         return None
     try:
@@ -470,10 +489,29 @@ def _operator_listing_source_payload(
             rel = str(Path(csv_path).relative_to(MAIN_ROOT))
         except ValueError:
             rel = Path(csv_path).name
-    lines: List[str] = [
-        f"{display_name}: the live listing row is `{rel or f'static/data/{retailer_key}.csv'}`.",
-        "Routine price/stock updates come from the daily GitHub pricing workflow (extractor output committed into that CSV).",
-    ]
+    rel_disp = rel or f"static/data/{retailer_key}.csv"
+
+    if state == "matched":
+        lines: List[str] = [
+            f"{display_name}: the live listing row is `{rel_disp}`.",
+            "Routine price/stock updates come from the daily GitHub pricing workflow (extractor output committed into that CSV).",
+        ]
+    elif state == "seen":
+        status_txt = (
+            (seen_status or "").replace("extension_", "").replace("_", " ").strip()
+            or "on record"
+        )
+        lines = [
+            f"{display_name}: a prior approval is on record (status: {status_txt}), "
+            f"but this URL is NOT currently in the live listing data (`{rel_disp}`).",
+            "It won't show on the site or be re-published unless you re-approve it.",
+        ]
+    else:  # candidate / fresh
+        lines = [
+            f"{display_name}: listings live in `{rel_disp}`.",
+            "Once you approve, the daily GitHub pricing workflow fills in price/stock on its next run.",
+        ]
+
     if (extractor_status or "").lower() == "blocked":
         lines.append(
             "This retailer is scrape-blocked: until the CSV row updates, the API may merge "
@@ -606,7 +644,7 @@ async def url_status(
             "scraped_title": title,
             "community_proposal": community_proposal,
             "operator_listing_source": _operator_listing_source_payload(
-                retailer_key, extractor_status
+                retailer_key, extractor_status, state="matched"
             ),
         }
 
@@ -640,7 +678,7 @@ async def url_status(
             "scraped_title": title,
             "community_proposal": community_proposal,
             "operator_listing_source": _operator_listing_source_payload(
-                retailer_key, extractor_status
+                retailer_key, extractor_status, state="seen", seen_status=seen_status
             ),
         }
 
@@ -661,7 +699,7 @@ async def url_status(
         "scraped_title": title,
         "community_proposal": community_proposal,
         "operator_listing_source": _operator_listing_source_payload(
-            retailer_key, extractor_status
+            retailer_key, extractor_status, state="candidate"
         ),
     }
 
@@ -763,10 +801,13 @@ def _lookup_seen(url: str, retailer_key: str) -> Tuple[Optional[str], Optional[s
         conn = _get_conn()
         cur = conn.cursor()
 
-        # Extension's own staging table takes precedence.
+        # Extension's own staging table takes precedence. Only *active* rows
+        # (pending / published) count as "seen": a superseded or rejected row
+        # is a retired mapping, so the URL should read as a clean slate (the
+        # operator can re-map it) rather than echoing a stale "published".
         cur.execute(
             "SELECT status, cid FROM extension_staged_approvals "
-            "WHERE url=%s AND retailer_key=%s "
+            "WHERE url=%s AND retailer_key=%s AND status IN ('pending', 'published') "
             "ORDER BY created_at DESC LIMIT 1",
             (url, retailer_key),
         )
@@ -1570,12 +1611,17 @@ async def mark_retailer_queued(request: Request, body: IdsBody):
 
 @router.post("/revoke-staged-url-mapping")
 async def revoke_staged_url_mapping(request: Request, body: RevokeStagedUrlMappingBody):
-    """Supersede pending ``extension_staged_approvals`` for one (retailer_key, url, cid).
+    """Supersede ``extension_staged_approvals`` for one (retailer_key, url, cid).
 
-    Removes that row's contribution to the live ``url_index`` overlay on the
-    next cache refresh. Does **not** edit retailer CSVs on disk (Railway never
-    does). If a duplicate mapping was already published into git, delete the
-    extra CSV row locally and push.
+    Retires *pending* rows by default (removes their contribution to the live
+    ``url_index`` overlay on the next cache refresh). With
+    ``include_published=True`` it also retires a leftover *published* record so
+    the popup no longer reports "extension published" for a mapping you've
+    already removed — only do this once the CSV row is gone.
+
+    Does **not** edit retailer CSVs on disk (Railway never does). If a duplicate
+    mapping was already published into git, delete the extra CSV row locally and
+    push.
     """
     auth = _check_admin(request)
     if auth:
@@ -1583,23 +1629,25 @@ async def revoke_staged_url_mapping(request: Request, body: RevokeStagedUrlMappi
     url_canon = canonicalize_url(body.url.strip())
     rk = body.retailer_key.strip()
     cid = body.cid.strip()
+    statuses = ["pending", "published"] if body.include_published else ["pending"]
     try:
         conn = _get_conn()
         cur = conn.cursor()
         cur.execute(
             """
             SELECT id, url FROM extension_staged_approvals
-             WHERE retailer_key = %s AND cid = %s AND status = 'pending'
+             WHERE retailer_key = %s AND cid = %s AND status = ANY(%s)
             """,
-            (rk, cid),
+            (rk, cid, statuses),
         )
         ids = [row[0] for row in cur.fetchall() if canonicalize_url(row[1]) == url_canon]
         if not ids:
             conn.close()
+            scope = "pending/published" if body.include_published else "pending"
             return JSONResponse(
                 {
                     "error": (
-                        "No pending staged row matched. This CID may come only from "
+                        f"No {scope} staged row matched. This CID may come only from "
                         f"static/data/{rk}.csv — remove that row locally, commit, and push."
                     ),
                 },
@@ -1634,7 +1682,11 @@ async def revoke_staged_url_mapping(request: Request, body: RevokeStagedUrlMappi
             final_cid=None,
             final_metadata={"superseded_ids": ids},
             source_table="extension_staged_approvals",
-            notes="operator removed duplicate overlay mapping",
+            notes=(
+                "operator retired mapping (incl. published)"
+                if body.include_published
+                else "operator removed duplicate overlay mapping"
+            ),
         )
         return {"ok": True, "superseded": updated, "ids": ids}
     except Exception as e:

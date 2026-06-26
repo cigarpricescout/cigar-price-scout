@@ -8,6 +8,8 @@ comparison table links to the homepage with a junk price).
 It talks to the SAME admin API the publisher uses:
   GET  /api/admin/pending-extension-approvals   (list pending rows)
   POST /api/admin/supersede-extension-staged    (retire rows by id)
+  POST /api/admin/revoke-staged-url-mapping     (retire by retailer+url+cid;
+                                                 can include a published row)
 
 Auth + base URL come from the environment, identical to
 tools/extension/publish_extension_approvals.py:
@@ -25,6 +27,15 @@ Usage (PowerShell):
 
   # Or target exact row ids printed by the dry run:
   python scripts/supersede_staged_mapping.py --id 1234 --id 1235 --commit
+
+  # DIRECT RETIRE by url+cid (works even when the row is already PUBLISHED, so
+  # it won't show up in the pending list above). Use --include-published only
+  # after the matching CSV row has been removed from git:
+  python scripts/supersede_staged_mapping.py \
+      --retailer bighumidor \
+      --url "https://www.bighumidor.com/index.cfm?ref2=3264" \
+      --cid "LAAROMADECUBA|LAAROMADECUBA|MIAMOR|BELICOSO|BELICOSO|6.125x52|MEX|BOX25" \
+      --include-published --commit
 
 Exit codes:
   0 = success (including "nothing matched")
@@ -84,6 +95,36 @@ def supersede(base: str, key: str, ids: List[int]) -> int:
     return int(r.json().get("superseded", 0))
 
 
+def revoke_url_mapping(
+    base: str,
+    key: str,
+    retailer_key: str,
+    url: str,
+    cid: str,
+    include_published: bool,
+) -> int:
+    r = requests.post(
+        f"{base}/api/admin/revoke-staged-url-mapping",
+        headers={"X-Admin-Key": key},
+        json={
+            "retailer_key": retailer_key,
+            "url": url,
+            "cid": cid,
+            "include_published": include_published,
+        },
+        timeout=30,
+    )
+    if r.status_code == 404:
+        # No matching row — surface the server's explanation, treat as "nothing to do".
+        try:
+            print(f"  {r.json().get('error', '404 — no matching row')}")
+        except Exception:
+            print("  404 — no matching row")
+        return 0
+    r.raise_for_status()
+    return int(r.json().get("superseded", 0))
+
+
 def _row_haystack(row: Dict) -> str:
     return " ".join(
         str(row.get(k) or "")
@@ -102,10 +143,30 @@ def main() -> int:
         "--id", type=int, action="append", default=[],
         help="Explicit staged-approval id(s) to supersede. Repeatable.",
     )
+    ap.add_argument(
+        "--url",
+        help="Direct-retire mode: the exact URL to disassociate (requires --cid and --retailer).",
+    )
+    ap.add_argument(
+        "--cid",
+        help="Direct-retire mode: the exact CID to disassociate from --url.",
+    )
+    ap.add_argument(
+        "--include-published",
+        action="store_true",
+        help=(
+            "In direct-retire mode, also retire a leftover PUBLISHED record "
+            "(use only after the matching CSV row has been removed from git)."
+        ),
+    )
     ap.add_argument("--commit", action="store_true", help="Actually supersede (default is dry run).")
     ap.add_argument("--base", help="Override API base URL.")
     args = ap.parse_args()
 
+    direct_retire = bool(args.url or args.cid)
+    if direct_retire and not (args.url and args.cid and args.retailer):
+        print("[USAGE] Direct-retire mode needs --url, --cid, and --retailer together.")
+        return 2
     if not (args.retailer or args.search or args.id):
         print("[USAGE] Provide at least one of --retailer, --search, or --id.")
         return 2
@@ -113,6 +174,33 @@ def main() -> int:
     base = (args.base or _api_base()).rstrip("/")
     key = _admin_key()
     print(f"API base: {base}")
+
+    if direct_retire:
+        scope = "pending + published" if args.include_published else "pending only"
+        print("\nDirect retire (revoke-staged-url-mapping):")
+        print(f"  retailer: {args.retailer}")
+        print(f"  cid:      {args.cid}")
+        print(f"  url:      {args.url}")
+        print(f"  scope:    {scope}")
+        if not args.commit:
+            print("\nDRY RUN — nothing changed. Re-run with --commit to retire it.")
+            return 0
+        try:
+            n = revoke_url_mapping(
+                base, key, args.retailer.strip(), args.url.strip(),
+                args.cid.strip(), args.include_published,
+            )
+        except Exception as e:
+            print(f"[ERROR] revoke failed: {e}")
+            return 1
+        print(f"\nRetired {n} row(s). The live overlay refreshes on the next request.")
+        if args.include_published:
+            print(
+                "Reminder: a published record only matters once its CSV row is "
+                "already removed from git — double-check that the CSV no longer "
+                "lists this URL."
+            )
+        return 0
 
     try:
         pending = fetch_pending(base, key)
