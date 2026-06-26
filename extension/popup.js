@@ -60,6 +60,11 @@ let lockedMasterCid = null;
 // (replaced on each debounced refresh).
 let lastSimilarResults = [];
 
+// Set true once the operator manually types into the Size field, so the
+// vitola→size auto-fill stops clobbering their edit. Reset on each
+// candidate-form render.
+let sizeUserEdited = false;
+
 // ── Bootstrapping ─────────────────────────────────────────────────────
 
 (async function init() {
@@ -147,6 +152,11 @@ function renderMappedCigarsSection(response) {
       </div>`
     : "";
 
+  // Single-CID mapping is removable only when it comes from a PENDING
+  // operator-staged row (live overlay) rather than a committed CSV row —
+  // the backend tells us via response.single_removable_staged.
+  const singleRemovable = !!response.single_removable_staged && !!singleCid;
+
   const listBlock = options.length > 1
     ? `
       <div class="mapped-cigar-list">
@@ -165,16 +175,30 @@ function renderMappedCigarsSection(response) {
           </div>
         `).join("")}
       </div>`
-    : `<div class="cid-display">${escapeHtml(singleCid || "\u2014")}</div>`;
+    : `
+      <div class="mapped-cigar-row">
+        <div class="mapped-cigar-text">
+          <code class="mapped-cigar-cid">${escapeHtml(singleCid || "\u2014")}</code>
+        </div>
+        ${singleRemovable
+          ? `<div class="mapped-cigar-actions" style="display:flex;gap:6px;flex-shrink:0">
+               <button type="button" class="secondary remove-staged-cid-btn" data-cid="${escapeAttr(singleCid)}" style="color:#b91c1c;border-color:#fecaca">Remove mapping</button>
+             </div>`
+          : ""}
+      </div>`;
+
+  const hint = options.length > 1
+    ? `<div class="hint-inline" style="margin-top:8px;font-size:11px;color:#6b7280">Each mapping is a separate master SKU on this page. Edit one without removing the others.${options.some((o) => o.removable_staged) ? " <strong>Remove</strong> only appears for pending operator staging (not CSV rows) — delete duplicate CSV lines in git if needed." : ""}</div>`
+    : (singleRemovable
+        ? `<div class="hint-inline" style="margin-top:8px;font-size:11px;color:#6b7280"><strong>Remove mapping</strong> disassociates this URL from the cigar (pending operator staging only). To point the cigar at a different URL instead, open its correct product page and Approve there — the old URL is retired automatically.</div>`
+        : "");
 
   return `
     <div class="section">
       <div class="section-label">Mapped cigar${options.length > 1 ? "s on this URL" : ""}</div>
       ${picker}
       ${listBlock}
-      ${options.length > 1
-        ? `<div class="hint-inline" style="margin-top:8px;font-size:11px;color:#6b7280">Each mapping is a separate master SKU on this page. Edit one without removing the others.${options.some((o) => o.removable_staged) ? " <strong>Remove</strong> only appears for pending operator staging (not CSV rows) — delete duplicate CSV lines in git if needed." : ""}</div>`
-        : ""}
+      ${hint}
     </div>`;
 }
 
@@ -455,7 +479,7 @@ function renderCandidate(tab, response) {
         ${field("line",          "Line",          parts.line,          "text")}
         ${field("vitola",        "Vitola",        parts.vitola,        "text")}
         ${field("vitola2",       "Vitola2",       parts.vitola2,       "text")}
-        ${field("size",          "Size (LxR)",    parts.size,          "text")}
+        ${field("size",          "Size (auto from vitola)", parts.size, "text")}
         ${wrapperField(parts.wrapper_code)}
         ${field("box_qty",       "Box Qty",       parts.box_qty,       "number")}
       </div>
@@ -865,6 +889,7 @@ function clearLockedMasterCid() {
 
 function wireCandidateActions(tab, response) {
   lockedMasterCid = (response._editCid || "").trim() || null;
+  sizeUserEdited = false;
   updateMasterLockUi();
 
   const refreshSimilar = debounce(() => {
@@ -873,12 +898,18 @@ function wireCandidateActions(tab, response) {
 
   const onFormEdit = () => {
     clearLockedMasterCid();
+    maybeAutofillSizeFromVitola();
     refreshCidPreviewBlock();
     refreshCatalogDraftSummary();
     rebuildDatalists(readFields());
     refreshMasterWrapperSuggest(readFields());
     refreshSimilar();
   };
+
+  // Respect a manual size edit (typing fires 'input'; our programmatic
+  // auto-fill assignment does not), so the operator can still override.
+  const sizeEl = document.getElementById("f-size");
+  if (sizeEl) sizeEl.addEventListener("input", () => { sizeUserEdited = true; });
 
   wireWrapperBucket(response, onFormEdit);
 
@@ -942,6 +973,7 @@ function wireCandidateActions(tab, response) {
   document.getElementById("skip").addEventListener("click", () => skipUrl(tab.url));
   document.getElementById("open-options").addEventListener("click", openOptions);
 
+  maybeAutofillSizeFromVitola();
   rebuildDatalists(readFields());
   refreshMasterWrapperSuggest(readFields());
   refreshSimilar();
@@ -979,6 +1011,33 @@ function rebuildDatalists(parts) {
 }
 
 function norm(v) { return String(v || "").trim().toLowerCase(); }
+
+// Auto-derive Size from the chosen Brand+Line+Vitola using the master
+// vocabulary, so the operator never has to type it. Approval is always
+// locked to an existing master cigar_id (which already encodes the size),
+// so the Size field is only a search/preview aid — asking the operator to
+// fill it was pure friction. Fills only when the master gives EXACTLY ONE
+// size for the current brand/line/vitola and the operator hasn't typed
+// their own size.
+function maybeAutofillSizeFromVitola() {
+  if (sizeUserEdited) return;
+  const sizeEl = document.getElementById("f-size");
+  if (!sizeEl || !VOCAB_ROWS.length) return;
+  const f = readFields();
+  if (!f.brand || !f.line || !f.vitola) return;
+  const sizes = new Set();
+  for (const r of VOCAB_ROWS) {
+    if (norm(r.brand) !== norm(f.brand)) continue;
+    if (norm(r.line) !== norm(f.line)) continue;
+    if (norm(r.vitola) !== norm(f.vitola)) continue;
+    const s = String(r.size || "").trim().toLowerCase();
+    if (s) sizes.add(s);
+  }
+  if (sizes.size === 1) {
+    const only = [...sizes][0];
+    if (norm(sizeEl.value) !== only) sizeEl.value = only;
+  }
+}
 
 /** Populate #f-master-wrapper-suggest from VOCAB_ROWS for current brand/line/vitola. */
 function refreshMasterWrapperSuggest(parts) {
@@ -1283,6 +1342,12 @@ async function approve(tab, response) {
         msg += resolved === 1
           ? " · 1 consumer proposal resolved"
           : ` · ${resolved} consumer proposals resolved`;
+      }
+      const retired = res.retired_stale_urls || 0;
+      if (retired > 0) {
+        msg += retired === 1
+          ? " · replaced 1 old URL"
+          : ` · replaced ${retired} old URLs`;
       }
       toast(msg);
       setTimeout(() => window.close(), 600);

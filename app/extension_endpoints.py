@@ -588,6 +588,17 @@ async def url_status(
             "url": url,
             "matched_cid": matched_cid,
             "cigar_options": cigar_options,
+            # Single-CID removability: when this URL maps to exactly one CID
+            # and that mapping comes from a PENDING operator-staged row (not
+            # a committed CSV row), the popup can offer a one-click "Remove
+            # mapping" to disassociate it. Multi-CID removal is handled per
+            # option via cigar_options[].removable_staged.
+            "single_removable_staged": (
+                (not cigar_options)
+                and bool(matched_cid)
+                and (url, retailer_key, matched_cid)
+                in (_cache_state.get("staged_overlay_triples") or frozenset())
+            ),
             "seen_status": "published",
             "extractor_status": extractor_status,
             "candidates": _candidates_for(url, title),
@@ -616,6 +627,12 @@ async def url_status(
             "url": url,
             "matched_cid": seen_matched,
             "cigar_options": seen_options,
+            "single_removable_staged": (
+                (not seen_options)
+                and bool(seen_matched)
+                and (url, retailer_key, seen_matched)
+                in (_cache_state.get("staged_overlay_triples") or frozenset())
+            ),
             "seen_status": seen_status,
             "extractor_status": extractor_status,
             "candidates": _candidates_for(url, title),
@@ -784,6 +801,70 @@ def _lookup_seen(url: str, retailer_key: str) -> Tuple[Optional[str], Optional[s
     return None, None
 
 
+# ── Approval-time URL guardrail (P4) ──────────────────────────────────
+# The #1 cause of a "stuck" wrong listing is an approval made while the
+# operator is sitting on a retailer's HOMEPAGE (or a category / cart /
+# search page, or behind an affiliate redirect). The CID then maps to a
+# non-product URL, the daily extractor can't scrape a product from it, and
+# the bad row lingers in the live overlay forever. Reject these at the
+# door so a CID can only ever be mapped to a real product (PDP) URL.
+
+# Path segments that are never a product detail page. Deliberately does NOT
+# include "products"/"product" (those ARE PDPs on Shopify/Magento) nor
+# "pages" (too many false positives).
+_NON_PRODUCT_URL_SEGMENTS = frozenset({
+    "collections", "categories", "category", "search", "cart", "checkout",
+    "account", "login", "register", "blog", "blogs", "policies", "policy",
+    "sitemap", "wishlist", "compare", "contact", "about",
+})
+
+# Affiliate / link-tracking redirect domains. A URL on one of these hosts is
+# a redirect wrapper, not a canonical retailer PDP, so it must never be
+# stored as a product mapping.
+_AFFILIATE_REDIRECT_HOSTS = (
+    "anrdoezrs.net", "dpbolvw.net", "kqzyfj.com", "jdoqocy.com",
+    "tkqlhce.com", "lduhtrp.net", "ftjcfx.com",
+    "linksynergy.com", "shareasale.com", "go.skimresources.com",
+    "prf.hn", "avantlink.com",
+)
+
+
+def _looks_like_non_product_url(url: str) -> Optional[str]:
+    """Return a human-readable reason if ``url`` is clearly not a PDP, else None.
+
+    Conservative by design — only flags URLs we are confident are NOT a
+    product page, so it never blocks a legitimate approval:
+      * affiliate/redirect hosts,
+      * a bare host / site root (the Big Humidor homepage bug),
+      * a listing/utility path (``/collections/x`` with no product handle).
+
+    A ``products``/``product`` path segment is treated as a definitive PDP
+    marker, so Shopify's nested ``/collections/<x>/products/<handle>`` and
+    plain ``/products/<handle>`` are always allowed. Retailers that encode
+    the product in the query string (e.g. Big Humidor
+    ``/index.cfm?ref2=363``) have a non-empty, non-listing path and pass.
+    """
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return None
+    host = (parsed.hostname or "").lower()
+    if host and any(host == h or host.endswith("." + h) for h in _AFFILIATE_REDIRECT_HOSTS):
+        return "is an affiliate/redirect link, not the retailer's product page"
+    path = (parsed.path or "")
+    segments = [s for s in path.lower().split("/") if s]
+    if not segments:
+        return "points at the site root / homepage, not a product page"
+    # A product-detail marker anywhere in the path wins — never block a PDP
+    # just because it's nested under a /collections/ or /category/ segment.
+    if any(seg in ("products", "product") for seg in segments):
+        return None
+    for seg in segments:
+        if seg in _NON_PRODUCT_URL_SEGMENTS:
+            return f"looks like a '{seg}' listing/utility page, not a product page"
+    return None
+
+
 # ── POST /api/admin/stage-approval ─────────────────────────────────────
 
 @router.post("/stage-approval")
@@ -815,6 +896,25 @@ async def stage_approval(request: Request, body: StageApprovalBody):
     # Normalize the URL once so the row we write to extension_staged_approvals
     # (and the bare row downstream in the retailer CSV) uses the canonical form.
     body.url = canonicalize_url(body.url)
+
+    # P4 guardrail: never map a CID to a homepage / category / cart / search /
+    # affiliate URL. This is orthogonal to `force` (which only controls CID
+    # supersession) — a non-product URL is rejected regardless, because there
+    # is no valid reason to point a product CID at one, and doing so is what
+    # produced the "stuck" wrong listing the operator hit on Big Humidor.
+    non_product_reason = _looks_like_non_product_url(body.url)
+    if non_product_reason:
+        return JSONResponse(
+            {
+                "error": (
+                    f"Refusing to map a cigar to this URL — it {non_product_reason}. "
+                    "Open the actual product page (PDP) for this cigar and approve "
+                    "from there."
+                ),
+                "code": "non_product_url",
+            },
+            status_code=422,
+        )
 
     # Resolve the CID (either passed-in or built from form parts).
     cid: Optional[str] = (body.cid or "").strip() or None
@@ -932,6 +1032,23 @@ async def stage_approval(request: Request, body: StageApprovalBody):
             parts_dict.get("wrapper"), box_qty_int,
             body.title, body.price, body.in_stock,
         ))
+
+        # Replace semantics: a given CID should map to at most ONE url per
+        # retailer (one PDP). When the operator (re)approves this CID at a
+        # NEW url, retire any OTHER pending rows for the same
+        # (retailer_key, cid) pointing at a DIFFERENT url, so correcting a
+        # bad URL automatically supersedes the stale one in the live overlay
+        # instead of leaving both to fight over the listing. Only 'pending'
+        # rows are touched — a row already drained to the retailer CSV
+        # ('published') must be cleaned up in git (the publisher owns CSVs).
+        cur.execute(
+            "UPDATE extension_staged_approvals "
+            "SET status='superseded' "
+            "WHERE retailer_key=%s AND cid=%s AND url<>%s "
+            "AND status='pending'",
+            (body.retailer_key, cid, body.url),
+        )
+        retired_stale_urls = cur.rowcount or 0
 
         # Blocked/dormant retailers: mirror manual price to observed_prices so
         # /compare and the consumer extension reflect the operator entry
@@ -1094,6 +1211,10 @@ async def stage_approval(request: Request, body: StageApprovalBody):
             # Surfaced so the popup can show "Approved consumer's submission"
             # toast and the smoke-test dashboard can verify the loop closed.
             "resolved_consumer_proposals": resolved_proposal_count,
+            # How many stale same-CID/different-URL pending rows this approval
+            # retired (the "replace" path). Lets the popup confirm the old
+            # wrong URL was dropped when remapping a CID to a corrected PDP.
+            "retired_stale_urls": retired_stale_urls,
         }
     except Exception as e:
         logger.exception("stage_approval failed: %s", e)
