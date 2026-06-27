@@ -1044,7 +1044,11 @@ _REPORT_PRICE_MAX_DEVIATION = 0.75      # ±75% of the price we were showing
 # Corrections that only nudge price/stock on the *same* SKU (CID tokens match)
 # apply immediately via observed_prices + merge — no operator queue.
 _AUTO_APPLY_PRICE_MAX_DEVIATION = 0.10  # ±10% vs the price we were showing
-_VALID_BOX_QTYS = {1, 5, 10, 15, 20, 24, 25, 50}
+# Box counts vary a lot in the real world (27 for Montecristo White, plus 18,
+# 21, 30, 40, …), so we range-check instead of enumerating. This still rejects
+# obvious typos (0, negatives, absurd counts) while accepting genuine packaging.
+_MIN_BOX_QTY = 1
+_MAX_BOX_QTY = 100
 
 
 def _cid_slug_key(s: Optional[str]) -> str:
@@ -1214,7 +1218,8 @@ async def report_correction(request: Request, body: ReportCorrectionBody):
          this as "Thanks — no changes detected".)
       3. proposed_price must be in [$5, $5000] AND within ±75% of
          current_price (when current_price is provided).
-      4. proposed_box_qty must be in {1, 5, 10, 15, 20, 24, 25, 50}.
+      4. proposed_box_qty must be within [1, 100] (range, not an allowlist —
+         real boxes come in many counts, e.g. 27 for Montecristo White).
       5. proposed_brand/line/vitola, when supplied, must be ≤ 80 chars.
 
     When the correction only adjusts **stock** and/or **price** on the same
@@ -1238,10 +1243,12 @@ async def report_correction(request: Request, body: ReportCorrectionBody):
     current_price_cents = _to_price_cents(body.current_price)
 
     # ── Field-level guards ──────────────────────────────────────────────
-    if body.proposed_box_qty is not None and body.proposed_box_qty not in _VALID_BOX_QTYS:
+    if body.proposed_box_qty is not None and not (
+        _MIN_BOX_QTY <= body.proposed_box_qty <= _MAX_BOX_QTY
+    ):
         return JSONResponse(
             {"error": "invalid_box_qty",
-             "reason": f"Box qty must be one of {sorted(_VALID_BOX_QTYS)}"},
+             "reason": f"Box qty must be between {_MIN_BOX_QTY} and {_MAX_BOX_QTY}"},
             status_code=400,
         )
     for label, val in (
