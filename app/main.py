@@ -2379,6 +2379,30 @@ def compare_all(
 
 RETAILER_KEY_TO_NAME = {r["key"]: r["name"] for r in RETAILERS}
 
+
+def _median_price(values: list[float]) -> float:
+    s = sorted(values)
+    n = len(s)
+    if n % 2:
+        return s[n // 2]
+    return (s[n // 2 - 1] + s[n // 2]) / 2
+
+
+def _price_history_is_outlier(price: float, peer_median: float) -> bool:
+    """Drop bogus homepage scrapes and obvious typos from chart series."""
+    if peer_median < 100:
+        return False
+    if price <= 75 and peer_median >= 150:
+        return True
+    if price < peer_median * 0.25:
+        return True
+    if price > 2000:
+        return True
+    if price > peer_median * 5 and price > 500:
+        return True
+    return False
+
+
 @app.get("/api/price-history")
 def price_history(
     brand: str = Query(...),
@@ -2420,6 +2444,26 @@ def price_history(
     """, list(matching_cids))
     rows = cur.fetchall()
     conn.close()
+
+    if not rows:
+        return {"days": 0, "retailers": {}}
+
+    # Drop per-day outliers (bogus $59 homepage scrapes, $8499 typos) before charting.
+    from collections import defaultdict as _dd
+    by_date: dict[str, list[tuple[str, float]]] = _dd(list)
+    for retailer_key, date_str, price in rows:
+        by_date[date_str].append((retailer_key, float(price)))
+
+    filtered_rows: list[tuple[str, str, float]] = []
+    for date_str, peers in by_date.items():
+        if len(peers) < 3:
+            filtered_rows.extend((rk, date_str, p) for rk, p in peers)
+            continue
+        peer_median = _median_price([p for _, p in peers])
+        for retailer_key, price in peers:
+            if not _price_history_is_outlier(price, peer_median):
+                filtered_rows.append((retailer_key, date_str, price))
+    rows = filtered_rows
 
     if not rows:
         return {"days": 0, "retailers": {}}
