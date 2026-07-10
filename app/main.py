@@ -1606,6 +1606,73 @@ def _get_sorted_cigar_sitemap_pairs():
     return pairs
 
 
+def _get_valid_landing_pages():
+    """Brand/line entries that render a real cigar landing page (not 404)."""
+    from collections import defaultdict
+
+    all_products = load_all_products()
+    by_line = defaultdict(list)
+    for p in all_products:
+        if p.brand and p.line:
+            by_line[(p.brand, p.line)].append(p)
+
+    pages = []
+    for (brand, line), products in by_line.items():
+        var_retailers = defaultdict(set)
+        for p in products:
+            var_retailers[(p.wrapper, p.vitola, p.box_qty)].add(p.retailer_key)
+        if not any(len(r) >= MIN_RETAILERS_FOR_COMPARISON for r in var_retailers.values()):
+            continue
+        brand_slug = brand.lower().replace(' ', '-').replace('&', 'and')
+        line_slug = normalize_line_slug(line)
+        pages.append({
+            'brand': brand,
+            'line': line,
+            'brand_slug': brand_slug,
+            'line_slug': line_slug,
+            'url': f"/cigars/{brand_slug}/{line_slug}",
+        })
+    pages.sort(key=lambda x: (x['brand'].lower(), x['line'].lower()))
+    return pages
+
+
+def _landing_page_serp_meta(brand_slug, line_slug, brand_display, line_display, low_price_display, retailer_count):
+    """Title and meta description tuned for high-traffic cigar SERPs."""
+    key = f"{brand_slug.lower()}|{line_slug.lower()}"
+    rc = retailer_count
+    lp = low_price_display
+    overrides = {
+        "cohiba|red-dot": (
+            f"Cohiba Red Dot Box Prices - Compare {rc}+ Retailers | Cigar Price Scout",
+            f"Compare Cohiba Red Dot cigar box prices from ${lp} across {rc} retailers. "
+            f"Tracked price history, buying guides, and delivered-price estimates. Updated daily.",
+        ),
+        "padron|1964-anniversary": (
+            f"Padron 1964 Anniversary Box Prices from ${lp} | Compare {rc} Retailers",
+            f"Compare Padron 1964 Anniversary box prices from ${lp} across {rc} retailers. "
+            f"Price history charts, buying guides, and shipping estimates. Updated daily.",
+        ),
+        "arturo-fuente|opus-x": (
+            f"Arturo Fuente Opus X Box Prices from ${lp} | Compare {rc} Retailers",
+            f"Compare Arturo Fuente Opus X cigar box prices from ${lp} across {rc} retailers. "
+            f"Tracked price history and buying guides for every vitola. Updated daily.",
+        ),
+        "my-father|the-judge": (
+            f"My Father The Judge Box Prices from ${lp} | Compare {rc} Retailers",
+            f"Compare My Father The Judge box prices from ${lp} across {rc} retailers. "
+            f"Price history, buying recommendations, and delivered totals. Updated daily.",
+        ),
+    }
+    if key in overrides:
+        return overrides[key]
+    title = f"{brand_display} {line_display} Prices from ${lp} | Compare {rc} Retailers"
+    desc = (
+        f"Compare {brand_display} {line_display} cigar box prices from ${lp} across {rc} retailers. "
+        f"Tracked price history, buying guides, and shipping estimates. Updated daily."
+    )
+    return title, desc
+
+
 def load_master_wrapper_aliases():
     """Load wrapper aliases from master_cigars.db (SQLite) for lookup"""
     # Try multiple possible paths for the master database
@@ -2571,6 +2638,7 @@ STATIC_SITEMAP_PAGES = [
     {"url": "/terms-of-service.html", "priority": "0.5", "changefreq": "yearly"},
     {"url": "/request-box-pricing.html", "priority": "0.7", "changefreq": "monthly"},
     {"url": "/deals.html", "priority": "0.9", "changefreq": "daily"},
+    {"url": "/cigar-price-history", "priority": "0.8", "changefreq": "weekly"},
     {"url": "/submit-deal.html", "priority": "0.6", "changefreq": "monthly"},
 ]
 
@@ -3141,6 +3209,12 @@ async def cigar_landing_page(brand: str, line: str):
         # separators) for cleaner SERP snippets and better click-through.
         html = html.replace('{{LOW_PRICE_DISPLAY}}', _format_price_display(low_price))
         html = html.replace('{{HIGH_PRICE_DISPLAY}}', _format_price_display(high_price))
+        page_title, page_desc = _landing_page_serp_meta(
+            brand, line, brand_display, line_display,
+            _format_price_display(low_price), retailer_count,
+        )
+        html = html.replace('{{PAGE_TITLE}}', _escape_html(page_title))
+        html = html.replace('{{PAGE_DESCRIPTION}}', _escape_html(page_desc))
         html = html.replace(
             '{{AVAILABILITY}}',
             'https://schema.org/InStock' if any_in_stock else 'https://schema.org/OutOfStock',
@@ -3935,6 +4009,109 @@ async def best_deals_page():
     
     with open(template_path, 'r', encoding='utf-8') as f:
         return HTMLResponse(content=f.read())
+
+
+@app.get("/cigar-price-history", response_class=HTMLResponse)
+async def cigar_price_history_index():
+    """Directory of cigar landing pages with tracked price history."""
+    pages = _get_valid_landing_pages()
+    from collections import OrderedDict
+    by_brand = OrderedDict()
+    for p in pages:
+        by_brand.setdefault(p['brand'], []).append(p)
+
+    sections = []
+    for brand, lines in by_brand.items():
+        bl_text = (brand + ' ' + ' '.join(item['line'] for item in lines)).lower()
+        line_links = '\n'.join(
+            f'        <li><a href="{_escape_html(item["url"])}" class="text-brand-500 hover:underline">'
+            f'{_escape_html(item["line"])}</a></li>'
+            for item in lines
+        )
+        sections.append(
+            f'      <div class="mb-6" data-brand-line="{_escape_html(bl_text)}">\n'
+            f'        <h2 class="font-display font-semibold text-xl text-brand-500 mb-2">{_escape_html(brand)}</h2>\n'
+            f'        <ul class="space-y-1 pl-1">\n{line_links}\n        </ul>\n'
+            f'      </div>'
+        )
+
+    body_sections = '\n'.join(sections) if sections else (
+        '      <p class="text-muted text-center">No cigar pages available yet.</p>'
+    )
+
+    html = f'''<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Cigar Price History — Tracked Box Prices &amp; Buying Guides | Cigar Price Scout</title>
+  <meta name="description" content="Browse tracked cigar box price history and buying guides by brand and line. Compare retailers, view charts, and find value across premium cigars." />
+  <link rel="canonical" href="https://cigarpricescout.com/cigar-price-history" />
+  <link rel="icon" type="image/png" href="/static/logo.png">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {{
+      theme: {{
+        extend: {{
+          colors: {{
+            brand: {{ 50: '#faf7f2', 500: '#7c5c2e', 600: '#6b4f27' }},
+            ink: '#111111',
+            muted: '#4b5563',
+          }},
+          fontFamily: {{
+            serif: ['Cormorant Garamond', 'Georgia', 'serif'],
+            display: ['Cinzel', 'Georgia', 'serif'],
+          }},
+        }},
+      }},
+    }}
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Cormorant+Garamond:wght@400;600&display=swap" rel="stylesheet" />
+</head>
+<body class="bg-brand-50 font-serif text-ink text-lg leading-relaxed">
+  <div class="max-w-3xl mx-auto px-5 py-8">
+    <header class="flex flex-col items-center text-center gap-2 mb-8">
+      <a href="/"><img src="/static/logo.png" alt="Cigar Price Scout" class="w-20 h-16 object-contain" /></a>
+      <div class="font-display font-bold text-2xl tracking-wide">Cigar Price Scout</div>
+    </header>
+    <main>
+      <a href="/" class="inline-block text-brand-500 font-medium hover:underline mb-5">&larr; Back to Search</a>
+      <h1 class="font-display font-bold text-3xl text-brand-500 mb-3">Cigar price history</h1>
+      <p class="text-muted mb-6">Real tracked price history and buying guides by line — pick a cigar below.</p>
+      <div class="mb-6">
+        <input type="search" id="cigarFilter" placeholder="Filter by brand or line…"
+               class="w-full p-3 border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20" />
+      </div>
+      <div id="cigarList">
+{body_sections}
+      </div>
+    </main>
+    <footer class="mt-10 py-5 border-t border-gray-200 text-center text-muted text-sm">
+      <p class="space-x-2">
+        <a href="/best-cigar-box-prices" class="text-brand-500 hover:underline">Best Cigar Box Prices</a>
+        <span>|</span>
+        <a href="/about.html" class="text-brand-500 hover:underline">About</a>
+        <span>|</span>
+        <a href="/contact.html" class="text-brand-500 hover:underline">Contact</a>
+      </p>
+      <p class="mt-2">&copy; 2026 Cigar Price Scout</p>
+    </footer>
+  </div>
+  <script>
+    const filterInput = document.getElementById('cigarFilter');
+    const list = document.getElementById('cigarList');
+    filterInput.addEventListener('input', () => {{
+      const q = filterInput.value.trim().toLowerCase();
+      list.querySelectorAll('[data-brand-line]').forEach((block) => {{
+        const text = block.getAttribute('data-brand-line') || '';
+        block.style.display = !q || text.includes(q) ? '' : 'none';
+      }});
+    }});
+  </script>
+</body>
+</html>'''
+
+    return HTMLResponse(content=html)
 
 # ============== DEAL SUBMISSION API ==============
 
