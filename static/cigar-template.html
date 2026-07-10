@@ -615,64 +615,101 @@
       // stable regardless of client-side filter state so Googlebot's JS render pass
       // sees the same H1 as the initial SSR pass.
 
-        populateFilters(data.results);
+        populateFilters();
         renderTable(data.results);
         renderMobileCards(data.results);
         updateAnswerBlock(data.results);
 
         document.getElementById('actionButtonsRow').style.display = 'flex';
     }
-      
-      function populateFilters(results) {
-        const wrappers = new Set();
-        const vitolas = new Set();
-        const boxQtys = new Set();
-        results.forEach(r => {
-          if (r.wrapper) wrappers.add(r.wrapper);
-          if (r.vitola) vitolas.add(r.vitola);
-          if (r.box_qty) boxQtys.add(Number(r.box_qty));
+
+      let filtersWired = false;
+
+      /** Rows matching any subset of wrapper / vitola / box_qty filters. */
+      function filterResults(results, { wrapper, vitola, boxQty } = {}) {
+        return results.filter(r => {
+          if (wrapper && r.wrapper !== wrapper) return false;
+          if (vitola && r.vitola !== vitola) return false;
+          if (boxQty && String(r.box_qty) !== String(boxQty)) return false;
+          return true;
         });
-        
+      }
+
+      function uniqueFieldValues(results, field) {
+        const values = new Set();
+        results.forEach(r => {
+          if (field === 'box_qty') {
+            if (r.box_qty) values.add(Number(r.box_qty));
+          } else if (r[field]) {
+            values.add(r[field]);
+          }
+        });
+        if (field === 'box_qty') {
+          return Array.from(values).sort((a, b) => a - b);
+        }
+        return Array.from(values).sort();
+      }
+
+      /** Rebuild all three dropdowns so only valid permutations are selectable. */
+      function rebuildFilterOptions() {
         const wrapperFilter = document.getElementById('wrapperFilter');
         const vitolaFilter = document.getElementById('vitolaFilter');
         const boxQtyFilter = document.getElementById('boxQtyFilter');
-        
-      wrapperFilter.innerHTML = '<option value="">All Wrappers</option>' + Array.from(wrappers).sort().map(w => `<option value="${w}">${w}</option>`).join('');
-      vitolaFilter.innerHTML = '<option value="">All Vitolas</option>' + Array.from(vitolas).sort().map(v => `<option value="${v}">${v}</option>`).join('');
-      boxQtyFilter.innerHTML = '<option value="">All Box Qty</option>' + Array.from(boxQtys).sort((a,b) => a-b).map(q => `<option value="${q}">Box of ${q}</option>`).join('');
-        
-        wrapperFilter.addEventListener('change', applyFilters);
-        vitolaFilter.addEventListener('change', applyFilters);
-        boxQtyFilter.addEventListener('change', applyFilters);
+
+        const wrapperVal = wrapperFilter.value;
+        const vitolaVal = vitolaFilter.value;
+        const boxQtyVal = boxQtyFilter.value;
+
+        const wrappers = uniqueFieldValues(
+          filterResults(allResults, { vitola: vitolaVal, boxQty: boxQtyVal }),
+          'wrapper'
+        );
+        const vitolas = uniqueFieldValues(
+          filterResults(allResults, { wrapper: wrapperVal, boxQty: boxQtyVal }),
+          'vitola'
+        );
+        const boxQtys = uniqueFieldValues(
+          filterResults(allResults, { wrapper: wrapperVal, vitola: vitolaVal }),
+          'box_qty'
+        );
+
+        wrapperFilter.innerHTML = '<option value="">All Wrappers</option>' +
+          wrappers.map(w => `<option value="${w}">${w}</option>`).join('');
+        vitolaFilter.innerHTML = '<option value="">All Vitolas</option>' +
+          vitolas.map(v => `<option value="${v}">${v}</option>`).join('');
+        boxQtyFilter.innerHTML = '<option value="">All Box Qty</option>' +
+          boxQtys.map(q => `<option value="${q}">Box of ${q}</option>`).join('');
+
+        if (wrapperVal && wrappers.includes(wrapperVal)) wrapperFilter.value = wrapperVal;
+        if (vitolaVal && vitolas.includes(vitolaVal)) vitolaFilter.value = vitolaVal;
+        if (boxQtyVal && boxQtys.includes(Number(boxQtyVal))) boxQtyFilter.value = boxQtyVal;
+      }
+
+      function populateFilters() {
+        const wrapperFilter = document.getElementById('wrapperFilter');
+        const vitolaFilter = document.getElementById('vitolaFilter');
+        const boxQtyFilter = document.getElementById('boxQtyFilter');
+
+        if (!filtersWired) {
+          wrapperFilter.addEventListener('change', applyFilters);
+          vitolaFilter.addEventListener('change', applyFilters);
+          boxQtyFilter.addEventListener('change', applyFilters);
+          filtersWired = true;
+        }
+
+        rebuildFilterOptions();
       }
       
       function applyFilters() {
+        rebuildFilterOptions();
+
         const wrapperVal = document.getElementById('wrapperFilter').value;
         const vitolaVal = document.getElementById('vitolaFilter').value;
-        const boxQtyFilter = document.getElementById('boxQtyFilter');
-        const boxQtyVal = boxQtyFilter.value;
-
-        // Rebuild box qty options based on current wrapper+vitola selection
-        const availableQtys = new Set();
-        allResults.forEach(r => {
-          if (wrapperVal && r.wrapper !== wrapperVal) return;
-          if (vitolaVal && r.vitola !== vitolaVal) return;
-          if (r.box_qty) availableQtys.add(Number(r.box_qty));
-        });
-        const sortedQtys = Array.from(availableQtys).sort((a, b) => a - b);
-        boxQtyFilter.innerHTML = '<option value="">All Box Qty</option>' + sortedQtys.map(q => `<option value="${q}">Box of ${q}</option>`).join('');
-        if (boxQtyVal && availableQtys.has(Number(boxQtyVal))) {
-          boxQtyFilter.value = boxQtyVal;
-        } else {
-          boxQtyFilter.value = '';
-        }
-
-        const finalBoxQty = boxQtyFilter.value;
-        const filtered = allResults.filter(r => {
-          if (wrapperVal && r.wrapper !== wrapperVal) return false;
-          if (vitolaVal && r.vitola !== vitolaVal) return false;
-          if (finalBoxQty && String(r.box_qty) !== finalBoxQty) return false;
-          return true;
+        const boxQtyVal = document.getElementById('boxQtyFilter').value;
+        const filtered = filterResults(allResults, {
+          wrapper: wrapperVal,
+          vitola: vitolaVal,
+          boxQty: boxQtyVal,
         });
         
         renderTable(filtered);
@@ -687,6 +724,7 @@
         document.getElementById('wrapperFilter').value = '';
         document.getElementById('vitolaFilter').value = '';
         document.getElementById('boxQtyFilter').value = '';
+        rebuildFilterOptions();
         renderTable(allResults);
         renderMobileCards(allResults);
         updateAnswerBlock(allResults);
