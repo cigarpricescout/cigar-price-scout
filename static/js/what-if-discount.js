@@ -5,9 +5,10 @@
 (function (global) {
   let overrides = {};
 
-  // Drop any legacy sessionStorage from earlier versions.
+  // Drop any legacy persisted storage from earlier versions.
   try {
     sessionStorage.removeItem('cps_whatif_v1');
+    localStorage.removeItem('cps_whatif_v1');
   } catch (e) {
     /* ignore */
   }
