@@ -311,12 +311,6 @@
           </div>
         </a>
 
-        <!-- What-if discount banner -->
-        <div x-show="whatIfActive && results.length > 0" x-cloak
-             class="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-center">
-          <span>Showing your estimated discounts (not guaranteed at checkout).</span>
-        </div>
-
         <!-- Missing Price Button -->
         <div x-show="results.length > 0" x-cloak class="text-center mb-5">
           <button onclick="openHomeMissingPriceModal()"
@@ -565,6 +559,12 @@
               </a>
             </div>
           </template>
+        </div>
+
+        <!-- What-if discount disclaimer -->
+        <div x-show="whatIfActive && results.length > 0" x-cloak
+             class="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-center">
+          <span>Showing your estimated discounts (not guaranteed at checkout).</span>
         </div>
         
         <!-- No Results -->
