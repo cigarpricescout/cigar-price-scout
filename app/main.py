@@ -1998,6 +1998,14 @@ def options():
     """Return brand -> line -> wrapper -> vitola/size tree for dropdowns"""
     return {"brands": build_options_tree()}
 
+@app.get("/api/retailers")
+def api_retailers():
+    """Canonical retailer keys/names for homepage what-if discount UI."""
+    return sorted(
+        [{"key": r["key"], "name": r["name"]} for r in RETAILERS],
+        key=lambda item: item["name"].lower(),
+    )
+
 @app.get("/compare")
 def compare(
     brand: str = Query(...),
