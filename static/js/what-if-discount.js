@@ -1,17 +1,19 @@
 /**
- * Session-only "what-if" retailer discounts (homepage compare).
- * Clear by closing the browser tab (sessionStorage).
+ * In-memory "what-if" retailer discounts (homepage compare).
+ * Clears on page refresh; does not persist across reloads.
  */
 (function (global) {
-  const STORAGE_KEY = 'cps_whatif_v1';
+  let overrides = {};
+
+  // Drop any legacy sessionStorage from earlier versions.
+  try {
+    sessionStorage.removeItem('cps_whatif_v1');
+  } catch (e) {
+    /* ignore */
+  }
 
   function load() {
-    try {
-      const raw = sessionStorage.getItem(STORAGE_KEY);
-      return raw ? JSON.parse(raw) : {};
-    } catch (e) {
-      return {};
-    }
+    return { ...overrides };
   }
 
   function save(map) {
@@ -20,22 +22,21 @@
       const v = Math.min(90, Math.max(0, Number(map[k]) || 0));
       if (v > 0) out[k] = v;
     });
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(out));
-    return out;
+    overrides = out;
+    return { ...overrides };
   }
 
   function clear() {
-    sessionStorage.removeItem(STORAGE_KEY);
+    overrides = {};
   }
 
   function hasActive() {
-    const m = load();
-    return Object.keys(m).some((k) => m[k] > 0);
+    return Object.keys(overrides).some((k) => overrides[k] > 0);
   }
 
   function getPct(retailerKey) {
     if (!retailerKey) return 0;
-    return load()[retailerKey] || 0;
+    return overrides[retailerKey] || 0;
   }
 
   function parseDollars(str) {
@@ -52,7 +53,6 @@
   }
 
   global.CpsWhatIf = {
-    STORAGE_KEY,
     load,
     save,
     clear,

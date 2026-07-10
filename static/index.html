@@ -311,17 +311,17 @@
           </div>
         </a>
 
-        <!-- Missing Price Button -->
-        <div x-show="results.length > 0" x-cloak class="text-center mb-5">
+        <!-- Missing Price + Clear discounts -->
+        <div x-show="results.length > 0" x-cloak class="text-center mb-5 flex flex-wrap justify-center items-center gap-3">
           <button onclick="openHomeMissingPriceModal()"
                   class="inline-flex items-center gap-2 px-8 py-4 rounded-xl bg-brand-500 text-white text-lg font-semibold hover:bg-brand-600 transition-all shadow-md hover:shadow-lg">
             <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Missing Price
           </button>
-          <div x-show="whatIfActive" class="mt-2">
-            <button type="button" @click="clearWhatIf()"
-                    class="text-xs text-gray-500 hover:text-brand-600 underline font-display">Clear discounts</button>
-          </div>
+          <button x-show="whatIfActive" type="button" @click="clearWhatIf()"
+                  class="inline-flex items-center gap-2 px-8 py-4 rounded-xl border-2 border-gray-300 bg-white text-gray-700 text-lg font-semibold hover:bg-gray-50 transition-all shadow-sm">
+            Clear discounts
+          </button>
         </div>
         
         <!-- Desktop Table -->
@@ -622,7 +622,7 @@
           <button type="button" @click="closeWhatIfModal()" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
         </div>
         <p class="text-sm text-muted mb-4">
-          Enter a percent-off for each retailer. Estimates apply to Scout totals on this page only and clear when you close the tab. Not guaranteed at checkout.
+          Enter a percent-off for each retailer. Estimates apply to Scout totals on this page only and reset when you refresh. Not guaranteed at checkout.
         </p>
         <div class="flex flex-wrap items-end gap-3 mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
           <div>
