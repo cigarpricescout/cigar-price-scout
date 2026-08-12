@@ -70,14 +70,33 @@ jobs:
           ANALYTICS_DB_URL: ${{ secrets.ANALYTICS_DB_URL }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           PYTHONUNBUFFERED: 1
+
+      - name: Prune historical DB under GitHub size limit
+        # Prevents GH001 push rejection when historical_prices.db exceeds 100 MB.
+        run: python scripts/prune_historical_prices_db.py --apply
       
       - name: Commit and push changes (if needed)
         run: |
-          # Check if there are any uncommitted changes
-          if ! git diff --quiet || ! git diff --cached --quiet; then
-            echo "Found uncommitted changes, committing now..."
+          # Never stage a DB that would exceed GitHub's hard 100 MB limit.
+          DB="data/historical_prices.db"
+          if [ -f "$DB" ]; then
+            SIZE=$(stat -c%s "$DB")
+            if [ "$SIZE" -ge $((95 * 1024 * 1024)) ]; then
+              echo "WARNING: $DB is $SIZE bytes (>=95MB) — excluding from commit"
+              git add -A -- . ':(exclude)data/historical_prices.db'
+              git reset HEAD -- data/historical_prices.db 2>/dev/null || true
+            else
+              git add -A
+            fi
+          else
             git add -A
+          fi
+
+          if ! git diff --cached --quiet; then
+            echo "Found staged changes, committing now..."
             git commit -m "Automated price update - $(date +'%Y-%m-%d %H:%M')" || echo "Commit may have already been done by script"
+          else
+            echo "No staged changes to commit"
           fi
           
           # Push any new commits (whether from script or from above)

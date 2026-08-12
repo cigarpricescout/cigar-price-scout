@@ -710,6 +710,27 @@ class AutomatedCigarPriceSystem:
         
         try:
             self.logger.info("Starting git commit and push...")
+
+            # Keep historical_prices.db under GitHub's 100 MB hard limit.
+            # Without this, daily growth eventually rejects the push (GH001)
+            # and the whole job fails even when CSV scrapes succeeded.
+            prune_script = self.project_root / "scripts" / "prune_historical_prices_db.py"
+            hist_db = self.project_root / "data" / "historical_prices.db"
+            if prune_script.exists() and hist_db.exists():
+                prune = subprocess.run(
+                    ["python", str(prune_script), "--apply"],
+                    capture_output=True,
+                    text=True,
+                    cwd=self.project_root,
+                )
+                if prune.stdout:
+                    self.logger.info(prune.stdout.strip())
+                if prune.returncode != 0:
+                    self.logger.warning(
+                        "historical_prices.db prune reported an issue "
+                        f"(exit {prune.returncode}); will exclude oversized DB from commit if needed. "
+                        f"{(prune.stderr or '').strip()}"
+                    )
             
             # Pull latest changes first to avoid conflicts
             pull_result = subprocess.run(['git', 'pull', '--rebase'],
@@ -727,11 +748,45 @@ class AutomatedCigarPriceSystem:
                 self.logger.info("No git changes to commit")
                 return True
             
-            # Add all changes
-            subprocess.run(['git', 'add', '.'], cwd=self.project_root, check=True)
+            # Prefer CSV + lightweight data commits. Never stage a DB that would
+            # blow GitHub's 100 MB limit (push would be rejected).
+            max_db_bytes = 95 * 1024 * 1024
+            hist_too_big = hist_db.exists() and hist_db.stat().st_size >= max_db_bytes
+            if hist_too_big:
+                self.logger.warning(
+                    f"Excluding {hist_db} from commit "
+                    f"({hist_db.stat().st_size / 1024 / 1024:.1f} MB >= 95 MB limit)"
+                )
+                subprocess.run(
+                    ["git", "add", "-A", "--", ".", ":(exclude)data/historical_prices.db"],
+                    cwd=self.project_root,
+                    check=True,
+                )
+                # Keep any previously staged oversized DB out of this commit.
+                subprocess.run(
+                    ["git", "reset", "HEAD", "--", "data/historical_prices.db"],
+                    cwd=self.project_root,
+                    capture_output=True,
+                )
+            else:
+                subprocess.run(['git', 'add', '.'], cwd=self.project_root, check=True)
             
             # Commit changes
             if self.config['git_automation']['auto_commit']:
+                # Nothing staged? (e.g. only the oversized DB changed)
+                staged = subprocess.run(
+                    ["git", "diff", "--cached", "--name-only"],
+                    capture_output=True,
+                    text=True,
+                    cwd=self.project_root,
+                )
+                if not (staged.stdout or "").strip():
+                    self.logger.warning(
+                        "Nothing staged after excluding oversized historical DB — "
+                        "skipping commit/push so the job can still succeed"
+                    )
+                    return True
+
                 commit_message = self.config['git_automation']['commit_message_template'].format(
                     date=datetime.now().strftime('%Y-%m-%d %H:%M')
                 )

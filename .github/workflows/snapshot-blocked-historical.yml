@@ -79,6 +79,12 @@ jobs:
 
       - name: Commit historical DB (if changed)
         run: |
+          python scripts/prune_historical_prices_db.py --apply
+          SIZE=$(stat -c%s data/historical_prices.db)
+          if [ "$SIZE" -ge $((95 * 1024 * 1024)) ]; then
+            echo "ERROR: historical_prices.db is $SIZE bytes — refusing to commit (>=95MB)"
+            exit 1
+          fi
           git add data/historical_prices.db
           if git diff --cached --quiet; then
             echo "No changes to historical_prices.db"
