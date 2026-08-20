@@ -227,6 +227,9 @@ function openCandidateForEdit(tab, response, editCid, { force = false } = {}) {
 }
 
 function renderMatched(tab, response) {
+  const reReviewLabel = needsManualPricing(response)
+    ? "Update price / stock"
+    : "Re-review selected";
   root.innerHTML = `
     ${renderHeader(tab, response)}
     <div class="banner matched">✓ Already published to ${escapeHtml(response.retailer_key)}</div>
@@ -234,11 +237,23 @@ function renderMatched(tab, response) {
     ${renderMappedCigarsSection(response)}
     ${renderOperatorListingSource(response)}
     ${renderScraped(response)}
+    ${needsManualPricing(response) ? `
+      <div class="section">
+        <div class="section-label">Blocked retailer — refresh listing</div>
+        <p class="operator-source-line">
+          Price and in-stock are operator-entered. Use <strong>${escapeHtml(reReviewLabel)}</strong>
+          to confirm the live page values and re-Approve.
+        </p>
+        ${manualPricingBlock(response)}
+      </div>` : ""}
     <div class="actions">
       ${response.community_proposal
         ? `<button class="approve" id="resolve-cp">Approve consumer submission</button>`
         : ""}
-      <button class="secondary" id="re-review">Re-review selected</button>
+      ${needsManualPricing(response)
+        ? `<button class="approve" id="refresh-price">Save price / stock</button>`
+        : ""}
+      <button class="secondary" id="re-review">${escapeHtml(reReviewLabel)}</button>
       ${(response.cigar_options && response.cigar_options.length > 1)
         ? `<button type="button" class="secondary" id="add-mapping">Add another mapping</button>`
         : ""}
@@ -248,10 +263,14 @@ function renderMatched(tab, response) {
   `;
   wireMatchedActions(tab, response);
   wireResolveCommunityProposal(tab, response);
+  wireRefreshPriceStock(tab, response);
 }
 
 function renderSeen(tab, response) {
   const label = (response.seen_status || "").replace("_", " ");
+  const reReviewLabel = needsManualPricing(response)
+    ? "Update price / stock"
+    : "Re-review selected";
   root.innerHTML = `
     ${renderHeader(tab, response)}
     <div class="banner seen">Status: ${escapeHtml(label)}</div>
@@ -259,17 +278,26 @@ function renderSeen(tab, response) {
     ${renderMappedCigarsSection(response)}
     ${renderOperatorListingSource(response)}
     ${renderScraped(response)}
+    ${needsManualPricing(response) ? `
+      <div class="section">
+        <div class="section-label">Blocked retailer — refresh listing</div>
+        ${manualPricingBlock(response)}
+      </div>` : ""}
     <div class="actions">
       ${response.community_proposal
         ? `<button class="approve" id="resolve-cp">Approve consumer submission</button>`
         : ""}
-      <button class="secondary" id="re-review">Re-review selected</button>
+      ${needsManualPricing(response)
+        ? `<button class="approve" id="refresh-price">Save price / stock</button>`
+        : ""}
+      <button class="secondary" id="re-review">${escapeHtml(reReviewLabel)}</button>
       <button class="skip" id="close">Close</button>
     </div>
     <div class="footer"><a href="#" id="open-options">Settings</a></div>
   `;
   wireMatchedActions(tab, response);
   wireResolveCommunityProposal(tab, response);
+  wireRefreshPriceStock(tab, response);
 }
 
 // Variant of communityProposalBanner for the matched/seen states.
@@ -475,6 +503,7 @@ function renderCandidate(tab, response) {
       <div id="master-lock-hint" class="banner seen" style="display:none;font-size:11px;margin-top:8px;line-height:1.4"></div>
       ${top && top.details && !top.details.inbox ? renderMatchChips(top.details) : ""}
       ${renderScraped(response)}
+      ${manualPricingBlock(response)}
 
       <div class="fields" id="cid-fields">
         <input type="hidden" id="f-parent_brand" name="parent_brand"
@@ -494,8 +523,6 @@ function renderCandidate(tab, response) {
         ${wrapperField(parts.wrapper_code)}
         ${field("box_qty",       "Box Qty",       parts.box_qty,       "number")}
       </div>
-
-      ${manualPricingBlock(response)}
 
       <div id="dup-warning" style="display:none"></div>
 
@@ -601,6 +628,34 @@ function needsManualPricing(response) {
   return s === "blocked" || s === "dormant";
 }
 
+function resolveProposedPriceStock(response) {
+  // Prefer live page scrape; fall back to inbox / community proposal values.
+  const s = response._scraped || {};
+  const inbox = response.ai_proposal || {};
+  const cp = response.community_proposal || {};
+
+  let price = null;
+  if (typeof s.price === "number" && !Number.isNaN(s.price)) price = s.price;
+  else if (typeof inbox.price === "number" && !Number.isNaN(inbox.price)) price = inbox.price;
+  else if (typeof cp.confirmed_price === "number" && !Number.isNaN(cp.confirmed_price)) {
+    price = cp.confirmed_price;
+  }
+
+  let inStock = null;
+  if (s.inStock === true || s.inStock === false) inStock = s.inStock;
+  else if (inbox.in_stock === true || inbox.in_stock === false) inStock = inbox.in_stock;
+  else if (cp.proposed_in_stock === true || cp.proposed_in_stock === false) {
+    inStock = cp.proposed_in_stock;
+  }
+
+  return { price, inStock };
+}
+
+function formatMoney(n) {
+  if (typeof n !== "number" || Number.isNaN(n)) return null;
+  return `$${n.toFixed(2)}`;
+}
+
 // Conditional price + in-stock block. Pre-fills from the page scrape so
 // most of the time the operator just confirms the values. Rendered inline
 // in the candidate form when needsManualPricing(response) is true; empty
@@ -608,19 +663,22 @@ function needsManualPricing(response) {
 // scraper fills these columns).
 function manualPricingBlock(response) {
   if (!needsManualPricing(response)) return "";
-  const s = response._scraped || {};
-  const priceVal = (typeof s.price === "number" && !Number.isNaN(s.price))
-    ? s.price.toFixed(2)
-    : "";
-  // Default to "in stock" unless the scraper EXPLICITLY captured the
-  // page as out-of-stock. Operators are usually browsing live inventory,
-  // so missing-data → true is the safer default than missing-data → null.
-  const inStockVal = s.inStock === false ? "false" : "true";
+  const { price, inStock } = resolveProposedPriceStock(response);
+  const priceVal = price != null ? price.toFixed(2) : "";
+  // Prefer an explicit scrape / proposal. Only default to "in stock" when
+  // nothing on the page or proposal said otherwise — operators must still
+  // be able to flip OOS pages (Famous, etc.) to No.
+  const inStockVal = inStock === false ? "false" : "true";
+  const scrapedHint = [
+    price != null ? `Page/proposal: ${formatMoney(price)}` : "No price detected — enter it",
+    inStock === false ? "Out of stock" : (inStock === true ? "In stock" : "Stock unknown"),
+  ].join(" · ");
   return `
     <div class="manual-pricing">
       <div class="manual-pricing-banner">
         <strong>No scraper for this retailer.</strong>
-        Your price + stock entry below is saved directly to the CSV.
+        Confirm price + stock below — saved to the CSV on Approve.
+        <div style="margin-top:4px;font-weight:500;opacity:.9">${escapeHtml(scrapedHint)}</div>
       </div>
       <div class="field-row">
         <div class="field">
@@ -773,10 +831,19 @@ function renderMatchChips(details) {
 function renderScraped(response) {
   const s = response._scraped || {};
   const t = response.scraped_title || s.title || "";
-  if (!t) return "";
+  const { price, inStock } = resolveProposedPriceStock(response);
+  const priceLabel = formatMoney(price);
+  const stockLabel = inStock === false ? "Out of stock" : (inStock === true ? "In stock" : null);
+  if (!t && !priceLabel && !stockLabel) return "";
   return `
     <div class="scraped">
-      <strong>On page:</strong> ${escapeHtml(t.slice(0, 140))}
+      ${t ? `<div><strong>On page:</strong> ${escapeHtml(t.slice(0, 140))}</div>` : ""}
+      ${(priceLabel || stockLabel) ? `
+        <div style="margin-top:4px">
+          <strong>Proposed:</strong>
+          ${priceLabel ? escapeHtml(priceLabel) : "—"}
+          ${stockLabel ? ` · ${escapeHtml(stockLabel)}` : ""}
+        </div>` : ""}
     </div>
   `;
 }
@@ -858,6 +925,54 @@ function wireMatchedActions(tab, response) {
   document.getElementById("re-review").addEventListener("click", () => {
     const cid = selectedMappedCid(response);
     openCandidateForEdit(tab, response, cid, { force: !multi });
+  });
+}
+
+function wireRefreshPriceStock(tab, response) {
+  const btn = document.getElementById("refresh-price");
+  if (!btn) return;
+  btn.addEventListener("click", async () => {
+    const cid = selectedMappedCid(response);
+    if (!cid || !response.retailer_key) {
+      return toast("No mapped cigar to update.", "error");
+    }
+    const priceEl = document.getElementById("f-price");
+    const stockEl = document.getElementById("f-in_stock");
+    let priceValue = null;
+    if (priceEl) {
+      const raw = (priceEl.value || "").trim();
+      if (raw !== "") {
+        const parsed = parseFloat(raw);
+        if (Number.isNaN(parsed) || parsed < 0) {
+          return toast("Enter a valid price (e.g. 12.99) or leave blank.", "error");
+        }
+        priceValue = parsed;
+      }
+    }
+    const inStockValue = stockEl ? (stockEl.value === "true") : null;
+    btn.disabled = true;
+    btn.textContent = "Saving…";
+    try {
+      await apiFetch("/api/admin/stage-approval", {
+        method: "POST",
+        body: {
+          retailer_key: response.retailer_key,
+          url: response.url || tab.url,
+          cid,
+          force: true,
+          title: response.scraped_title || (response._scraped && response._scraped.title) || "",
+          price: priceValue,
+          in_stock: inStockValue,
+        },
+      });
+      toast("Price / stock saved — publisher will write CSV next run");
+      chrome.runtime.sendMessage({ type: "invalidateCache", url: tab.url }).catch(() => {});
+      setTimeout(() => window.close(), 700);
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = "Save price / stock";
+      toast(String((e && e.message) || e), "error");
+    }
   });
 }
 
@@ -1546,10 +1661,13 @@ function inboxProposalBanner(response) {
   const p = response.ai_proposal;
   if (!p || !p.cigar_id) return "";
   const label = [p.brand, p.line, p.vitola].filter(Boolean).join(" ") || "Master catalog row";
+  const { price, inStock } = resolveProposedPriceStock(response);
   const meta = [
     p.size,
     p.box_qty != null && p.box_qty !== "" ? `Box ${p.box_qty}` : "",
     p.wrapper || p.wrapper_code || "",
+    formatMoney(price),
+    inStock === false ? "Out of stock" : (inStock === true ? "In stock" : ""),
   ].filter(Boolean).join(" • ");
   return `
     <div class="community-proposal">
@@ -1559,8 +1677,8 @@ function inboxProposalBanner(response) {
       <div class="cp-product">${escapeHtml(label)}</div>
       ${meta ? `<div class="cp-meta">${escapeHtml(meta)}</div>` : ""}
       <div class="cp-hint">
-        Opened from the review inbox. Compare this master row to the live page,
-        then Approve if it matches. Skip if the vitola, wrapper, or box qty is wrong.
+        Opened from the review inbox. Confirm price + stock below (blocked retailers),
+        then Approve if the vitola / wrapper / box match the live page.
       </div>
     </div>
   `;
