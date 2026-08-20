@@ -590,6 +590,13 @@ Files you'll touch most often, grouped by concern:
   key, consumer hits `/api/public/*` and `/api/community/*` anonymously.
 - **`observer_id` is the foundation for future badges/dashboards/watchlists.**
   Don't break its meaning. Every contribution table already carries it.
+- **Landing-page OOS policy.** Comparison tables show all in-stock rows
+  plus up to 3 OOS sample rows (`LANDING_TABLE_OOS_SAMPLE`). Filtering
+  to wrapper + vitola + box qty reveals every monitored retailer.
+  `/api/price-history` is not stock-filtered — charts keep OOS history.
+  Fully OOS landings stay live (history + sample rows, `noindex, follow`)
+  but are omitted from the cigar sitemap. SERP `from $X` / JSON-LD
+  prices use in-stock rows only.
 - **Dormant retailers** (those with `DORMANT` in the CSV filename, or
   `extractor_status="dormant"`) are skipped entirely by
   `build_retailer_registry()` and `load_csv()`. Use this when sunsetting
@@ -606,4 +613,4 @@ Files you'll touch most often, grouped by concern:
 - For "is this change safe to ship?" → run section 11.
 - For "what file owns X?" → section 12.
 
-Last updated: 2026-05-13, commit `ff61839`.
+Last updated: 2026-08-19, landing-page OOS sample + in-stock SERP prices.

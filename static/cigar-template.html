@@ -14,7 +14,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{{PAGE_TITLE}}</title>
   <meta name="description" content="{{PAGE_DESCRIPTION}}" />
-  <meta name="robots" content="index, follow">
+  <meta name="robots" content="{{ROBOTS}}">
   <link rel="canonical" href="https://cigarpricescout.com/cigars/{{BRAND_SLUG}}/{{LINE_SLUG}}" />
     <link rel="icon" type="image/png" href="/static/logo.png">
   
@@ -246,8 +246,9 @@
       <main>
         <section id="results">
         <h1 id="resultsTitle" class="font-display font-bold text-2xl text-center tracking-wide my-4">
-            {{BRAND}} {{LINE}} Prices – Compare {{RETAILER_COUNT}} Retailers
+            {{RESULTS_H1}}
           </h1>
+        <p id="resultsSummary" class="text-center text-muted text-sm mb-2 max-w-3xl mx-auto"></p>
 
         <!-- Filters
              Mobile: single column, each control full-width (uniform look).
@@ -443,6 +444,7 @@
               </tbody>
             </table>
           </div>
+        <p id="oosTableNote" class="text-center text-sm text-muted mt-3 mb-2" style="display: none;"></p>
 
           
           <!-- Mobile Cards
@@ -544,6 +546,7 @@
     </div>
 
     <script>
+      const LANDING_OOS_CAP = 3;
       let allResults = [];
       
     // Extract brand and line from URL path
@@ -574,6 +577,62 @@
         }
       }
       
+      function hasTightFilters() {
+        const w = document.getElementById('wrapperFilter')?.value;
+        const v = document.getElementById('vitolaFilter')?.value;
+        const q = document.getElementById('boxQtyFilter')?.value;
+        return !!(w && v && q);
+      }
+
+      function visibleTableResults(results) {
+        const inStock = results.filter(r => !r.oos);
+        const oos = results.filter(r => r.oos);
+        if (hasTightFilters()) {
+          return { rows: results, hiddenOos: 0, allOos: inStock.length === 0, oosCount: oos.length };
+        }
+        const shownOos = oos.slice(0, LANDING_OOS_CAP);
+        return {
+          rows: inStock.concat(shownOos),
+          hiddenOos: Math.max(0, oos.length - shownOos.length),
+          allOos: inStock.length === 0,
+          oosCount: oos.length,
+        };
+      }
+
+      function updateOosNote(view) {
+        const note = document.getElementById('oosTableNote');
+        if (!note) return;
+        if (view.allOos) {
+          note.style.display = 'block';
+          note.textContent = view.hiddenOos
+            ? `Currently out of stock at tracked retailers. Showing ${view.rows.length} sample listings; ${view.hiddenOos} more OOS rows are hidden. Price history below still includes the full record.`
+            : 'Currently out of stock at tracked retailers. Price history below still includes the full record.';
+          return;
+        }
+        if (view.hiddenOos > 0) {
+          note.style.display = 'block';
+          note.textContent = `${view.hiddenOos} additional out-of-stock listings are hidden. Filter to a wrapper, vitola, and box size to see every retailer we monitor, or open Price History for the full trend.`;
+          return;
+        }
+        note.style.display = 'none';
+        note.textContent = '';
+      }
+
+      function sortLandingResults(results) {
+        return results.slice().sort((a, b) => {
+          if (!!a.oos !== !!b.oos) return a.oos ? 1 : -1;
+          return parseFloat(String(a.base).replace(/[$,]/g, '')) - parseFloat(String(b.base).replace(/[$,]/g, ''));
+        });
+      }
+
+      function renderVisibleResults(results) {
+        const view = visibleTableResults(results);
+        renderTable(view.rows);
+        renderMobileCards(view.rows);
+        updateAnswerBlock(results);
+        updateOosNote(view);
+      }
+
       function displayResults(data) {
         const titleEl = document.getElementById('resultsTitle');
         const metaDesc = document.querySelector('meta[name="description"]');
@@ -585,14 +644,12 @@
             return;
         }
 
-      // Sort by base (advertised) price since shipping/tax aren't shown on individual cigar pages
-      data.results.sort((a, b) => parseFloat(a.base.replace("$", "")) - parseFloat(b.base.replace("$", "")));
-        allResults = data.results;
+      allResults = sortLandingResults(data.results);
 
         const wrappers = new Set();
         const vitolas = new Set();
         const boxQtys = new Set();
-        data.results.forEach(r => {
+        allResults.forEach(r => {
             if (r.wrapper) wrappers.add(r.wrapper);
             if (r.vitola) vitolas.add(r.vitola);
             if (r.box_qty) boxQtys.add(r.box_qty);
@@ -601,26 +658,33 @@
       // Update summary
         const summaryEl = document.getElementById('resultsSummary');
         if (summaryEl) {
-            const wrapperList = Array.from(wrappers).sort().join(', ');
-            const vitolaList = Array.from(vitolas).sort().join(', ');
-            let summary = `We found ${data.results.length} ${data.brand} ${data.line} box listings`;
-            if (wrapperList) summary += ` in wrappers such as ${wrapperList}`;
-            if (vitolaList) summary += ` and vitolas like ${vitolaList}`;
-        summary += `. Use the filters below to explore wrappers, vitolas, and box quantities.`;
-            summaryEl.textContent = summary;
+            const inStockCount = allResults.filter(r => !r.oos).length;
+            const oosCount = allResults.length - inStockCount;
+            if (inStockCount === 0) {
+              summaryEl.textContent = `No in-stock boxes right now among ${allResults.length} tracked listings. Open Price History for the full trend; a few OOS rows stay in the table so you can see we still monitor this cigar.`;
+            } else {
+              const wrapperList = Array.from(wrappers).sort().join(', ');
+              const vitolaList = Array.from(vitolas).sort().join(', ');
+              let summary = `We found ${inStockCount} in-stock ${data.brand} ${data.line} listings`;
+              if (oosCount) summary += ` (plus ${oosCount} out of stock we still monitor)`;
+              if (wrapperList) summary += ` in wrappers such as ${wrapperList}`;
+              if (vitolaList) summary += ` and vitolas like ${vitolaList}`;
+              summary += `. Use the filters below to explore wrappers, vitolas, and box quantities.`;
+              summaryEl.textContent = summary;
+            }
         }
 
       // Intentionally NOT updating titleEl here — the server renders the canonical
-      // H1 (cigar name + "Prices – Compare N Retailers") and we want that to remain
-      // stable regardless of client-side filter state so Googlebot's JS render pass
+      // H1 and we want that to remain stable so Googlebot's JS render pass
       // sees the same H1 as the initial SSR pass.
 
         populateFilters();
-        renderTable(data.results);
-        renderMobileCards(data.results);
-        updateAnswerBlock(data.results);
+        renderVisibleResults(allResults);
 
         document.getElementById('actionButtonsRow').style.display = 'flex';
+        if (allResults.every(r => r.oos) && !historyExpanded) {
+          togglePriceHistory();
+        }
     }
 
       let filtersWired = false;
@@ -712,9 +776,7 @@
           boxQty: boxQtyVal,
         });
         
-        renderTable(filtered);
-        renderMobileCards(filtered);
-        updateAnswerBlock(filtered);
+        renderVisibleResults(filtered);
         updateMissingPriceBtn();
         if (historyExpanded) loadPriceHistory();
         if (guideExpanded) loadBuyingGuide();
@@ -725,9 +787,7 @@
         document.getElementById('vitolaFilter').value = '';
         document.getElementById('boxQtyFilter').value = '';
         rebuildFilterOptions();
-        renderTable(allResults);
-        renderMobileCards(allResults);
-        updateAnswerBlock(allResults);
+        renderVisibleResults(allResults);
         updateMissingPriceBtn();
         if (historyExpanded) loadPriceHistory();
         if (guideExpanded) loadBuyingGuide();
@@ -791,7 +851,8 @@
         if (cheapest.box_qty) productDesc += (productDesc ? ' • ' : '') + 'Box of ' + cheapest.box_qty;
         document.getElementById('cheapest-product').textContent = productDesc || '--';
         
-        document.getElementById('compared-count').textContent = results.length + ' retailers';
+        document.getElementById('compared-count').textContent =
+          inStock.length + ' in stock' + (results.length > inStock.length ? ` / ${results.length} tracked` : '');
         
         answerBlock.style.display = 'block';
       }

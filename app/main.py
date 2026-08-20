@@ -1587,29 +1587,50 @@ def load_all_products():
 _sitemap_cigar_pairs_cache = {"pairs": None, "_prod_ts": None}
 
 
+LANDING_TABLE_OOS_SAMPLE = 3
+
+
+def _line_has_comparable_variation(products) -> bool:
+    from collections import defaultdict
+
+    var_retailers = defaultdict(set)
+    for p in products:
+        var_retailers[(p.wrapper, p.vitola, p.box_qty)].add(p.retailer_key)
+    return any(len(r) >= MIN_RETAILERS_FOR_COMPARISON for r in var_retailers.values())
+
+
+def _landing_table_products(products):
+    """In-stock rows first, plus a small OOS sample so monitoring is visible."""
+    in_stock = [p for p in products if p.in_stock]
+    oos = [p for p in products if not p.in_stock]
+    in_stock.sort(key=lambda p: p.price_cents or 10**12)
+    oos.sort(key=lambda p: p.price_cents or 10**12)
+    return in_stock + oos[:LANDING_TABLE_OOS_SAMPLE]
+
+
 def _get_sorted_cigar_sitemap_pairs():
-    """Unique (brand_slug, line_slug) pairs; invalidated whenever load_all_products() refreshes."""
+    """Indexable cigar URLs: comparable variation AND at least one in-stock price."""
     pts = _product_cache["timestamp"]
     c = _sitemap_cigar_pairs_cache
     if c["pairs"] is not None and c.get("_prod_ts") == pts:
         return c["pairs"]
 
-    all_products = load_all_products()
-    cigar_pages = set()
-    for p in all_products:
-        if not p.brand or not p.line:
-            continue
-        brand_slug = p.brand.lower().replace(' ', '-').replace('&', 'and')
-        line_slug = normalize_line_slug(p.line)
-        cigar_pages.add((brand_slug, line_slug))
-    pairs = sorted(cigar_pages, key=lambda x: (x[0], x[1]))
+    pairs = [
+        (p["brand_slug"], p["line_slug"])
+        for p in _get_valid_landing_pages()
+        if p.get("in_stock")
+    ]
     c["pairs"] = pairs
     c["_prod_ts"] = pts
     return pairs
 
 
 def _get_valid_landing_pages():
-    """Brand/line entries that render a real cigar landing page (not 404)."""
+    """Brand/line entries that render a real cigar landing page (not 404).
+
+    Includes currently all-OOS lines so /cigar-price-history can still link to
+    tracked charts. Sitemap and Google indexing use the in_stock flag separately.
+    """
     from collections import defaultdict
 
     all_products = load_all_products()
@@ -1620,10 +1641,7 @@ def _get_valid_landing_pages():
 
     pages = []
     for (brand, line), products in by_line.items():
-        var_retailers = defaultdict(set)
-        for p in products:
-            var_retailers[(p.wrapper, p.vitola, p.box_qty)].add(p.retailer_key)
-        if not any(len(r) >= MIN_RETAILERS_FOR_COMPARISON for r in var_retailers.values()):
+        if not _line_has_comparable_variation(products):
             continue
         brand_slug = brand.lower().replace(' ', '-').replace('&', 'and')
         line_slug = normalize_line_slug(line)
@@ -1633,20 +1651,28 @@ def _get_valid_landing_pages():
             'brand_slug': brand_slug,
             'line_slug': line_slug,
             'url': f"/cigars/{brand_slug}/{line_slug}",
+            'in_stock': any(p.in_stock and p.price_cents for p in products),
         })
     pages.sort(key=lambda x: (x['brand'].lower(), x['line'].lower()))
     return pages
 
 
-def _landing_page_serp_meta(brand_slug, line_slug, brand_display, line_display, low_price_display, retailer_count):
+def _landing_page_serp_meta(brand_slug, line_slug, brand_display, line_display, low_price_display, retailer_count, all_oos=False):
     """Title and meta description tuned for high-traffic cigar SERPs."""
+    if all_oos:
+        title = f"{brand_display} {line_display} Price History | Currently Out of Stock"
+        desc = (
+            f"Tracked box price history for {brand_display} {line_display}. "
+            f"Currently out of stock at retailers we monitor. Charts still update when stock returns."
+        )
+        return title, desc
     key = f"{brand_slug.lower()}|{line_slug.lower()}"
     rc = retailer_count
     lp = low_price_display
     overrides = {
         "cohiba|red-dot": (
-            f"Cohiba Red Dot Box Prices - Compare {rc}+ Retailers | Cigar Price Scout",
-            f"Compare Cohiba Red Dot cigar box prices from ${lp} across {rc} retailers. "
+            f"Cohiba Red Dot Box Prices from ${lp} | In Stock at {rc} Retailers",
+            f"Compare in-stock Cohiba Red Dot cigar box prices from ${lp} across {rc} retailers. "
             f"Tracked price history, buying guides, and delivered-price estimates. Updated daily.",
         ),
         "padron|1964-anniversary": (
@@ -2836,7 +2862,7 @@ def _build_related_releases_html(
             info["line_display"] = p.line
         info["retailers"].add(p.retailer_key)
         info["vitolas"].add((p.wrapper, p.vitola, p.box_qty))
-        if p.price_cents:
+        if p.price_cents and p.in_stock:
             info["prices"].append(p.price_cents / 100)
         if p.wrapper:
             info["wrapper_counts"][p.wrapper] += 1
@@ -3048,14 +3074,7 @@ async def cigar_landing_page(brand: str, line: str):
             and normalize_line_slug(p.line) == line.lower()
         ]
         
-        # Check if ANY variation has enough retailers for a meaningful comparison
-        from collections import defaultdict as _defaultdict
-        _var_retailers = _defaultdict(set)
-        for p in matching_products:
-            _var_retailers[(p.wrapper, p.vitola, p.box_qty)].add(p.retailer_key)
-        has_valid_variation = any(
-            len(r) >= MIN_RETAILERS_FOR_COMPARISON for r in _var_retailers.values()
-        )
+        has_valid_variation = _line_has_comparable_variation(matching_products)
         
         if not matching_products or not has_valid_variation:
             return HTMLResponse(
@@ -3137,7 +3156,7 @@ async def cigar_landing_page(brand: str, line: str):
         # Deduplicate by (retailer, wrapper, vitola, box_qty) so the cards list doesn't
         # show near-duplicate cards for the same variation across data reloads.
         _seen_card_keys = set()
-        for p in matching_products[:25]:
+        for p in _landing_table_products(matching_products)[:25]:
             price_dollars = p.price_cents / 100 if p.price_cents else 0
             price_str = f"${price_dollars:.2f}" if p.price_cents else "N/A"
             if p.price_cents:
@@ -3201,17 +3220,17 @@ async def cigar_landing_page(brand: str, line: str):
         else:
             html = html.replace('{{SSR_MOBILE_CARDS}}', '')
         
-        # Fill in JSON-LD structured data and meta tag values
-        retailer_count = len({p.retailer_key for p in matching_products if p.price_cents})
-        # Price range is computed from ALL priced rows, not just the first 25 SSR'd
-        # ones — otherwise the SERP title/meta and JSON-LD could show "$0" when a
-        # qualifying variation's rows sort beyond the SSR cap.
-        all_prices = [p.price_cents / 100 for p in matching_products if p.price_cents]
+        # SERP prices and offer counts use in-stock rows only so snippets don't
+        # advertise an OOS outlier. Historical charts still use the full catalog.
+        in_stock_priced = [p for p in matching_products if p.in_stock and p.price_cents]
+        any_in_stock = bool(in_stock_priced)
+        offer_rows = in_stock_priced if any_in_stock else [p for p in matching_products if p.price_cents]
+        retailer_count = len({p.retailer_key for p in offer_rows})
+        all_prices = [p.price_cents / 100 for p in offer_rows]
         low_price = min(all_prices) if all_prices else 0
         high_price = max(all_prices) if all_prices else 0
-        any_in_stock = any(p.in_stock for p in matching_products if p.price_cents)
 
-        html = html.replace('{{OFFER_COUNT}}', str(len(matching_products)))
+        html = html.replace('{{OFFER_COUNT}}', str(len(offer_rows)))
         # JSON-LD requires raw numeric values (dot decimal, no separators).
         html = html.replace('{{LOW_PRICE}}', f"{low_price:.2f}")
         html = html.replace('{{HIGH_PRICE}}', f"{high_price:.2f}")
@@ -3222,6 +3241,7 @@ async def cigar_landing_page(brand: str, line: str):
         page_title, page_desc = _landing_page_serp_meta(
             brand, line, brand_display, line_display,
             _format_price_display(low_price), retailer_count,
+            all_oos=not any_in_stock,
         )
         html = html.replace('{{PAGE_TITLE}}', _escape_html(page_title))
         html = html.replace('{{PAGE_DESCRIPTION}}', _escape_html(page_desc))
@@ -3230,6 +3250,15 @@ async def cigar_landing_page(brand: str, line: str):
             'https://schema.org/InStock' if any_in_stock else 'https://schema.org/OutOfStock',
         )
         html = html.replace('{{RETAILER_COUNT}}', str(retailer_count))
+        html = html.replace(
+            '{{ROBOTS}}',
+            'index, follow' if any_in_stock else 'noindex, follow',
+        )
+        if any_in_stock:
+            results_h1 = f"{brand_display} {line_display} Prices – Compare {retailer_count} Retailers"
+        else:
+            results_h1 = f"{brand_display} {line_display} – Price History (Currently Out of Stock)"
+        html = html.replace('{{RESULTS_H1}}', _escape_html(results_h1))
         
         if has_seo:
             faq_1, faq_2, faq_3 = generate_faq_answers(brand_display, line_display, seo_data)
