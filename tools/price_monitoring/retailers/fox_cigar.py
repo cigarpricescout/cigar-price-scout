@@ -25,6 +25,138 @@ from datetime import datetime
 import time
 
 
+def _ld_nodes(data):
+    """Flatten JSON-LD lists and @graph wrappers."""
+    if isinstance(data, list):
+        for item in data:
+            yield from _ld_nodes(item)
+        return
+    if isinstance(data, dict):
+        if "@graph" in data:
+            yield from _ld_nodes(data["@graph"])
+        else:
+            yield data
+
+
+def _parse_money(text) -> float | None:
+    if not text:
+        return None
+    m = re.search(r"(\d{1,4}(?:,\d{3})*(?:\.\d{2})?)", str(text).replace("\xa0", " "))
+    if not m:
+        return None
+    try:
+        return float(m.group(1).replace(",", ""))
+    except ValueError:
+        return None
+
+
+def _quantity_from_fox_label(text: str):
+    """Return (quantity, is_box) from Fox variation labels like '25ct Box'."""
+    label = (text or "").strip()
+    if not label:
+        return None, False
+    if re.search(r"\bsingle\b", label, re.I):
+        return 1, False
+    m = re.search(r"(\d+)\s*ct\s*box", label, re.I)
+    if m:
+        return int(m.group(1)), True
+    m = re.search(r"box\s*(?:of\s*)?(\d+)", label, re.I)
+    if m:
+        return int(m.group(1)), True
+    m = re.search(r"(\d+)\s*(?:ct\s*)?pack", label, re.I)
+    if m:
+        return int(m.group(1)), False
+    return None, False
+
+
+def _row_sale_price(row) -> float | None:
+    """Sale/current price in a variation row, skipping strikethrough MSRP."""
+    price_root = row.select_one(".co-var-price") or row
+    for el in price_root.select(".woocommerce-Price-amount"):
+        if el.find_parent("del"):
+            continue
+        price = _parse_money(el.get_text())
+        if price is not None:
+            return price
+    return _parse_money(price_root.get_text())
+
+
+def _extract_from_co_variation_form(soup: BeautifulSoup, result: dict):
+    """
+    Current Fox layout (2026): radio rows in form.co-variation-form.
+    Each .co-var-row has label, sale/MSRP, and stock — do not use related-product bdi prices.
+    """
+    rows = soup.select("form.co-variation-form .co-var-row, .co-variation-rows .co-var-row")
+    if not rows:
+        return None
+
+    options = []
+    for row in rows:
+        label_el = row.select_one(".co-var-name") or row.find("label")
+        label = label_el.get_text(" ", strip=True) if label_el else ""
+        quantity, is_box = _quantity_from_fox_label(label)
+        if quantity is None:
+            continue
+        stock_el = row.select_one(".co-var-stock")
+        in_stock = True
+        if stock_el:
+            classes = " ".join(stock_el.get("class", [])).lower()
+            text = stock_el.get_text(" ", strip=True).lower()
+            in_stock = "outofstock" not in classes and "out of stock" not in text
+        options.append({
+            "quantity": quantity,
+            "text": label,
+            "is_box": is_box,
+            "in_stock": in_stock,
+            "price": _row_sale_price(row),
+            "source_text": label,
+        })
+
+    result["debug_info"]["layout"] = "co_variation_form"
+    result["debug_info"]["quantity_options"] = options
+    box_options = [opt for opt in options if opt["is_box"]]
+    if not box_options:
+        result["debug_info"]["error"] = "co-variation form found but no box rows"
+        return None
+
+    in_stock_boxes = [opt for opt in box_options if opt["in_stock"]]
+    target = max(in_stock_boxes or box_options, key=lambda x: x["quantity"])
+    result["box_quantity"] = target["quantity"]
+    result["in_stock"] = target["in_stock"]
+    result["debug_info"]["target_box"] = target
+    result["debug_info"]["price_source"] = "co_var_row"
+
+    # Fox still renders the box sale price on OOS rows — keep it so Scout
+    # does not retain a stale wrong price from an earlier bad scrape.
+    price = target.get("price")
+    result["price"] = price
+    result["success"] = True if (price is not None or not target["in_stock"]) else False
+    if not target["in_stock"]:
+        result["debug_info"]["note"] = (
+            "Box out of stock — listed price kept"
+            if price is not None
+            else "Box out of stock - no price available"
+        )
+    if price:
+        chosen_row = None
+        for row in rows:
+            label_el = row.select_one(".co-var-name") or row.find("label")
+            label = label_el.get_text(" ", strip=True) if label_el else ""
+            if label == target["text"]:
+                chosen_row = row
+                break
+        if chosen_row:
+            del_el = chosen_row.select_one("del .woocommerce-Price-amount")
+            msrp = _parse_money(del_el.get_text()) if del_el else None
+            if msrp and msrp > price:
+                result["discount_percent"] = ((msrp - price) / msrp) * 100
+                result["debug_info"]["msrp"] = msrp
+    elif target["in_stock"]:
+        result["debug_info"]["error"] = "Box row had no parseable price"
+        result["success"] = False
+    return result
+
+
 def _parse_json_ld_product(soup: BeautifulSoup) -> dict:
     """Read Product price/stock from schema.org JSON-LD when present."""
     for script in soup.find_all("script", type="application/ld+json"):
@@ -35,9 +167,12 @@ def _parse_json_ld_product(soup: BeautifulSoup) -> dict:
             data = json.loads(raw)
         except json.JSONDecodeError:
             continue
-        items = data if isinstance(data, list) else [data]
-        for item in items:
-            if not isinstance(item, dict) or item.get("@type") != "Product":
+        for item in _ld_nodes(data):
+            if not isinstance(item, dict):
+                continue
+            types = item.get("@type")
+            type_list = types if isinstance(types, list) else [types]
+            if "Product" not in type_list:
                 continue
             out: dict = {}
             offers = item.get("offers")
@@ -47,10 +182,13 @@ def _parse_json_ld_product(soup: BeautifulSoup) -> dict:
                 offer = offers
             else:
                 offer = {}
-            price = offer.get("price")
-            specs = offer.get("priceSpecification")
-            if specs and isinstance(specs, list) and specs[0].get("price"):
-                price = specs[0].get("price")
+            # AggregateOffer.priceSpecification[0] is often the cheapest SKU (single).
+            # Box comparison should use highPrice when present.
+            price = offer.get("highPrice") or offer.get("price")
+            if price is None:
+                specs = offer.get("priceSpecification")
+                if specs and isinstance(specs, list) and specs[0].get("price"):
+                    price = specs[0].get("price")
             if price is not None:
                 try:
                     out["price"] = float(str(price).replace(",", ""))
@@ -281,7 +419,7 @@ def extract_fox_cigar_data(url):
         # Rate limiting - 1 second for politeness
         time.sleep(1)
         
-        response = requests.get(url, headers=headers, timeout=10)
+        response = requests.get(url, headers=headers, timeout=30)
         response.raise_for_status()
         soup = BeautifulSoup(response.content, 'html.parser')
         
@@ -297,6 +435,10 @@ def extract_fox_cigar_data(url):
             'discount_percent': None,
             'debug_info': {}
         }
+
+        co_result = _extract_from_co_variation_form(soup, result)
+        if co_result is not None:
+            return co_result
         
         # STEP 1: Find "Cigar Count" or "Box Count" section and analyze all quantity options
         count_section = None
@@ -545,38 +687,27 @@ def extract_fox_cigar_data(url):
                 if price:
                     break
         
-        # Strategy 3: Fallback to displayed price with better filtering
+        # Strategy 3: Fallback to displayed price in the product summary only
+        # (page-wide .woocommerce-Price-amount / bdi matches related products)
         if not price:
             result['debug_info']['fallback_to_displayed_price'] = True
-            
-            # Look for the prominently displayed price
-            price_selectors = [
-                '.summary .price .amount bdi',  # Most specific for product summary
-                '.price .amount bdi',
-                '.woocommerce-Price-amount bdi',
-                'bdi'  # Any bdi element (WooCommerce uses these for prices)
-            ]
-            
-            for selector in price_selectors:
-                price_elements = soup.select(selector)
-                for elem in price_elements:
-                    price_text = elem.get_text().strip()
-                    if '$' in price_text:
-                        price_match = re.search(r'\$([0-9,]+\.?\d*)', price_text.replace(',', ''))
-                        if price_match:
-                            try:
-                                potential_price = float(price_match.group(1))
-                                # Use more restrictive range for fallback
-                                if 50 <= potential_price <= 5000:
-                                    price = potential_price
-                                    result['debug_info']['price_element'] = selector
-                                    result['debug_info']['price_text'] = price_text
-                                    break
-                            except ValueError:
-                                continue
-                
-                if price:
-                    break
+            product_scope = (
+                soup.select_one('form.co-variation-form')
+                or soup.select_one('.summary.entry-summary')
+                or soup.select_one('.summary')
+            )
+            if product_scope:
+                candidates = []
+                for elem in product_scope.select('.woocommerce-Price-amount'):
+                    if elem.find_parent('del'):
+                        continue
+                    potential_price = _parse_money(elem.get_text())
+                    if potential_price is not None and 50 <= potential_price <= 5000:
+                        candidates.append(potential_price)
+                if candidates:
+                    price = max(candidates)
+                    result['debug_info']['price_source'] = 'summary_max_non_strikethrough'
+                    result['debug_info']['price_candidates'] = candidates
         
         # STEP 6: Look for discount information (crossed out MSRP)
         if price:
