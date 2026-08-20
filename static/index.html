@@ -1005,15 +1005,32 @@
         },
         
         formatWrapperDisplay(wrapper, alias) {
+          // Colloquial category (Natural, Maduro, …) always on the RIGHT.
+          // Matches app.main._format_wrapper_display.
           if (!wrapper) return '';
-          if (!alias || alias.trim() === '' || alias.toLowerCase() === wrapper.toLowerCase()) return wrapper;
-          return `${alias} (${wrapper})`;
+          const w = String(wrapper).trim();
+          const a = alias ? String(alias).trim() : '';
+          if (!a || a.toLowerCase() === w.toLowerCase()) return w;
+          const colloquial = new Set([
+            'natural', 'maduro', 'habano', 'connecticut', 'sun grown',
+            'sungrown', 'sun-grown', 'cameroon', 'oscuro', 'rosado',
+            'claro', 'candela', 'corojo',
+          ]);
+          const isCol = (s) => colloquial.has(String(s || '').trim().toLowerCase());
+          if (isCol(a) && !isCol(w)) return `${w} (${a})`;
+          if (isCol(w) && !isCol(a)) return `${a} (${w})`;
+          // Both or neither: longer / more specific on the left.
+          if (w.length >= a.length) return `${w} (${a})`;
+          return `${a} (${w})`;
         },
         
         extractActualWrapper(displayWrapper) {
+          // Prefer the specific (left) token; /compare also accepts the
+          // full "Specific (Colloquial)" string and either half.
           if (!displayWrapper) return '';
-          const match = displayWrapper.match(/\(([^)]+)\)$/);
-          return match ? match[1] : displayWrapper;
+          const match = String(displayWrapper).match(/^(.+?)\s*\(([^)]+)\)$/);
+          if (match) return match[1].trim();
+          return displayWrapper;
         },
         
         async search() {
@@ -1037,7 +1054,9 @@
             });
             
             if (this.selection.wrapper) {
-              params.append('wrapper', this.extractActualWrapper(this.selection.wrapper));
+              // Send the full display label ("Ecuadorian Habano (Natural)").
+              // /compare matches Product.wrapper, either half, or master fields.
+              params.append('wrapper', this.selection.wrapper);
             }
             if (this.selection.vitola) {
               params.append('vitola', this.selection.vitola);

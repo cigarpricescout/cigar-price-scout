@@ -624,7 +624,7 @@ RETAILERS = [
     {"key": "thecigarshouse", "name": "The Cigars House", "csv": f"{CSV_PATH_PREFIX}/thecigarshouse.csv", "authorized": False},
     {"key": "tobacconistofgreenwich", "name": "Tobacconist of Greenwich", "csv": f"{CSV_PATH_PREFIX}/tobacconistofgreenwich.csv", "authorized": False},
     {"key": "iheartcigars", "name": "iHeart Cigars", "csv": f"{CSV_PATH_PREFIX}/iheartcigars.csv", "authorized": False},
-    {"key": "stogies", "name": "Stogies World Class Cigars", "csv": f"{CSV_PATH_PREFIX}/stogies.csv", "authorized": False},
+    {"key": "stogies", "name": "Stogies World Class Cigars", "csv": f"{CSV_PATH_PREFIX}/stogies-DORMANT.csv", "authorized": False, "extractor_status": "dormant", "hostname": "stogiesworldclasscigars.com"},
 ]
 
 
@@ -722,28 +722,76 @@ class Product:
 _master_index_cache = {"data": None, "timestamp": 0}
 
 
-def _format_wrapper_display(alias: str, canon: str) -> str:
-    """Combine the canonical wrapper category and its specific varietal alias.
+# Shopper-facing wrapper categories. When pairing with a botanical/varietal
+# name, these always render on the RIGHT: "Ecuadorian Habano (Natural)".
+_COLLOQUIAL_WRAPPER_TERMS = frozenset({
+    "natural",
+    "maduro",
+    "habano",
+    "connecticut",
+    "sun grown",
+    "sungrown",
+    "sun-grown",
+    "cameroon",
+    "oscuro",
+    "rosado",
+    "claro",
+    "candela",
+    "corojo",
+})
 
-    The cigar landing page (/cigars/<brand>/<line>) historically showed the
-    industry-friendly wrapper category first, with the specific botanical
-    varietal in parentheses — e.g. "Maduro (Connecticut Broadleaf)" or
-    "Sun Grown (Ecuadorian Sungrown)" — so a shopper who knows the cigar
-    by either term can find it. This helper preserves that ordering.
+
+def _is_colloquial_wrapper_term(s: str) -> bool:
+    t = (s or "").strip().lower()
+    if not t:
+        return False
+    if t in _COLLOQUIAL_WRAPPER_TERMS:
+        return True
+    # Bare category words only — do not treat "Nicaraguan Habano" as colloquial.
+    return False
+
+
+def _format_wrapper_display(alias: str, canon: str) -> str:
+    """Combine wrapper fields with the colloquial term always on the right.
+
+    Display convention (site-wide):
+      specific / botanical LEFT, colloquial RIGHT in parentheses.
+      e.g. "Ecuadorian Habano (Natural)", "Sun Grown (Natural)",
+           "Connecticut Broadleaf (Maduro)".
+
+    ``alias`` and ``canon`` may arrive swapped depending on which master
+    column held the colloquial name; this helper detects colloquial terms
+    and forces consistent ordering.
 
     Examples:
-      _format_wrapper_display("Connecticut Broadleaf", "Maduro") -> "Maduro (Connecticut Broadleaf)"
-      _format_wrapper_display("Ecuadorian Sungrown", "Sun Grown") -> "Sun Grown (Ecuadorian Sungrown)"
-      _format_wrapper_display("Natural", "Cameroon")            -> "Cameroon (Natural)"
-      _format_wrapper_display("Maduro", "Maduro")               -> "Maduro"
-      _format_wrapper_display("", "Habano")                     -> "Habano"
-      _format_wrapper_display("Natural", "")                    -> "Natural"
-      _format_wrapper_display("", "")                           -> ""
+      _format_wrapper_display("Natural", "Ecuadorian Habano")
+          -> "Ecuadorian Habano (Natural)"
+      _format_wrapper_display("Ecuadorian Sumatra Oscuro", "Natural")
+          -> "Ecuadorian Sumatra Oscuro (Natural)"
+      _format_wrapper_display("Sun Grown", "Natural")
+          -> "Sun Grown (Natural)"
+      _format_wrapper_display("Connecticut Broadleaf", "Maduro")
+          -> "Connecticut Broadleaf (Maduro)"
+      _format_wrapper_display("Maduro", "Maduro") -> "Maduro"
+      _format_wrapper_display("", "Habano") -> "Habano"
+      _format_wrapper_display("Natural", "") -> "Natural"
+      _format_wrapper_display("", "") -> ""
     """
     a = (alias or "").strip()
     c = (canon or "").strip()
+    if not a and not c:
+        return ""
     if a and c and a.lower() != c.lower():
-        return f"{c} ({a})"
+        a_col = _is_colloquial_wrapper_term(a)
+        c_col = _is_colloquial_wrapper_term(c)
+        if a_col and not c_col:
+            return f"{c} ({a})"
+        if c_col and not a_col:
+            return f"{a} ({c})"
+        # Both or neither look colloquial — keep longer/more specific left.
+        if len(c) >= len(a):
+            return f"{c} ({a})"
+        return f"{a} ({c})"
     return c or a
 
 
@@ -752,13 +800,11 @@ def _wrapper_filter_matches(
     product: Product,
     master_row: Optional[Dict[str, str]],
 ) -> bool:
-    """Match landing-page wrapper filters to Product.wrapper.
+    """Match landing-page / homepage wrapper filters to Product.wrapper.
 
-    ``/compare-all`` exposes ``wrapper`` as ``_format_wrapper_display(alias,
-    canon)`` (e.g. \"Dominican Rosado (Rosado)\"), while ``Product.wrapper``
-    follows master enrichment (``Wrapper_Alias`` or ``Wrapper``). Without
-    this bridge, ``/api/price-history`` received the display string and
-    compared it to ``Rosado``, yielding no CIDs and empty charts.
+    Accepts the combined display string (``Specific (Colloquial)``), either
+    half of it, or a raw master alias/canon value — so flipping display
+    order never breaks ``/compare`` or price-history filters.
     """
     fv = (filter_val or "").strip().lower()
     if not fv:
@@ -766,6 +812,15 @@ def _wrapper_filter_matches(
     pw = (product.wrapper or "").strip().lower()
     if pw == fv:
         return True
+
+    # Display form: "ecuadorian habano (natural)" → match either side or full.
+    if "(" in fv and fv.endswith(")"):
+        left, _, rest = fv.partition("(")
+        left = left.strip()
+        inner = rest[:-1].strip()
+        if pw and pw in (left, inner, fv):
+            return True
+
     if master_row:
         disp = _format_wrapper_display(
             master_row.get("wrapper_alias", ""),
@@ -777,6 +832,17 @@ def _wrapper_filter_matches(
             cell = (master_row.get(key) or "").strip().lower()
             if cell and cell == fv:
                 return True
+        if "(" in fv and fv.endswith(")"):
+            left, _, rest = fv.partition("(")
+            left = left.strip()
+            inner = rest[:-1].strip()
+            for part in (left, inner):
+                if not part:
+                    continue
+                for key in ("wrapper_canon", "wrapper_alias", "wrapper"):
+                    cell = (master_row.get(key) or "").strip().lower()
+                    if cell and cell == part:
+                        return True
     return False
 
 
@@ -827,13 +893,10 @@ def load_master_index() -> Dict[str, Dict[str, str]]:
                     box_qty = int(float(box_qty_raw)) if box_qty_raw else 0
                 except (TypeError, ValueError):
                     box_qty = 0
-                # Prefer wrapper_alias for display ("Connecticut Shade")
-                # over the technical wrapper column ("Connecticut"). The
-                # canonical wrapper_code lives in the CID itself.
-                # Both fields are also exposed separately so endpoints
-                # that want the formal+colloquial combined display
-                # (e.g. /compare-all → cigar landing page dropdown) can
-                # build "alias (canon)" without re-reading the master CSV.
+                # Prefer wrapper_alias for Product.wrapper enrichment when set.
+                # Display strings use _format_wrapper_display so the colloquial
+                # term always lands on the RIGHT: "Ecuadorian Habano (Natural)".
+                # Both fields are also exposed separately for that helper.
                 wrapper_alias = (row.get('Wrapper_Alias') or '').strip()
                 wrapper_canon = (row.get('Wrapper') or '').strip()
                 index[cid] = {
@@ -1469,6 +1532,10 @@ def load_all_products():
 
     all_products = []
     for retailer in RETAILERS:
+        # Dormant retailers stay in RETAILERS for config/history but must not
+        # appear on /compare or feed automation (see get_active_retailer_keys).
+        if retailer.get("extractor_status") == "dormant":
+            continue
         products = load_csv(retailer["csv"], retailer["key"], retailer["name"], master_index=master_index)
         all_products.extend(products)
 
@@ -2030,7 +2097,11 @@ def options():
 def api_retailers():
     """Canonical retailer keys/names for homepage what-if discount UI."""
     return sorted(
-        [{"key": r["key"], "name": r["name"]} for r in RETAILERS],
+        [
+            {"key": r["key"], "name": r["name"]}
+            for r in RETAILERS
+            if r.get("extractor_status") != "dormant"
+        ],
         key=lambda item: item["name"].lower(),
     )
 
@@ -2087,6 +2158,7 @@ def compare(
     
     # Load all products and filter by criteria
     all_products = load_all_products()
+    master_index = load_master_index()
 
     matching_products = []
     
@@ -2095,9 +2167,11 @@ def compare(
         if p.brand.lower() != brand.lower() or p.line.lower() != line.lower():
             continue
         
-        # Wrapper filter (optional)
+        # Wrapper filter (optional) — accepts display "Specific (Colloquial)",
+        # either half, or raw Product.wrapper / master fields.
         if wrapper and wrapper.strip():
-            if p.wrapper.lower() != wrapper.lower():
+            master_row = master_index.get(p.cigar_id or "") if p.cigar_id else None
+            if not _wrapper_filter_matches(wrapper, p, master_row):
                 continue
         
         # Vitola filter (optional)
