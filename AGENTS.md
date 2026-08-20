@@ -359,11 +359,15 @@ Then `git pull --rebase` + commit + push, which triggers a Railway redeploy.
 
 ### Weekly
 
-Monday 7am: `automation/run_weekly_discovery.py` runs (see
-`AI_WORKFLOW_INSTRUCTIONS.md`). It identifies new URLs found by the
-extractors that don't yet have CIDs, runs the AI matcher, and stages
-high-confidence matches into `extension_staged_approvals` for operator
-review via `tools/ai/review_matches.py`.
+Monday 7am: `automation/run_weekly_discovery.py` stages URL↔CID rows into
+`url_staged_matches` (`status='staged'`). Operators review them at
+`/admin/review` (Inbox tab): **Open page**, then **Approve in the operator
+extension**. In-card Approve is disabled so mappings are not published
+without seeing the PDP. `GET /api/admin/url-status` returns `ai_proposal`
+for those staged rows so the popup locks the proposed master CID.
+
+The CSV publish queue tab lists already-approved `extension_staged_approvals`
+waiting for the local publisher. Withdraw only — do not Approve there.
 
 ### Ad-hoc: onboarding an anti-bot retailer
 

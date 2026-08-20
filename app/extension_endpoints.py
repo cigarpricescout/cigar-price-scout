@@ -549,6 +549,7 @@ async def url_status(
           "available_in_master": [ ... ],   # subset of candidates already in master
           "scraped_title": str | null,
           "community_proposal": ... | null,
+          "ai_proposal": { cigar_id, lock, source, ... } | null,
           "operator_listing_source": { "lines": [str, ...] } | null,
         }
     """
@@ -588,6 +589,7 @@ async def url_status(
     # same brand/line/vitola/box_qty/price. Exposed across all states so
     # even a 'matched' URL surfaces a pending re-classification proposal.
     community_proposal = _lookup_community_proposal(url)
+    ai_proposal = _lookup_inbox_proposal(url, retailer_key)
 
     # If we have no retailer key, decide between "no_scraper" (we have *some*
     # CSV that uses this domain but no extractor) and "unknown" (totally new
@@ -607,6 +609,7 @@ async def url_status(
             "available_in_master": [],
             "scraped_title": title,
             "community_proposal": community_proposal,
+            "ai_proposal": ai_proposal,
             "operator_listing_source": None,
         }
 
@@ -643,6 +646,7 @@ async def url_status(
             "available_in_master": [],
             "scraped_title": title,
             "community_proposal": community_proposal,
+            "ai_proposal": ai_proposal,
             "operator_listing_source": _operator_listing_source_payload(
                 retailer_key, extractor_status, state="matched"
             ),
@@ -677,6 +681,7 @@ async def url_status(
             "available_in_master": [],
             "scraped_title": title,
             "community_proposal": community_proposal,
+            "ai_proposal": ai_proposal,
             "operator_listing_source": _operator_listing_source_payload(
                 retailer_key, extractor_status, state="seen", seen_status=seen_status
             ),
@@ -684,6 +689,8 @@ async def url_status(
 
     # 3) Fresh URL → propose CIDs from the master list
     cands = _candidates_for(url, title)
+    if ai_proposal:
+        cands = _prepend_inbox_candidate(cands, ai_proposal)
     available = [c for c in cands if c["cigar_id"] in _cache_state["master_by_cid"]]
     return {
         "state": "candidate",
@@ -698,6 +705,7 @@ async def url_status(
         "available_in_master": [c["cigar_id"] for c in available],
         "scraped_title": title,
         "community_proposal": community_proposal,
+        "ai_proposal": ai_proposal,
         "operator_listing_source": _operator_listing_source_payload(
             retailer_key, extractor_status, state="candidate"
         ),
@@ -707,6 +715,126 @@ async def url_status(
 def _candidates_for(url: str, title: Optional[str]) -> List[Dict]:
     """Run the matcher against the cached master list."""
     return find_top_candidates(url, title, _cache_state["master"], limit=5)
+
+
+def _candidate_from_master_cid(cid: str, extra: Optional[Dict] = None) -> Optional[Dict]:
+    """Build a find_top_candidates-shaped dict from a master row."""
+    row = (_cache_state.get("master_by_cid") or {}).get(cid) or {}
+    if not row and not extra:
+        return None
+    parts = parse_cid(cid) or {}
+    out = {
+        "cigar_id": cid,
+        "score": 1.0,
+        "confidence": "HIGH",
+        "lock": True,
+        "details": {"inbox": True},
+        "brand": row.get("brand") or (extra or {}).get("brand"),
+        "line": row.get("line") or (extra or {}).get("line"),
+        "vitola": row.get("vitola") or (extra or {}).get("vitola"),
+        "wrapper": row.get("wrapper") or (extra or {}).get("wrapper"),
+        "wrapper_code": row.get("wrapper_code") or parts.get("wrapper_code"),
+        "size": row.get("size") or (extra or {}).get("size") or parts.get("size"),
+        "box_qty": row.get("box_qty") or (extra or {}).get("box_qty") or parts.get("box_qty"),
+        "parent_brand": row.get("parent_brand") if row.get("parent_brand") is not None else parts.get("parent_brand"),
+    }
+    if extra:
+        out.update({k: v for k, v in extra.items() if v is not None and k not in ("cigar_id",)})
+    return out
+
+
+def _prepend_inbox_candidate(cands: List[Dict], proposal: Dict) -> List[Dict]:
+    cid = (proposal or {}).get("cigar_id")
+    if not cid:
+        return cands
+    entry = _candidate_from_master_cid(cid, {
+        "source": proposal.get("source"),
+        "match_token": proposal.get("match_token"),
+        "brand": proposal.get("brand"),
+        "line": proposal.get("line"),
+        "vitola": proposal.get("vitola"),
+        "wrapper": proposal.get("wrapper"),
+        "size": proposal.get("size"),
+        "box_qty": proposal.get("box_qty"),
+    })
+    if not entry:
+        return cands
+    rest = [c for c in (cands or []) if c.get("cigar_id") != cid]
+    return [entry] + rest
+
+
+def _lookup_inbox_proposal(url: str, retailer_key: Optional[str]) -> Optional[Dict]:
+    """Pending weekly-discovery / inbox row for this canonical URL.
+
+    Used so the operator popup can lock the proposed master CID when the
+    operator opens a page from /admin/review. Does not overlay /compare.
+    """
+    if not url or not retailer_key:
+        return None
+    canon = canonicalize_url(url)
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT cid, url, confidence, brand, line, vitola, wrapper, size,
+                   box_qty, price, in_stock, match_token
+              FROM url_staged_matches
+             WHERE retailer_key=%s AND status='staged'
+               AND (url = %s OR url = %s)
+             ORDER BY CASE confidence WHEN 'HIGH' THEN 0 WHEN 'MEDIUM' THEN 1 ELSE 2 END,
+                      created_at DESC
+             LIMIT 1
+            """,
+            (retailer_key, canon, url),
+        )
+        row = cur.fetchone()
+        if not row:
+            path = (urlparse(canon).path or "").rstrip("/")
+            if len(path) >= 8:
+                cur.execute(
+                    """
+                    SELECT cid, url, confidence, brand, line, vitola, wrapper, size,
+                           box_qty, price, in_stock, match_token
+                      FROM url_staged_matches
+                     WHERE retailer_key=%s AND status='staged'
+                       AND url LIKE %s
+                     ORDER BY CASE confidence WHEN 'HIGH' THEN 0 WHEN 'MEDIUM' THEN 1 ELSE 2 END
+                     LIMIT 12
+                    """,
+                    (retailer_key, "%" + path + "%"),
+                )
+                for r in cur.fetchall():
+                    if canonicalize_url(r[1] or "") == canon:
+                        row = r
+                        break
+        conn.close()
+        if not row:
+            return None
+        cid = row[0]
+        built = _candidate_from_master_cid(cid, {
+            "brand": row[3],
+            "line": row[4],
+            "vitola": row[5],
+            "wrapper": row[6],
+            "size": row[7],
+            "box_qty": row[8],
+        })
+        if not built:
+            return None
+        price = float(row[9]) if row[9] is not None else None
+        built.update({
+            "source": "harvester",
+            "confidence": (row[2] or "MEDIUM"),
+            "match_token": row[11],
+            "price": price,
+            "in_stock": row[10],
+            "lock": True,
+        })
+        return built
+    except Exception as e:
+        logger.warning("lookup_inbox_proposal error: %s", e)
+        return None
 
 
 def _lookup_community_proposal(url: str) -> Optional[Dict]:
@@ -1091,6 +1219,20 @@ async def stage_approval(request: Request, body: StageApprovalBody):
         )
         retired_stale_urls = cur.rowcount or 0
 
+        try:
+            canon = canonicalize_url(body.url)
+            cur.execute(
+                """
+                UPDATE url_staged_matches
+                   SET status='approved', reviewed_at=NOW()
+                 WHERE retailer_key=%s AND status='staged' AND cid=%s
+                   AND (url = %s OR url = %s)
+                """,
+                (body.retailer_key, cid, body.url, canon),
+            )
+        except Exception as e:
+            logger.warning("inbox match close-on-approve failed: %s", e)
+
         # Blocked/dormant retailers: mirror manual price to observed_prices so
         # /compare and the consumer extension reflect the operator entry
         # immediately (CSV is still updated by the local publisher).
@@ -1287,6 +1429,19 @@ async def skip_url(request: Request, body: SkipUrlBody):
               SET reason=EXCLUDED.reason,
                   retailer_key=EXCLUDED.retailer_key
         """, (body.url, body.retailer_key, body.reason or "skipped"))
+        if body.retailer_key:
+            try:
+                cur.execute(
+                    """
+                    UPDATE url_staged_matches
+                       SET status='rejected', reviewed_at=NOW()
+                     WHERE retailer_key=%s AND status='staged'
+                       AND (url = %s OR url = %s)
+                    """,
+                    (body.retailer_key, body.url, canonicalize_url(body.url)),
+                )
+            except Exception as e:
+                logger.warning("inbox match close-on-skip failed: %s", e)
         conn.commit()
         conn.close()
 

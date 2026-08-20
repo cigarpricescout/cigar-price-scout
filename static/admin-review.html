@@ -96,7 +96,7 @@
 </div>
 
 <div class="filters source-toggle" id="source-toggle" style="background:#fafafa;border-bottom:1px solid #ddd;justify-content:center;flex-wrap:wrap;gap:6px">
-  <button id="btn-src-harvester" class="active" type="button" onclick="setSource('harvester')">Harvester <span id="cnt-harvester"></span></button>
+  <button id="btn-src-harvester" class="active" type="button" onclick="setSource('harvester')">Inbox <span id="cnt-harvester"></span></button>
   <button id="btn-src-community" type="button" onclick="setSource('community')">Community <span id="cnt-community"></span></button>
   <button id="btn-src-extension" type="button" onclick="setSource('extension')">CSV publish queue <span id="cnt-extension"></span></button>
   <button id="btn-src-retailers" type="button" onclick="setSource('retailers')">New retailers <span id="cnt-retailers"></span></button>
@@ -404,6 +404,10 @@ function parseReason(reason) {
   };
 }
 
+function jsUrl(url) {
+  return String(url || "").replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+}
+
 function renderCard(m) {
   if (m._community) return renderCommunityCard(m);
   if (m._extension_staged) return renderExtensionStagedCard(m);
@@ -418,7 +422,7 @@ function renderCard(m) {
     <div class="card-body">
       <div class="top-row">
         <div>
-          <div class="section-label">CID (What you're approving)</div>
+          <div class="section-label">Proposed master CID — open the page, then Approve in the operator extension</div>
         </div>
         <span class="confidence ${m.confidence}">${m.confidence}</span>
       </div>
@@ -433,12 +437,12 @@ function renderCard(m) {
         ${price ? `<span style="font-weight:600">${price}</span>` : ''}
         ${stock ? `<span style="color:${stockColor}">${stock}</span>` : ''}
       </div>
-      <div class="url-row"><a href="${m.url}" target="_blank">${m.url}</a></div>
+      <div class="url-row"><a href="${m.url}" target="_blank" rel="noopener">${m.url}</a></div>
     </div>
     <div class="actions">
-      <button class="approve-btn" onclick="reviewOne('${m.token}','approve')">Approve</button>
-      <button class="reject-btn" onclick="reviewOne('${m.token}','reject')">Reject</button>
-      <button class="select-btn${selected}" onclick="toggleSelect('${m.token}')" title="Select for bulk action">&#9744;</button>
+      <button class="approve-btn" onclick="openInExtension('${jsUrl(m.url)}')">Open page</button>
+      <button class="reject-btn" onclick="reviewOne('${m.token}','reject')">Skip</button>
+      <button class="select-btn${selected}" onclick="toggleSelect('${m.token}')" title="Select to skip in bulk">&#9744;</button>
     </div>
   </div>`;
 }
@@ -446,7 +450,6 @@ function renderCard(m) {
 function renderCommunityCard(m) {
   const tc = m._top_candidate;
   const haveCID = !!(tc && tc.cigar_id);
-  const isHigh = m.confidence === 'HIGH';
   const selected = selectedTokens.has(m.token) ? ' selected' : '';
   const consumerLine = [m.brand, m.line, m.vitola].filter(Boolean).join(' ');
   const priceStr = m.price != null ? `$${m.price.toFixed(2)}` : null;
@@ -468,10 +471,8 @@ function renderCommunityCard(m) {
   // can compare the proposed values against the current CID's master
   // record before flipping anything.
   const approveBtn = (m._is_correction)
-    ? `<button class="approve-btn" style="background:#fff3e0;color:#e65100" onclick="openInExtension('${m.url.replace(/'/g, "\\'")}')">Review in extension</button>`
-    : (haveCID && isHigh)
-      ? `<button class="approve-btn" onclick="reviewOne('${m.token}','approve')">Approve →</button>`
-      : `<button class="approve-btn" style="background:#fff3e0;color:#e65100" onclick="openInExtension('${m.url.replace(/'/g, "\\'")}')">Open in extension</button>`;
+    ? `<button class="approve-btn" style="background:#fff3e0;color:#e65100" onclick="openInExtension('${jsUrl(m.url)}')">Review in extension</button>`
+    : `<button class="approve-btn" onclick="openInExtension('${jsUrl(m.url)}')">Open page</button>`;
 
   // For correction rows, render the side-by-side diff between what we
   // were showing and what the consumer proposes. This is the whole
@@ -769,17 +770,13 @@ async function reviewOne(token, action) {
           : 'Dismissed from queue'
       );
     } else if (token.startsWith('community:')) {
-      // Community proposal: hits resolve-community-proposal with the
-      // top_candidate's CID for approve, or action='reject' for reject.
       const proposal_id = parseInt(token.split(':')[1], 10);
-      // Pull the suggested CID off the rendered card (we stashed it on
-      // the dataset in renderCommunityCard's CID block — fall back to
-      // empty string which the server will reject loudly).
-      const cidEl = card.querySelector('.cid-full');
-      const cid = cidEl ? cidEl.textContent.trim() : '';
-      const body = (action === 'approve')
-        ? {proposal_id, action: 'approve_existing', cid}
-        : {proposal_id, action: 'reject'};
+      if (action === 'approve') {
+        showToast('Open the product page and Approve in the operator extension', true);
+        card.classList.remove('removing');
+        return;
+      }
+      const body = {proposal_id, action: 'reject'};
       const resp = await fetch('/api/admin/resolve-community-proposal', {
         method: 'POST',
         headers: {'Content-Type': 'application/json', 'X-Admin-Key': KEY},
@@ -787,10 +784,15 @@ async function reviewOne(token, action) {
       });
       const data = await resp.json().catch(() => ({}));
       if (!resp.ok) throw new Error(data.error || 'failed');
-      showToast(action === 'approve' ? 'Approved & staged' : 'Rejected');
+      showToast('Rejected');
     } else {
+      if (action === 'approve') {
+        showToast('Open the product page and Approve in the operator extension', true);
+        card.classList.remove('removing');
+        return;
+      }
       await fetch(`/admin/match/${token}/${action}`, {method: 'GET'});
-      showToast(action === 'approve' ? 'Approved' : 'Rejected');
+      showToast('Skipped');
     }
   } catch(e) {
     card.classList.remove('removing');
@@ -821,12 +823,17 @@ function updateBulkBarLabels() {
   const rejectBtn = document.querySelector('#bulk-bar .br');
   if (!approveBtn || !rejectBtn) return;
   if (currentSource === 'retailers') {
+    approveBtn.style.display = '';
     approveBtn.textContent = 'Mark processed';
     rejectBtn.textContent = 'Dismiss';
   } else if (currentSource === 'extension') {
-    approveBtn.textContent = 'Approve';
+    approveBtn.style.display = 'none';
     rejectBtn.textContent = 'Withdraw';
+  } else if (currentSource === 'harvester' || currentSource === 'community') {
+    approveBtn.style.display = 'none';
+    rejectBtn.textContent = currentSource === 'harvester' ? 'Skip' : 'Reject';
   } else {
+    approveBtn.style.display = '';
     approveBtn.textContent = 'Approve';
     rejectBtn.textContent = 'Reject';
   }
@@ -858,6 +865,7 @@ async function bulkAction(action) {
       .filter(t => t.startsWith('newretailer:'))
       .map(t => parseInt(t.split(':')[1], 10));
 
+    let mutated = true;
     try {
     if (newRetailerIds.length) {
       const n = await markNewRetailersProcessed(newRetailerIds);
@@ -868,13 +876,18 @@ async function bulkAction(action) {
       );
     }
     if (harvesterTokens.length) {
-      const resp = await fetch('/api/admin/bulk-review', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json', 'X-Admin-Key': KEY},
-        body: JSON.stringify({action, tokens: harvesterTokens})
-      });
-      const data = await resp.json();
-      showToast(`${data.updated || 0} harvester ${action === 'approve' ? 'approved' : 'rejected'}`);
+      if (action === 'approve') {
+        showToast('Open the product page and Approve in the operator extension', true);
+        mutated = false;
+      } else {
+        const resp = await fetch('/api/admin/bulk-review', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json', 'X-Admin-Key': KEY},
+          body: JSON.stringify({action: 'reject', tokens: harvesterTokens})
+        });
+        const data = await resp.json();
+        showToast(`${data.updated || 0} inbox item(s) skipped`);
+      }
     }
     if (extIds.length && action === 'reject') {
       const resp = await fetch('/api/admin/supersede-extension-staged', {
@@ -886,7 +899,8 @@ async function bulkAction(action) {
       if (resp.ok) showToast(`Withdrew ${data.superseded || extIds.length} from publish queue`);
       else showToast(data.error || 'extension withdraw failed', true);
     } else if (extIds.length && action === 'approve') {
-      showToast('Extension queue: use Withdraw, not bulk approve', true);
+      showToast('Already queued for morning CSV publish. Use Withdraw to cancel.', true);
+      mutated = false;
     }
     if (communityIds.length) {
       // No bulk endpoint on the server side yet — fan out one request
@@ -897,9 +911,13 @@ async function bulkAction(action) {
         const card = cardByToken('community:' + id);
         const cidEl = card ? card.querySelector('.cid-full') : null;
         const cid = cidEl ? cidEl.textContent.trim() : '';
-        const body = (action === 'approve')
-          ? {proposal_id: id, action: 'approve_existing', cid}
-          : {proposal_id: id, action: 'reject'};
+        if (action === 'approve') {
+          showToast('Open the product page and Approve in the operator extension', true);
+          mutated = false;
+          fail++;
+          continue;
+        }
+        const body = {proposal_id: id, action: 'reject'};
         try {
           const resp = await fetch('/api/admin/resolve-community-proposal', {
             method: 'POST',
@@ -911,8 +929,13 @@ async function bulkAction(action) {
       }
       showToast(`${ok} community ${action === 'approve' ? 'approved' : 'rejected'}${fail ? `, ${fail} failed` : ''}`, fail > 0);
     }
-  } catch(e) { showToast('Bulk action failed', true); }
+  } catch(e) { showToast('Bulk action failed', true); mutated = false; }
 
+  if (!mutated) {
+    selectedTokens.clear();
+    updateBulkBar();
+    return;
+  }
   tokens.forEach(t => {
     const card = cardByToken(t);
     if (card) card.classList.add('removing');
@@ -949,7 +972,7 @@ function setSource(src) {
   const allBtn = document.getElementById('btn-all');
   if (allBtn) allBtn.classList.add('active');
   const titles = {
-    harvester: 'Harvester queue',
+    harvester: 'Inbox',
     community: 'Community submissions',
     extension: 'CSV publish queue',
     retailers: 'New retailer requests',
@@ -1031,7 +1054,7 @@ function showToast(msg, err) {
   document.getElementById('btn-src-extension').classList.toggle('active', currentSource === 'extension');
   document.getElementById('btn-src-retailers').classList.toggle('active', currentSource === 'retailers');
   const titles = {
-    harvester: 'Harvester queue',
+    harvester: 'Inbox',
     community: 'Community submissions',
     extension: 'CSV publish queue',
     retailers: 'New retailer requests',

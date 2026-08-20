@@ -414,14 +414,15 @@ function renderNoScraper(tab, response) {
 }
 
 function renderCandidate(tab, response) {
+  const inbox = response.ai_proposal;
   const top = (response.candidates && response.candidates[0]) || null;
   const alts = (response.candidates || []).slice(1, 5);
   const proposalParts = partsFromCommunityProposal(response.community_proposal);
-  // Pre-fill priority: consumer proposal > matcher top candidate > URL
-  // guess. Consumer proposals are higher signal than URL-pattern guesses
-  // because a real human saw the page and typed the values; we trust
-  // their input more than the matcher's heuristics on the URL alone.
-  const parts = proposalParts
+  const inboxParts = (inbox && inbox.cigar_id) ? partsFromCandidate(inbox) : null;
+  // Prefill: inbox (admin review / weekly discovery CID) > consumer
+  // proposal > live URL matcher. Inbox is an explicit stored mapping.
+  const parts = inboxParts
+    || proposalParts
     || (top ? partsFromCandidate(top) : suggestPartsFromUrl(tab.url, response.scraped_title));
 
   // Consumer proposals omit parent_brand. When the matcher already has a
@@ -457,9 +458,12 @@ function renderCandidate(tab, response) {
     ${renderHeader(tab, response)}
     <div class="section">
       ${communityProposalBanner(response)}
+      ${inboxProposalBanner(response)}
       <div class="section-label">
-        Catalog draft
-        ${top ? `<span class="confidence ${top.confidence}">${top.confidence} ${(top.score*100|0)}%</span>` : ""}
+        ${inbox && inbox.cigar_id ? "Inbox proposal" : "Catalog draft"}
+        ${inbox && inbox.cigar_id
+          ? `<span class="confidence HIGH">LOCK ${(inbox.confidence || "HIGH")}</span>`
+          : (top ? `<span class="confidence ${top.confidence}">${top.confidence} ${(top.score*100|0)}%</span>` : "")}
       </div>
       <div id="catalog-draft-summary" class="catalog-draft-summary">
         ${escapeHtml(humanDraftSummaryFromParts(parts) || "Add brand, line, vitola…")}
@@ -469,7 +473,7 @@ function renderCandidate(tab, response) {
         <div class="cid-display" id="cid-preview">${escapeHtml(buildCidString(parts))}</div>
       </details>
       <div id="master-lock-hint" class="banner seen" style="display:none;font-size:11px;margin-top:8px;line-height:1.4"></div>
-      ${top ? renderMatchChips(top.details) : ""}
+      ${top && top.details && !top.details.inbox ? renderMatchChips(top.details) : ""}
       ${renderScraped(response)}
 
       <div class="fields" id="cid-fields">
@@ -985,8 +989,14 @@ function wireCandidateActions(tab, response) {
   refreshMasterWrapperSuggest(readFields());
   refreshSimilar();
 
+  const inbox = response.ai_proposal;
   const top = (response.candidates && response.candidates[0]) || null;
-  if (top && top.cigar_id) {
+  if (inbox && inbox.cigar_id) {
+    applyFields(partsFromCandidate(inbox));
+    setLockedMasterCid(inbox.cigar_id);
+  } else if (top && top.lock && top.cigar_id) {
+    setLockedMasterCid(top.cigar_id);
+  } else if (top && top.cigar_id && String(top.confidence || "").toUpperCase() === "HIGH") {
     setLockedMasterCid(top.cigar_id);
   } else {
     updateMasterLockUi();
@@ -1532,6 +1542,30 @@ function humanizeAge(iso) {
 // has already proposed metadata for this URL. Tells the operator what was
 // submitted so they understand why the form is pre-filled. The banner is
 // purely informational — the form itself is the action surface.
+function inboxProposalBanner(response) {
+  const p = response.ai_proposal;
+  if (!p || !p.cigar_id) return "";
+  const label = [p.brand, p.line, p.vitola].filter(Boolean).join(" ") || "Master catalog row";
+  const meta = [
+    p.size,
+    p.box_qty != null && p.box_qty !== "" ? `Box ${p.box_qty}` : "",
+    p.wrapper || p.wrapper_code || "",
+  ].filter(Boolean).join(" • ");
+  return `
+    <div class="community-proposal">
+      <div class="cp-header">
+        <span class="cp-badge">Inbox proposal</span>
+      </div>
+      <div class="cp-product">${escapeHtml(label)}</div>
+      ${meta ? `<div class="cp-meta">${escapeHtml(meta)}</div>` : ""}
+      <div class="cp-hint">
+        Opened from the review inbox. Compare this master row to the live page,
+        then Approve if it matches. Skip if the vitola, wrapper, or box qty is wrong.
+      </div>
+    </div>
+  `;
+}
+
 function communityProposalBanner(response) {
   const cp = response.community_proposal;
   if (!cp) return "";
