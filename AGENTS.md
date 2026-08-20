@@ -617,4 +617,4 @@ Files you'll touch most often, grouped by concern:
 - For "is this change safe to ship?" → run section 11.
 - For "what file owns X?" → section 12.
 
-Last updated: 2026-08-19, landing-page OOS sample + in-stock SERP prices.
+Last updated: 2026-08-19, Stogies marked dormant; blank CSV URLs excluded from /compare.
