@@ -570,7 +570,7 @@ RETAILERS = [
     {"key": "cigardepot", "name": "Cigar Depot", "csv": f"{CSV_PATH_PREFIX}/cigardepot.csv", "authorized": False},
     {"key": "cigarcellarofmiami", "name": "Cigar Cellar of Miami", "csv": f"{CSV_PATH_PREFIX}/cigarcellarofmiami.csv", "authorized": False, "extractor_status": "blocked", "hostname": "cigarcellarofmiami.com"},
     {"key": "cigarcountry", "name": "Cigar Country", "csv": f"{CSV_PATH_PREFIX}/cigarcountry.csv", "authorized": False, "extractor_status": "blocked", "hostname": "cigarcountry.com"},
-    {"key": "cigarhustler", "name": "Cigar Hustler", "csv": f"{CSV_PATH_PREFIX}/cigarhustler.csv", "authorized": False},
+    {"key": "cigarhustler", "name": "Cigar Hustler", "csv": f"{CSV_PATH_PREFIX}/cigarhustler-DORMANT.csv", "authorized": False, "extractor_status": "dormant", "hostname": "cigarhustler.com"},
     {"key": "cigarking", "name": "Cigar King", "csv": f"{CSV_PATH_PREFIX}/cigarking.csv", "authorized": False},    
     {"key": "cigaroasis", "name": "Cigar Oasis", "csv": f"{CSV_PATH_PREFIX}/cigaroasis.csv", "authorized": False},
     {"key": "cigarpage", "name": "Cigar Page", "csv": f"{CSV_PATH_PREFIX}/cigarpage.csv", "authorized": False, "extractor_status": "blocked", "hostname": "cigarpage.com"},

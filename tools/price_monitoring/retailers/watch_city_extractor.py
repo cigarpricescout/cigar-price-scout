@@ -56,92 +56,34 @@ def extract_watch_city_data(url: str, rate_limit_seconds: float = 3.0) -> Dict:
         }
 
 
+def _money_values(text: str) -> list:
+    return [float(match) for match in re.findall(r'\$(\d+\.?\d*)', (text or '').replace(',', ''))]
+
+
 def _extract_watch_city_pricing_fixed(soup: BeautifulSoup) -> tuple:
-    """FIXED pricing - prioritize sale price over MSRP"""
-    
+    """Read only the main product price. Related cards repeat other vitolas' prices."""
     sale_price = None
     msrp_price = None
     discount_percent = None
-    
-    # Strip thousands separators so prices >= $1,000 parse correctly.
-    page_text = soup.get_text().replace(',', '')
-    print(f"    [PRICE] Analyzing pricing...")
-    
-    # Strategy 1: Price ranges like "$10.60 - $409.50"
-    price_range_pattern = r'\$(\d+\.?\d*)\s*[-–]\s*\$(\d+\.?\d*)'
-    price_range_matches = re.findall(price_range_pattern, page_text)
-    
-    if price_range_matches:
-        for low_str, high_str in price_range_matches:
-            try:
-                low_price = float(low_str)
-                high_price = float(high_str)
-                
-                # Higher price is typically box price
-                if 200 <= high_price <= 600:
-                    sale_price = high_price
-                    print(f"    [PRICE] Price range: ${low_price} - ${high_price}, using ${high_price}")
-                    break
-            except ValueError:
-                continue
-    
-    # Strategy 2: Known Watch City pricing patterns
-    known_prices = {
-        409.50: 'diplomatico',
-        455.0: 'diplomatico_msrp',
-        387.5: 'exclusivo', 
-        330.0: 'principe',
-        238.5: 'classic_workofart',
-        218.25: 'signature',
-        157.5: 'shortstory'
-    }
-    
-    found_prices = []
-    all_prices = re.findall(r'\$?(\d+\.?\d*)', page_text)
-    
-    for price_str in all_prices:
-        try:
-            price_val = float(price_str)
-            if price_val in known_prices:
-                found_prices.append(price_val)
-                print(f"    [PRICE] Found known price: ${price_val} ({known_prices[price_val]})")
-        except ValueError:
-            continue
-    
-    if found_prices:
-        # Prioritize sale prices over MSRP
-        sale_candidates = [p for p in found_prices if not known_prices[p].endswith('_msrp')]
-        msrp_candidates = [p for p in found_prices if known_prices[p].endswith('_msrp')]
-        
-        if sale_candidates:
-            sale_price = max(sale_candidates)  # Use highest sale price found
-        if msrp_candidates:
-            msrp_price = max(msrp_candidates)
-    
-    # Strategy 3: URL-based fallback
-    if not sale_price:
-        url_price_map = {
-            'diplomatico': 409.50,
-            'exclusivo': 387.5,
-            'principe': 330.0, 
-            'classic': 238.5,
-            'work-of-art': 238.5,
-            'signature': 218.25,
-            'short-story': 157.5
-        }
-        
-        page_url = str(soup).lower()
-        for key, price in url_price_map.items():
-            if key in page_url:
-                sale_price = price
-                print(f"    [PRICE] URL-based mapping: {key} -> ${price}")
-                break
-    
-    # Calculate discount
+
+    view = soup.select_one('.productView-price')
+    if view:
+        main = view.select_one('.price--main')
+        rrp = view.select_one('.price--rrp')
+        if main:
+            amounts = _money_values(main.get_text(' ', strip=True))
+            if amounts:
+                # "$7.00 - $157.50" is single through box. The high end is the box sale.
+                sale_price = max(amounts)
+        if rrp:
+            amounts = _money_values(rrp.get_text(' ', strip=True))
+            if amounts:
+                msrp_price = max(amounts)
+
     if msrp_price and sale_price and msrp_price > sale_price:
         discount_percent = ((msrp_price - sale_price) / msrp_price) * 100
-    
-    print(f"    [PRICE] Final: Sale=${sale_price}, MSRP=${msrp_price}")
+
+    print(f"    [PRICE] Final: Sale=${sale_price}, MSRP={msrp_price}")
     return sale_price, msrp_price, discount_percent
 
 

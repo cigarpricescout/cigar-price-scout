@@ -23,6 +23,10 @@ def extract_bnb_tobacco_data(url: str, target_vitola: str = None, target_packagi
     Extract data from BnB Tobacco URL with variant-specific targeting
     Handles ultra-premium pricing (no upper limit)
     """
+    shopify_result = _extract_from_product_json(url, target_vitola, target_packaging)
+    if shopify_result:
+        return shopify_result
+
     try:
         variant_id = _extract_variant_id(url)
         
@@ -46,13 +50,13 @@ def extract_bnb_tobacco_data(url: str, target_vitola: str = None, target_packagi
         stock_status = _extract_stock_status(soup)
         box_qty = _extract_box_quantity_from_page(soup, target_packaging)
         
-        # Validate pricing - only reject unreasonably low prices (under $100)
+        # Reject singles, not real boxes under $100 (Punch Knuckle Buster is ~$85).
         current_price = pricing_data.get('current_price')
-        if current_price and current_price < 100:
+        if current_price and current_price < 40:
             print(f"  [WARNING] Rejected unreasonable box price: ${current_price} (too low for box)")
             # Try alternative pricing extraction
             alternative_price = _extract_alternative_pricing(soup, variant_id)
-            if alternative_price and alternative_price >= 100:
+            if alternative_price and alternative_price >= 40:
                 current_price = alternative_price
                 pricing_data['current_price'] = current_price
             else:
@@ -87,6 +91,41 @@ def extract_bnb_tobacco_data(url: str, target_vitola: str = None, target_packagi
             'has_target_config': False,
             'error': str(e)
         }
+
+
+def _extract_from_product_json(url: str, target_vitola: str = None, target_packaging: str = None) -> Optional[Dict]:
+    """Public Shopify product JSON. Prices are dollars; data-price HTML attributes are cents."""
+    try:
+        from shopify_json_extract import extract_shopify_product_url
+        result = extract_shopify_product_url(
+            url,
+            target_vitola=target_vitola,
+            target_packaging=target_packaging,
+            moms_style_variants=True,
+        )
+    except Exception:
+        return None
+    if not result or not result.get("price") or result["price"] < 40:
+        return None
+    return {
+        'success': True,
+        'product_title': result.get('product_title'),
+        'price': result.get('price'),
+        'original_price': result.get('original_price'),
+        'discount_percent': result.get('discount_percent'),
+        'in_stock': result.get('in_stock'),
+        'box_quantity': result.get('box_quantity'),
+        'variant_id': _extract_variant_id(url),
+        'has_target_config': bool(result.get('price') and result.get('box_quantity')),
+        'error': None,
+    }
+
+
+def _cents_attribute_to_dollars(raw: float) -> float:
+    """Shopify data-price is integer cents. A value of 8499 is $84.99, not $8,499."""
+    if raw >= 100 and abs(raw - round(raw)) < 0.001:
+        return raw / 100.0
+    return raw
 
 
 def _extract_variant_id(url: str) -> Optional[str]:
@@ -188,8 +227,8 @@ def _extract_from_price_elements(soup: BeautifulSoup) -> Optional[float]:
                 # Check data attributes first
                 if elem.has_attr('data-price'):
                     try:
-                        price = float(elem['data-price'])
-                        if price >= 100:  # Only minimum validation for boxes
+                        price = _cents_attribute_to_dollars(float(elem['data-price']))
+                        if price >= 40:
                             return price
                     except:
                         pass
@@ -200,7 +239,7 @@ def _extract_from_price_elements(soup: BeautifulSoup) -> Optional[float]:
                 if price_match:
                     try:
                         price = float(price_match.group(1))
-                        if price >= 100:  # Only minimum validation for boxes
+                        if price >= 40:
                             return price
                     except:
                         continue
@@ -219,7 +258,7 @@ def _extract_from_meta_data(soup: BeautifulSoup) -> Optional[float]:
         if meta_price and meta_price.get('content'):
             try:
                 price = float(meta_price['content'])
-                if price >= 100:
+                if price >= 40:
                     return price
             except:
                 pass
@@ -230,8 +269,8 @@ def _extract_from_meta_data(soup: BeautifulSoup) -> Optional[float]:
             for attr in ['data-price', 'data-product-price', 'data-variant-price']:
                 if product_area.has_attr(attr):
                     try:
-                        price = float(product_area[attr])
-                        if price >= 100:
+                        price = _cents_attribute_to_dollars(float(product_area[attr]))
+                        if price >= 40:
                             return price
                     except:
                         pass

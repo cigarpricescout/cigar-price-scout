@@ -31,6 +31,10 @@ def extract_tobacco_locker_data(url: str) -> Dict:
         'error': str or None
     }
     """
+    shopify_result = _extract_from_product_json(url)
+    if shopify_result:
+        return shopify_result
+
     try:
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
@@ -68,6 +72,25 @@ def extract_tobacco_locker_data(url: str) -> Dict:
             'box_quantity': None,
             'error': str(e)
         }
+
+
+def _extract_from_product_json(url: str) -> Optional[Dict]:
+    """Largest box variant. Page text min() was selecting the 5-pack."""
+    try:
+        from shopify_json_extract import extract_shopify_product_url
+        result = extract_shopify_product_url(url)
+    except Exception:
+        return None
+    price = (result or {}).get("price")
+    if not price or price < 40:
+        return None
+    return {
+        'success': True,
+        'price': price,
+        'in_stock': result.get('in_stock'),
+        'box_quantity': result.get('box_quantity'),
+        'error': None,
+    }
 
 
 def _extract_tobacco_locker_price(soup: BeautifulSoup) -> Optional[float]:
@@ -147,11 +170,11 @@ def _extract_tobacco_locker_price(soup: BeautifulSoup) -> Optional[float]:
                         return max(reasonable_prices)  # Highest reasonable for Opus X
             else:
                 # For everything else, use original logic
+                # Lowest price >= $100 is usually a 5-pack. The box is the higher one.
                 reasonable_prices = [p for p in unique_prices if p >= 100]
                 if reasonable_prices:
-                    return min(reasonable_prices)  # Take lowest reasonable price
-                else:
-                    return min(unique_prices)  # Fallback
+                    return max(reasonable_prices)
+                return max(unique_prices)
     
     # Strategy 3: Fallback - look in specific product sections
     product_sections = soup.find_all(['div'], class_=re.compile(r'product|price', re.I))

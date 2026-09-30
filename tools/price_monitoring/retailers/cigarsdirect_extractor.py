@@ -12,6 +12,10 @@ from typing import Dict
 
 def extract_cigarsdirect_data(url: str) -> Dict:
     """Extract product data from CigarsDirect URL"""
+    shopify_result = _extract_from_product_json(url)
+    if shopify_result:
+        return shopify_result
+
     try:
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
@@ -54,6 +58,27 @@ def extract_cigarsdirect_data(url: str) -> Dict:
             'error': str(e)
         }
 
+def _extract_from_product_json(url: str) -> Dict | None:
+    """Largest box variant from the public product JSON, in dollars."""
+    try:
+        from shopify_json_extract import extract_shopify_product_url
+        result = extract_shopify_product_url(url)
+    except Exception:
+        return None
+    price = (result or {}).get("price")
+    if not price or price < 40:
+        return None
+    return {
+        'success': True,
+        'price': price,
+        'original_price': result.get('original_price'),
+        'discount_percent': result.get('discount_percent'),
+        'in_stock': result.get('in_stock'),
+        'box_quantity': result.get('box_quantity'),
+        'error': None,
+    }
+
+
 def _extract_pricing_minimal_fix(soup: BeautifulSoup) -> tuple:
     """PROVEN pricing extraction with MINIMAL FIX for first-match issue"""
     sale_price = None
@@ -76,8 +101,9 @@ def _extract_pricing_minimal_fix(soup: BeautifulSoup) -> tuple:
                         price_cents = int(price_str)
                         candidate_price = price_cents / 100
                         
-                        # Validate reasonable box price range
-                        if 150 <= candidate_price <= 2500:
+                        # Box prices under $150 are real (Punch ~$106, CAO Gold ~$144).
+                        # The old $150 floor rejected those and left single-cigar cents stored as dollars.
+                        if 40 <= candidate_price <= 2500:
                             valid_prices.append(candidate_price)
                     
                     # If we have multiple valid prices, take the highest (boxes cost more than singles)
@@ -94,7 +120,7 @@ def _extract_pricing_minimal_fix(soup: BeautifulSoup) -> tuple:
                     compare_cents = int(compare_matches[0])
                     candidate_msrp = compare_cents / 100
                     
-                    if candidate_msrp > 0 and 150 <= candidate_msrp <= 2500:
+                    if candidate_msrp > 0 and 40 <= candidate_msrp <= 2500:
                         msrp_price = candidate_msrp
                 except (ValueError, IndexError):
                     continue
@@ -118,7 +144,7 @@ def _extract_pricing_minimal_fix(soup: BeautifulSoup) -> tuple:
             if price_match:
                 try:
                     price_val = float(price_match.group(1))
-                    if 150 <= price_val <= 2500:
+                    if 40 <= price_val <= 2500:
                         sale_price = price_val
                         break
                 except ValueError:

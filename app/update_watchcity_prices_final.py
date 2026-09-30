@@ -20,6 +20,7 @@ sys.path.insert(0, tools_path)
 
 try:
     from watch_city_extractor import extract_watch_city_data
+    from price_sanity import price_change_is_implausible
 except ImportError:
     print("[ERROR] Could not import extract_watch_city_data. Make sure the extractor is in tools/price_monitoring/retailers/watch_city_extractor.py")
     sys.exit(1)
@@ -279,10 +280,14 @@ class WatchCityCigarsCSVUpdaterWithMaster:
                 continue
             
             # Update the row with new pricing data
-            if pricing_data.get('price') is not None:
-                row['price'] = pricing_data['price']
-            if pricing_data.get('in_stock') is not None:
-                row['in_stock'] = pricing_data['in_stock']
+            new_price = pricing_data.get('price')
+            if new_price is not None and price_change_is_implausible(row.get('price'), new_price):
+                print(f"  [REJECT] ${new_price} is not a plausible change from ${row.get('price')}; keeping stored price")
+            else:
+                if new_price is not None:
+                    row['price'] = new_price
+                if pricing_data.get('in_stock') is not None:
+                    row['in_stock'] = pricing_data['in_stock']
             
             # Show results
             price_str = f"${pricing_data.get('price', 'N/A')}"

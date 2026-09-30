@@ -78,11 +78,11 @@ RETAILER_EXTRACTOR_MAP = {
     "cigarboxpa":        ("cigarboxpa_extractor",            "extract_cigarboxpa_data"),
     "pyramidcigars":     ("pyramid_cigars_extractor",        "extract_pyramid_cigars_data"),
     "coronacigar":       ("coronacigar_extractor",           "extract_coronacigar_data"),
-    "cigarhustler":      ("cigarhustler_extractor",          "extract_cigarhustler_data"),
     "cigardepot":        ("cigardepot_extractor",            "extract_cigardepot_data"),
     "cigarking":         ("cigar_king_extractor",            "extract_cigar_king_data"),
     "iheartcigars":      ("iheartcigars_production_final",   "extract_iheartcigars_data_production"),
     # Dormant retailers
+    "cigarhustler":      ("cigarhustler_extractor",          "extract_cigarhustler_data"),
     "gothamcigars":      ("gotham_cigars_extractor",         "extract_gotham_cigars_data"),
     "neptune":           ("neptune_cigar_extractor",         "extract_neptune_cigar_data"),
     "cigarprimestore":   ("cigarprimestore_extractor",       "extract_cigarprimestore_data"),

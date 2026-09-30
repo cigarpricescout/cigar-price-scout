@@ -33,7 +33,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-CSV_PATH = REPO_ROOT / 'static' / 'data' / 'cigarhustler.csv'
+CSV_PATH = REPO_ROOT / 'static' / 'data' / 'cigarhustler-DORMANT.csv'
 DB_PATH = REPO_ROOT / 'data' / 'historical_prices.db'
 RETAILER_KEY = 'cigarhustler'
 

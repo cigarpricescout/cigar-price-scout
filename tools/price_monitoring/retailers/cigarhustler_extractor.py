@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 """
-Cigar Hustler Extractor - Production Ready
-ZenCart platform with clean product display and sale price support
-Successfully tested on multiple products with 100% accuracy
+Cigar Hustler Extractor
 
-Platform: ZenCart
-Compliance: Tier 1 (stable URLs, 1 req/sec)
-Test Results: 3/3 passed (Hemingway, Padron 1964, 601 La Bomba)
+The monitored ZenCart product URLs now return 410 or redirect to a new
+storefront. The retailer is dormant until those products have new URLs.
+This parser still expects the old ZenCart product page.
 """
 
 import json

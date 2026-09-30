@@ -31,7 +31,7 @@ except ImportError:
 class CigarHustlerCSVUpdater:
     def __init__(self, csv_path: str = None, master_path: str = None, dry_run: bool = False):
         if csv_path is None:
-            self.csv_path = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'cigarhustler.csv')
+            self.csv_path = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'cigarhustler-DORMANT.csv')
         else:
             self.csv_path = csv_path
             
