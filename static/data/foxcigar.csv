@@ -1,7 +1,7 @@
 cigar_id,title,url,brand,line,wrapper,vitola,size,box_qty,price,in_stock,current_promotions_applied
 ARTUROFUENTE|ARTUROFUENTE|HEMINGWAY|CLASSIC|CLASSIC|7x48|CAM|BOX25,Classic,https://foxcigar.com/shop/cigars/arturo-fuente-hemingway-classic-2/,Arturo Fuente,Hemingway,Cameroon,Classic,7x48,25,273.94,True,
 PADRON|PADRON|1964ANNIVERSARY|DIPLOMATICO|DIPLOMATICO|7x50|MAD|BOX25,Diplomatico,,Padron,1964 Anniversary,Maduro,Diplomatico,7x50,25,467.5,False,
-MYFATHER|MYFATHER|THEJUDGE|GRANDROBUSTO|GRANDROBUSTO|5.625x60|ECU|BOX23,Grand Robusto,https://foxcigar.com/shop/cigars/my-father-the-judge-grand-robusto-2/,My Father,The Judge,Ecuadorian Sumatra Oscuro,Grand Robusto,5.625x60,23,231.2,False,
+MYFATHER|MYFATHER|THEJUDGE|GRANDROBUSTO|GRANDROBUSTO|5.625x60|ECU|BOX23,Grand Robusto,https://foxcigar.com/shop/cigars/my-father-the-judge-grand-robusto-2/,My Father,The Judge,Ecuadorian Sumatra Oscuro,Grand Robusto,5.625x60,23,231.2,True,
 COHIBA||REDDOT|ROBUSTO|ROBUSTO|5x49|CAM|BOX25,Robusto,,Cohiba,Red Dot,Cameroon,Robusto,5x49,25,535.99,True,
 ASHTON|ASHTON|VSG|ROBUSTO|ROBUSTO|5.5x50|ECU|BOX24,Robusto,https://foxcigar.com/shop/cigars/ashton-vsg-robusto-2/,Ashton,VSG,Ecuadorian Sun Grown,Robusto,5.5x50,24,345.99,True,
 ARTUROFUENTE|ARTUROFUENTE|HEMINGWAY|BESTSELLER|BESTSELLER|4.5x55|CAM|BOX25,Best Seller,,Arturo Fuente,Hemingway,Cameroon,Best Seller,4.5x55,25,197.99,True,
@@ -24,7 +24,7 @@ ASHTON|ASHTON|VSG|ILLUSION|ILLUSION|6x54|ECU|BOX24,Illusion,https://foxcigar.com
 DREWESTATE|DREWESTATE|LIGAPRIVADANO.9|ROBUSTO|ROBUSTO|5x54|CON|BOX24,Robusto,,Drew Estate,Liga Privada No. 9,Connecticut Broadleaf Oscuro,Robusto,5x54,24,363.99,True,
 DREWESTATE|DREWESTATE|LIGAPRIVADANO.9|CORONAVIVA|CORONAVIVA|6x46|CON|BOX24,Corona Viva,https://foxcigar.com/shop/cigars/liga-privada-no-9-corona-viva-2/,Drew Estate,Liga Privada No. 9,Connecticut Broadleaf Oscuro,Corona Viva,6x46,24,384.17,True,
 DREWESTATE|DREWESTATE|UNDERCROWNMADURO|GRANTORO|GRANTORO|6x52|SAN|BOX25,Gran Toro,https://foxcigar.com/shop/cigars/undercrown-maduro-gran-toro-2/,Drew Estate,Undercrown Maduro,San Andres,Gran Toro,6x52,25,225.99,True,
-OLIVA|OLIVA|SERIEV|TORPEDO|TORPEDO|6.5x52|ECU|BOX24,Torpedo,https://foxcigar.com/shop/cigars/oliva-serie-v-torpedo-2/,Oliva,Serie V,Ecuadorian Habano,Torpedo,6.5x52,24,181.08,True,
+OLIVA|OLIVA|SERIEV|TORPEDO|TORPEDO|6.5x52|ECU|BOX24,Torpedo,https://foxcigar.com/shop/cigars/oliva-serie-v-torpedo-2/,Oliva,Serie V,Ecuadorian Habano,Torpedo,6.5x52,24,181.08,False,
 OLIVA|OLIVA|SERIEV|DOUBLEROBUSTO|DOUBLEROBUSTO|5x54|ECU|BOX24,Double Robusto,https://foxcigar.com/shop/cigars/oliva-serie-v-double-robusto-2/,Oliva,Serie V,Ecuadorian Habano,Double Robusto,5x54,24,151.84,False,
 OLIVA|OLIVA|SERIEV|CHURCHILLEXTRA|CHURCHILLEXTRA|7x48|ECU|BOX24,Churchill Extra,https://foxcigar.com/shop/cigars/oliva-serie-v-churchill-extra-2/,Oliva,Serie V,Ecuadorian Habano,Churchill Extra,7x48,24,193.46,True,
 OLIVA|OLIVA|SERIEV|DOUBLETORO|DOUBLETORO|6x60|ECU|BOX24,Double Toro,https://foxcigar.com/shop/cigars/oliva-serie-v-double-toro-2/,Oliva,Serie V,Ecuadorian Habano,Double Toro,6x60,24,187.83,False,
