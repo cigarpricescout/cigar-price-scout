@@ -617,4 +617,4 @@ Files you'll touch most often, grouped by concern:
 - For "is this change safe to ship?" → run section 11.
 - For "what file owns X?" → section 12.
 
-Last updated: 2026-09-30, box-price extractor fixes; Cigar Hustler marked dormant.
+Last updated: 2026-11-17, Fox pack-as-box guard; blank dead Fox URLs.

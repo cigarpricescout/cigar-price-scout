@@ -116,8 +116,14 @@ def _extract_from_co_variation_form(soup: BeautifulSoup, result: dict):
     result["debug_info"]["quantity_options"] = options
     box_options = [opt for opt in options if opt["is_box"]]
     if not box_options:
+        # Pack/single-only pages used to fall through and publish the 5-pack
+        # as a BOX25 price (e.g. Macanudo Cafe Portofino $53.64).
         result["debug_info"]["error"] = "co-variation form found but no box rows"
-        return None
+        result["success"] = False
+        result["price"] = None
+        result["in_stock"] = False
+        result["box_quantity"] = None
+        return result
 
     in_stock_boxes = [opt for opt in box_options if opt["in_stock"]]
     target = max(in_stock_boxes or box_options, key=lambda x: x["quantity"])
@@ -421,6 +427,30 @@ def extract_fox_cigar_data(url):
         
         response = requests.get(url, headers=headers, timeout=30)
         response.raise_for_status()
+
+        from urllib.parse import urlparse
+        requested_path = urlparse(url).path.rstrip("/")
+        final_path = urlparse(response.url).path.rstrip("/")
+        # Dead product URLs often 200-redirect onto /brand/... listings; scraping
+        # those pages publishes unrelated card prices as the box price.
+        if requested_path != final_path and "/shop/cigars/" not in final_path:
+            return {
+                'url': url,
+                'retailer': "Fox Cigar",
+                'extracted_at': datetime.now().isoformat(),
+                'method': 'fox_cigar_rules',
+                'success': False,
+                'price': None,
+                'in_stock': False,
+                'box_quantity': None,
+                'discount_percent': None,
+                'error': f'product URL redirected to non-product page: {response.url}',
+                'debug_info': {
+                    'requested_path': requested_path,
+                    'final_path': final_path,
+                },
+            }
+
         soup = BeautifulSoup(response.content, 'html.parser')
         
         result = {

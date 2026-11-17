@@ -22,6 +22,7 @@ sys.path.append(tools_path)
 
 try:
     from retailers.fox_cigar import extract_fox_cigar_data
+    from retailers.price_sanity import price_change_is_implausible
 except ImportError:
     print("[ERROR] Could not import extract_fox_cigar_data. Make sure the extractor is in tools/price_monitoring/retailers/fox_cigar.py")
     sys.exit(1)
@@ -269,16 +270,24 @@ class FoxCigarCSVUpdater:
             # Update the row with new pricing data - preserve historical prices
             # Only update price if we got a valid price (not None/0/empty)
             price_updated = False
-            if pricing_data.get('price') and pricing_data['price'] > 0:
-                row['price'] = pricing_data['price']
-                price_updated = True
+            new_price = pricing_data.get('price')
+            if new_price and new_price > 0:
+                if price_change_is_implausible(row.get('price'), new_price):
+                    print(
+                        f"  [REJECT] ${new_price} is not a plausible change from "
+                        f"${row.get('price')}; keeping stored price"
+                    )
+                else:
+                    row['price'] = new_price
+                    price_updated = True
+                    if pricing_data.get('in_stock') is not None:
+                        row['in_stock'] = pricing_data['in_stock']
             else:
                 # Preserve historical price when no valid current price
                 current_price = row.get('price', 'N/A')
                 print(f"  [PRICE] Preserved historical price ${current_price} (no valid current price)")
-            
-            # Always update stock status regardless of price
-            row['in_stock'] = pricing_data['in_stock']
+                if pricing_data.get('in_stock') is not None:
+                    row['in_stock'] = pricing_data['in_stock']
             
             # Validate box quantity if available
             if pricing_data.get('box_quantity'):
